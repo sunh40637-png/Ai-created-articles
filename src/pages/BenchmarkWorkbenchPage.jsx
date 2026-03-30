@@ -12,6 +12,7 @@ import {
   History,
   LibraryBig,
   LayoutTemplate,
+  ListFilter,
   LoaderCircle,
   MessageSquareText,
   Monitor,
@@ -20,9 +21,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Paperclip,
-  PenSquare,
   Plus,
-  RefreshCw,
   ScrollText,
   Search,
   Smartphone,
@@ -36,7 +35,12 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { createTopicRecommendations, useBenchmarkStore } from '@/stores/useBenchmarkStore.js'
+import {
+  createTopicRecommendations,
+  getTopicRecommendationPageCount,
+  TOPIC_LIBRARY_TYPES,
+  useBenchmarkStore,
+} from '@/stores/useBenchmarkStore.js'
 
 const reasoningModel = 'MiniMax-M2.7 深度模式'
 const highspeedModel = 'MiniMax-M2.7 标准模式'
@@ -82,6 +86,219 @@ const workbenchTabs = [
 
 const sidebarModules = [
   { id: 'library', label: '选题库', icon: LibraryBig },
+]
+
+const topicLibraryItems = [
+  {
+    id: 'library-topic-01',
+    title: '真正有分寸的人，往往守住了这3条处世边界',
+    reason: '适合从普通人的处境切入，写出细腻但有后劲的人情道理。',
+    penName: '芷若',
+    theme: '做人处世智慧',
+  },
+  {
+    id: 'library-topic-02',
+    title: '婚姻走到后半程，女人最该守住的3件事',
+    reason: '适合落到家庭关系里的现实处境，清单式表达更有执行感。',
+    penName: '明远',
+    theme: '家庭关系',
+  },
+  {
+    id: 'library-topic-03',
+    title: '人到晚年才明白，日子过稳了，靠的是这3种心态',
+    reason: '适合讲晚年自处的清醒和温柔，读者容易读出余味。',
+    penName: '芷若',
+    theme: '晚年自处',
+  },
+  {
+    id: 'library-topic-04',
+    title: '父母慢慢老去后，子女最不能忽视的3件事',
+    reason: '切中孝道与父母这个母题，适合做明确的提醒型内容。',
+    penName: '明远',
+    theme: '孝道与父母',
+  },
+  {
+    id: 'library-topic-05',
+    title: '一个人到了这个年纪，最该放在心上的3条养生道理',
+    reason: '健康与生命类内容适合用清单结构，读者容易收藏转发。',
+    penName: '明远',
+    theme: '健康与生命',
+  },
+  {
+    id: 'library-topic-06',
+    title: '真正聪明的人，到了一定年纪都会慢慢收住这3种脾气',
+    reason: '适合落到处世分寸和情绪管理，容易写出有现实感的提醒。',
+    penName: '明远',
+    theme: '做人处世智慧',
+  },
+  {
+    id: 'library-topic-07',
+    title: '真正靠谱的人，往往在这3件小事上看得出分寸',
+    reason: '做人处世智慧类母题，适合写成有力度的三点式文章。',
+    penName: '明远',
+    theme: '做人处世智慧',
+  },
+  {
+    id: 'library-topic-08',
+    title: '一个家能不能走长久，多半要看这3个地方有没有守住',
+    reason: '家庭关系母题下，清单型更适合给出明确抓手。',
+    penName: '明远',
+    theme: '家庭关系',
+  },
+  {
+    id: 'library-topic-09',
+    title: '人老了以后，最难得的不是热闹，而是守住这份清静',
+    reason: '晚年自处适合芷若的温柔叙述，容易写出安静的回味。',
+    penName: '芷若',
+    theme: '晚年自处',
+  },
+  {
+    id: 'library-topic-10',
+    title: '等父母老了以后，真正见孝心的，往往是这3件小事',
+    reason: '孝道母题下，清单结构清楚，适合落到具体行动。',
+    penName: '明远',
+    theme: '孝道与父母',
+  },
+  {
+    id: 'library-topic-11',
+    title: '一个人下半生最值钱的，不是存款，而是这3样东西',
+    reason: '健康与生命母题可以延展到身心状态和生命质量，适合实用表达。',
+    penName: '明远',
+    theme: '健康与生命',
+  },
+  {
+    id: 'library-topic-12',
+    title: '到了晚年以后，最能护住一个人的，往往是这3份清醒',
+    reason: '适合写晚年自处的安静和通透，文字更容易沉下来。',
+    penName: '芷若',
+    theme: '晚年自处',
+  },
+  {
+    id: 'library-topic-13',
+    title: '人情走到最后才懂，真正有格局的人守的是这3件事',
+    reason: '做人处世类内容，明远的力度和清单结构更容易讲透。',
+    penName: '明远',
+    theme: '做人处世智慧',
+  },
+  {
+    id: 'library-topic-14',
+    title: '一个家想过得安稳，夫妻之间最好别丢了这3样东西',
+    reason: '家庭关系里适合写清单式提醒，现实感更强。',
+    penName: '明远',
+    theme: '家庭关系',
+  },
+  {
+    id: 'library-topic-15',
+    title: '到了晚年以后，人最该看开的，不是得失，而是这件事',
+    reason: '晚年自处适合以故事和余味收束，芷若更贴近这个母题。',
+    penName: '芷若',
+    theme: '晚年自处',
+  },
+  {
+    id: 'library-topic-16',
+    title: '对父母最深的亏欠，往往不是没钱，而是晚了这3步',
+    reason: '孝道题适合写成明确的三点提醒，便于直达读者心里。',
+    penName: '明远',
+    theme: '孝道与父母',
+  },
+  {
+    id: 'library-topic-17',
+    title: '人过五十后才知道，真正保命的，是这3个生活习惯',
+    reason: '健康与生命母题适合做收藏型内容，结构清楚，传播性更好。',
+    penName: '明远',
+    theme: '健康与生命',
+  },
+  {
+    id: 'library-topic-18',
+    title: '一个家庭真正的福气，不是热闹，而是把这3件事过顺了',
+    reason: '适合家庭关系主题，表达上能兼顾温度和明确的现实抓手。',
+    penName: '明远',
+    theme: '家庭关系',
+  },
+  {
+    id: 'library-topic-19',
+    title: '真正有教养的人，从不在这3件事上让人难堪',
+    reason: '适合写人情边界和分寸感，标题抓力强，也利于转发。',
+    penName: '明远',
+    theme: '做人处世智慧',
+  },
+  {
+    id: 'library-topic-20',
+    title: '女人到了中年，最该远离的不是忙，而是这3种消耗',
+    reason: '适合女性情感和自我消耗主题，容易形成共鸣。',
+    penName: '明远',
+    theme: '家庭关系',
+  },
+  {
+    id: 'library-topic-21',
+    title: '晚年最好的活法，不是合群，而是把这3件事想明白',
+    reason: '更适合写通透和自处，语气可以安静但有后劲。',
+    penName: '芷若',
+    theme: '晚年自处',
+  },
+  {
+    id: 'library-topic-22',
+    title: '父母老了以后，真正让人心酸的，常常不是贫穷而是这件事',
+    reason: '适合从细节入手写孝道，不需要很重的说教也能动人。',
+    penName: '芷若',
+    theme: '孝道与父母',
+  },
+  {
+    id: 'library-topic-23',
+    title: '到了这个年纪，最该逼自己养成的，是这3个保命习惯',
+    reason: '健康主题做成明确清单，更适合收藏和二次传播。',
+    penName: '明远',
+    theme: '健康与生命',
+  },
+  {
+    id: 'library-topic-24',
+    title: '人这一生真正的体面，往往藏在这3次不争里',
+    reason: '适合做处世主题的克制表达，文风可以沉一点。',
+    penName: '芷若',
+    theme: '做人处世智慧',
+  },
+  {
+    id: 'library-topic-25',
+    title: '夫妻过到最后，比爱更重要的，其实是这3种能力',
+    reason: '家庭关系里适合写现实层面的经营感，读者会更容易代入。',
+    penName: '明远',
+    theme: '家庭关系',
+  },
+  {
+    id: 'library-topic-26',
+    title: '人老了以后，慢慢把这3样东西放下，日子反而顺了',
+    reason: '适合晚年自处主题，整体更偏安静和清醒的风格。',
+    penName: '芷若',
+    theme: '晚年自处',
+  },
+  {
+    id: 'library-topic-27',
+    title: '真正懂孝顺的人，不会只在父母生病时才想起这3件事',
+    reason: '孝道题更适合落到日常行动和情感亏欠上，容易打动人。',
+    penName: '明远',
+    theme: '孝道与父母',
+  },
+  {
+    id: 'library-topic-28',
+    title: '五十岁以后，最好的养生，不是补，而是先停掉这3种习惯',
+    reason: '适合健康主题的反常识切口，读者会更愿意点开。',
+    penName: '明远',
+    theme: '健康与生命',
+  },
+  {
+    id: 'library-topic-29',
+    title: '一个人真正成熟的开始，是学会在这3件事上闭嘴',
+    reason: '处世边界和语言分寸都是高频话题，容易写出力度。',
+    penName: '明远',
+    theme: '做人处世智慧',
+  },
+  {
+    id: 'library-topic-30',
+    title: '到了中晚年，一个家最怕的，不是没钱，而是丢了这3样东西',
+    reason: '适合家庭关系和晚年处境的结合题，读者接受度高。',
+    penName: '明远',
+    theme: '家庭关系',
+  },
 ]
 
 const markdownComponents = {
@@ -208,81 +425,8 @@ function hasSessionHistory(session) {
   return hasUserMessage || hasSelectedTopic || hasGeneratedVersions || hasAdvancedStage || hasFlow
 }
 
-function normalizeRecommendedTopics(recommendations = []) {
-  return recommendations
-    .map((topic, index) => {
-      const title = typeof topic?.title === 'string' ? topic.title.trim() : ''
-
-      if (!title) {
-        return null
-      }
-
-      return {
-        id: typeof topic?.id === 'string' ? topic.id : createId(`recommended-topic-${index + 1}`),
-        penName: typeof topic?.penName === 'string' && topic.penName.trim() ? topic.penName : '明远',
-        reason:
-          typeof topic?.reason === 'string' && topic.reason.trim()
-            ? topic.reason.trim()
-            : '这个方向更贴近你刚才补充的选题偏好。',
-        theme: typeof topic?.theme === 'string' && topic.theme.trim() ? topic.theme.trim() : '做人处世智慧',
-        title,
-        type: typeof topic?.type === 'string' && topic.type.trim() ? topic.type.trim() : 'B型',
-      }
-    })
-    .filter(Boolean)
-}
-
-function inferTopicTheme(title = '') {
-  if (/父母|母亲|父亲|孝|养老/.test(title)) {
-    return '孝道与父母'
-  }
-
-  if (/婚姻|夫妻|家庭|婆媳|爱人|伴侣|感情|家/.test(title)) {
-    return '家庭关系'
-  }
-
-  if (/晚年|老了|余生|老年|晚景|下半生/.test(title)) {
-    return '晚年自处'
-  }
-
-  if (/健康|身体|生命|养生|保命|生死/.test(title)) {
-    return '健康与生命'
-  }
-
-  return '做人处世智慧'
-}
-
-function inferTopicType(title = '') {
-  if (/\d/.test(title)) {
-    return 'B型'
-  }
-
-  if (/热搜|热点|爆火|刷屏|事件|新闻/.test(title)) {
-    return 'C型'
-  }
-
-  return 'A型'
-}
-
-function buildCustomTopic(title) {
-  const trimmedTitle = title.trim().slice(0, 30)
-  const type = inferTopicType(trimmedTitle)
-  const theme = inferTopicTheme(trimmedTitle)
-  const penName = type === 'A型' ? '芷若' : '明远'
-
-  return {
-    id: createId('custom-topic'),
-    penName,
-    reason: `根据你输入的自定义选题，系统判断更适合按${type}来写，并归入“${theme}”这个母题。`,
-    theme,
-    title: trimmedTitle,
-    type,
-  }
-}
-
 function buildDraftVersion({ note = '', supplement = '', topic, versionNumber }) {
   const noteSummary = note.trim() ? `这次重点吸收了你的修改意见：${note.trim()}。` : ''
-  const supplementSummary = supplement.trim() ? `系统已同时吸收补充要求：${supplement.trim()}。` : ''
   const draftMarkdown = [
     `# ${topic.title}`,
     '',
@@ -298,7 +442,7 @@ function buildDraftVersion({ note = '', supplement = '', topic, versionNumber })
     '',
     '文章中段可以加入一段更具体的动作感。比如他照例说“你别想太多”，她没有争，没有哭，只是把已经打好的长消息一个字一个字删掉。这个细节比任何指责都更有力，因为它让读者看到，一个人真正心冷时，反而会显得异常平静。',
     '',
-    `在结尾部分，要把情绪从“委屈”收束到“清醒”。不是控诉谁坏，而是让读者明白：被反复忽略的人，最终离开的那一步，看起来很轻，背后却是很重的累积。${supplementSummary}${noteSummary}`.trim(),
+    `在结尾部分，要把情绪从“委屈”收束到“清醒”。不是控诉谁坏，而是让读者明白：被反复忽略的人，最终离开的那一步，看起来很轻，背后却是很重的累积。${noteSummary}`.trim(),
     '',
     '所以这篇稿子的真正落点，不是教人立刻离开，而是提醒读者，任何关系里最危险的信号，从来不是争执，而是你已经越来越不想说话。',
   ].join('\n')
@@ -331,7 +475,7 @@ function buildDraftVersion({ note = '', supplement = '', topic, versionNumber })
     '## AI 已处理动作',
     '',
     `- 第 ${versionNumber} 版已完成正文修订。`,
-    supplement.trim() ? `- 已吸收补充要求：${supplement.trim()}` : '- 当前未添加额外补充要求。',
+    '- 当前版本未附加额外选题约束。',
   ].join('\n')
 
   return {
@@ -382,26 +526,6 @@ async function requestGeneratedDraft({ action, deepThinkingEnabled, note = '', s
 
   if (!response.ok) {
     throw new Error(payload?.error || 'MiniMax 内容创作失败')
-  }
-
-  return payload
-}
-
-async function requestTopicRecommendations({ supplement = '' }) {
-  const response = await fetch('/api/topic-recommendations', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      supplement,
-    }),
-  })
-
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload?.error || '推荐选题生成失败')
   }
 
   return payload
@@ -784,6 +908,21 @@ function TopicCard({ disabled = false, isSelected, onSelect, topic }) {
   )
 }
 
+function TopicLibraryCard({ topic }) {
+  return (
+    <article className="rounded-[24px] border border-border/70 bg-white px-5 py-5 transition-all hover:border-foreground/15 hover:bg-secondary/25">
+      <div className="min-w-0">
+        <div className="text-[15px] font-semibold leading-[1.55] text-foreground">{topic.title}</div>
+        <p className="mt-2 text-[13px] leading-6 text-muted-foreground">{topic.reason}</p>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.penName}</span>
+        <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.theme}</span>
+      </div>
+    </article>
+  )
+}
+
 function WorkflowCard({ flow, onOpenTab }) {
   if (!flow) {
     return null
@@ -861,136 +1000,209 @@ function WorkflowCard({ flow, onOpenTab }) {
 }
 
 function TopicStageCard({
-  onChangeSupplement,
-  onChangeCustomTopic,
-  onCreateCustomTopic,
-  onOpenCustomTopic,
-  onOpenSupplement,
-  onRefreshTopics,
-  onSaveSupplement,
+  filterTypes,
+  onApplyFilters,
+  onClearFilters,
+  onSelectPage,
+  onSelectTopic,
+  pageCount,
+  pageIndex,
   recommendations,
   selectedTopicId,
-  supplement,
-  customTopicInput,
-  customTopicOpen,
-  supplementOpen,
-  isRefreshing,
-  recommendationError,
-  onSelectTopic,
 }) {
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [draftFilterTypes, setDraftFilterTypes] = useState(filterTypes)
+  const filterPopoverRef = useRef(null)
+
+  useEffect(() => {
+    setDraftFilterTypes(filterTypes)
+  }, [filterTypes])
+
+  useEffect(() => {
+    if (!isFilterOpen) {
+      return
+    }
+
+    function handlePointerDown(event) {
+      if (!filterPopoverRef.current?.contains(event.target)) {
+        setIsFilterOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+    }
+  }, [isFilterOpen])
+
+  function handleToggleDraftType(type) {
+    setDraftFilterTypes((current) => {
+      if (current.includes(type)) {
+        return current.filter((item) => item !== type)
+      }
+
+      if (current.length >= 3) {
+        return current
+      }
+
+      return [...current, type]
+    })
+  }
+
+  function handleConfirmFilters() {
+    onApplyFilters(draftFilterTypes)
+    setIsFilterOpen(false)
+  }
+
+  function handleClearButtonClick(event) {
+    event.stopPropagation()
+    setDraftFilterTypes([])
+    onClearFilters()
+    setIsFilterOpen(false)
+  }
+
   return (
     <div className="rounded-[30px] border border-border/70 bg-white p-5 shadow-[0_24px_50px_rgba(15,23,42,0.04)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-[22px] font-semibold text-foreground">选题确认</h3>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            className="rounded-full"
-            disabled={isRefreshing}
-            onClick={onRefreshTopics}
-            size="sm"
+
+        <div className="relative" ref={filterPopoverRef}>
+          <button
+            className={cn(
+              'inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] transition-colors',
+              filterTypes.length > 0
+                ? 'border-foreground/20 bg-foreground text-white'
+                : 'border-border/75 bg-white text-foreground hover:border-foreground/15',
+            )}
+            onClick={() => {
+              setDraftFilterTypes(filterTypes)
+              setIsFilterOpen((current) => !current)
+            }}
             type="button"
-            variant="outline"
           >
-            {isRefreshing ? <LoaderCircle className="animate-spin" size={14} /> : <RefreshCw size={14} />}
-            换一批
-          </Button>
-          <Button
-            className="rounded-full"
-            disabled={isRefreshing}
-            onClick={onOpenCustomTopic}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <Plus size={14} />
-            我有题目
-          </Button>
-          <Button
-            className="rounded-full"
-            disabled={isRefreshing}
-            onClick={onOpenSupplement}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <PenSquare size={14} />
-            按偏好重推
-          </Button>
+            <ListFilter size={14} />
+            <span>筛选</span>
+            {filterTypes.length > 0 ? (
+              <>
+                <span className="rounded-full bg-white/14 px-1.5 py-0.5 text-[11px] leading-none text-white">
+                  {filterTypes.length}
+                </span>
+                <span
+                  className="inline-flex size-4 items-center justify-center rounded-full bg-white/12 text-white/88 transition-colors hover:bg-white/18"
+                  onClick={handleClearButtonClick}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <X size={11} />
+                </span>
+              </>
+            ) : null}
+          </button>
+
+          {isFilterOpen ? (
+            <div className="absolute right-0 top-[calc(100%+10px)] z-30 w-[300px] rounded-[22px] border border-border/80 bg-white p-4 shadow-[0_24px_60px_rgba(15,23,42,0.12)]">
+              <div className="text-[14px] font-medium text-foreground">筛选预设选题</div>
+              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
+                根据文章类型筛选当前预设选题，最多选择 3 个不同类型。
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {TOPIC_LIBRARY_TYPES.map((type) => {
+                  const selected = draftFilterTypes.includes(type)
+
+                  return (
+                    <button
+                      className={cn(
+                        'rounded-full border px-3 py-1.5 text-[12px] transition-colors',
+                        selected
+                          ? 'border-foreground/15 bg-foreground text-white'
+                          : 'border-border/70 bg-white text-foreground hover:border-foreground/15 hover:bg-secondary/25',
+                      )}
+                      key={type}
+                      onClick={() => handleToggleDraftType(type)}
+                      type="button"
+                    >
+                      {type}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <button
+                  className="text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => {
+                    setDraftFilterTypes([])
+                    setIsFilterOpen(false)
+                  }}
+                  type="button"
+                >
+                  清空选择
+                </button>
+                <Button className="rounded-full" onClick={handleConfirmFilters} size="sm" type="button">
+                  确定
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {recommendationError ? (
-        <div className="mt-4 rounded-[20px] border border-red-200 bg-red-50/70 px-4 py-3 text-[13px] leading-6 text-red-700">
-          {recommendationError}
-        </div>
-      ) : null}
-
-      {supplementOpen ? (
-        <div className="mt-4 rounded-[24px] border border-border/70 bg-secondary/20 p-4">
-          <div className="text-[13px] font-medium text-foreground">按偏好重推</div>
-          <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
-            写清你想要的方向，系统会重新生成 6 个更贴近偏好的选题。
-          </p>
-          <Textarea
-            className="mt-3 min-h-[92px] border-border/70 bg-white text-[14px]"
-            onChange={(event) => onChangeSupplement(event.target.value)}
-            placeholder="例如：更偏女性情感、少一点说教感、开头更克制。"
-            value={supplement}
-          />
-          <div className="mt-3 flex justify-end">
-            <Button
-              className="rounded-full"
-              disabled={!supplement.trim() || isRefreshing}
-              onClick={onSaveSupplement}
-              size="sm"
-              type="button"
-            >
-              {isRefreshing ? <LoaderCircle className="animate-spin" size={14} /> : null}
-              重新生成推荐
-            </Button>
+      <div className="mt-5 grid gap-3 xl:grid-cols-2">
+        {recommendations.length === 0 ? (
+          <div className="col-span-full rounded-[24px] border border-dashed border-border/80 bg-secondary/15 px-5 py-14 text-center text-[14px] text-muted-foreground">
+            当前筛选条件下暂无预设选题，换一个类型再试试。
           </div>
-        </div>
-      ) : null}
-
-      {customTopicOpen ? (
-        <div className="mt-4 rounded-[24px] border border-border/70 bg-secondary/20 p-4">
-          <div className="text-[13px] font-medium text-foreground">我有题目</div>
-          <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
-            限 30 字以内。系统会自动判断文章类型、建议笔名和所属母题。
-          </p>
-          <Textarea
-            className="mt-3 min-h-[88px] border-border/70 bg-white text-[14px]"
-            maxLength={30}
-            onChange={(event) => onChangeCustomTopic(event.target.value.slice(0, 30))}
-            placeholder="例如：人到晚年，最难得的是把自己的日子过安静。"
-            value={customTopicInput}
-          />
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="text-[12px] text-muted-foreground">{customTopicInput.length}/30</div>
-            <Button
-              className="rounded-full"
-              disabled={!customTopicInput.trim() || isRefreshing}
-              onClick={onCreateCustomTopic}
-              size="sm"
-              type="button"
-            >
-              使用这个选题
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="mt-5 grid gap-3 lg:grid-cols-2">
-        {recommendations.map((topic) => (
-          <TopicCard
-            disabled={isRefreshing}
-            isSelected={topic.id === selectedTopicId}
-            key={topic.id}
-            onSelect={onSelectTopic}
-            topic={topic}
-          />
-        ))}
+        ) : (
+          recommendations.map((topic) => (
+            <TopicCard
+              isSelected={topic.id === selectedTopicId}
+              key={topic.id}
+              onSelect={onSelectTopic}
+              topic={topic}
+            />
+          ))
+        )}
       </div>
+
+      {pageCount > 1 ? (
+        <div className="mt-5 flex items-center justify-center gap-2">
+          <button
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/70 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+            disabled={pageIndex === 0}
+            onClick={() => onSelectPage(pageIndex - 1)}
+            type="button"
+          >
+            <ChevronLeft size={14} />
+          </button>
+
+          {Array.from({ length: pageCount }, (_, index) => (
+            <button
+              className={cn(
+                'inline-flex h-9 min-w-9 items-center justify-center rounded-full border px-3 text-[12px] transition-colors',
+                pageIndex === index
+                  ? 'border-foreground/15 bg-foreground text-white'
+                  : 'border-border/70 bg-white text-foreground hover:border-foreground/15 hover:bg-secondary/25',
+              )}
+              key={`page-${index + 1}`}
+              onClick={() => onSelectPage(index)}
+              type="button"
+            >
+              {index + 1}
+            </button>
+          ))}
+
+          <button
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/70 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+            disabled={pageIndex >= pageCount - 1}
+            onClick={() => onSelectPage(pageIndex + 1)}
+            type="button"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1608,7 +1820,25 @@ function RightWorkbenchShell({
 
 function LibraryModuleCanvas() {
   return (
-    <div className="flex min-h-0 flex-1 bg-white" />
+    <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white">
+      <div className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-5 lg:px-6">
+        <div className="mb-6">
+          <h1 className="text-[30px] font-semibold tracking-[-0.03em] text-foreground sm:text-[34px]">选题库</h1>
+          <p className="mt-2 text-[14px] leading-6 text-muted-foreground">
+            先用同一套选题卡样式整理 30 个预备选题。当前只做列表展示，后续再补“已创作”标注和更新交互。
+          </p>
+          <div className="mt-4 inline-flex rounded-full bg-secondary px-3 py-1.5 text-[12px] text-muted-foreground">
+            当前预置 {topicLibraryItems.length} 个选题
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {topicLibraryItems.map((topic) => (
+            <TopicLibraryCard key={topic.id} topic={topic} />
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -1653,6 +1883,8 @@ export default function BenchmarkWorkbenchPage() {
   const currentStageId = activeSession?.stageId ?? 'topic'
   const selectedTopic = activeSession ? getSelectedTopic(activeSession) : null
   const activeVersion = activeSession ? getActiveVersion(activeSession) : null
+  const activeFilterTypes = activeSession?.topicSelection?.filterTypes ?? []
+  const topicPageCount = getTopicRecommendationPageCount(activeFilterTypes)
   const availableTabs = activeSession ? getAvailableTabs(activeSession) : []
   const isBusy = Boolean(activeSession?.processingFlow)
   const isContentModule = activeModule === 'content'
@@ -1912,7 +2144,7 @@ export default function BenchmarkWorkbenchPage() {
         const version = buildVersionFromGeneratedResult({
           generated,
           note: '',
-          supplement: current.topicSelection.supplement,
+          supplement: '',
           topic: currentTopic,
           versionNumber: 1,
         })
@@ -1959,7 +2191,7 @@ export default function BenchmarkWorkbenchPage() {
         requestGeneratedDraft({
           action: 'initial',
           deepThinkingEnabled: activeSession.deepThinkingEnabled,
-          supplement: activeSession.topicSelection.supplement,
+          supplement: '',
           topic,
         }),
       sessionId: currentSessionId,
@@ -1974,204 +2206,57 @@ export default function BenchmarkWorkbenchPage() {
     })
   }
 
-  function handleRefreshTopics() {
+  function handleApplyTopicFilters(nextFilterTypes) {
     if (!currentSessionId || !activeSession) {
       return
     }
 
-    const supplement = activeSession.topicSelection.supplement.trim()
-
-    if (supplement) {
-      updateSession(currentSessionId, (current) => ({
-        ...current,
-        topicSelection: {
-          ...current.topicSelection,
-          isRefreshingRecommendations: true,
-          recommendationError: '',
-        },
-      }))
-
-      requestTopicRecommendations({ supplement })
-        .then((result) => {
-          const nextRecommendations = normalizeRecommendedTopics(result.recommendations)
-
-          if (nextRecommendations.length < 6) {
-            throw new Error('AI 返回的推荐选题数量不足，请重试')
-          }
-
-          updateSession(currentSessionId, (current) => ({
-            ...current,
-            messages: [
-              ...current.messages,
-              {
-                id: createId('assistant'),
-                role: 'assistant',
-                content: result.summary || '我已经按你的偏好重新整理了一组新的选题方向。',
-                createdAt: new Date().toISOString(),
-              },
-            ],
-            topicSelection: {
-              ...current.topicSelection,
-              isRefreshingRecommendations: false,
-              recommendationError: '',
-              recommendations: nextRecommendations,
-              selectedTopicId: null,
-            },
-          }))
-        })
-        .catch((error) => {
-          updateSession(currentSessionId, (current) => ({
-            ...current,
-            topicSelection: {
-              ...current.topicSelection,
-              isRefreshingRecommendations: false,
-              recommendationError: error.message || '按偏好重推失败了，请稍后重试。',
-            },
-          }))
-        })
-
-      return
-    }
-
-    const nextBatchIndex = (activeSession.topicSelection.batchIndex + 1) % 3
+    const normalizedFilterTypes = Array.from(new Set(nextFilterTypes)).slice(0, 3)
+    const nextRecommendations = createTopicRecommendations({
+      filterTypes: normalizedFilterTypes,
+      pageIndex: 0,
+    })
 
     updateSession(currentSessionId, (current) => ({
       ...current,
       topicSelection: {
         ...current.topicSelection,
-        batchIndex: nextBatchIndex,
+        filterTypes: normalizedFilterTypes,
+        pageIndex: 0,
         recommendationError: '',
-        recommendations: createTopicRecommendations(nextBatchIndex),
+        recommendations: nextRecommendations,
         selectedTopicId: null,
+        source: 'preset',
       },
     }))
   }
 
-  function handleOpenSupplementComposer() {
-    updateCurrentSession((current) => ({
-      ...current,
-      topicSelection: {
-        ...current.topicSelection,
-        isCustomTopicComposerOpen: false,
-        isSupplementComposerOpen: true,
-        recommendationError: '',
-      },
-    }))
+  function handleClearTopicFilters() {
+    handleApplyTopicFilters([])
   }
 
-  function handleOpenCustomTopicComposer() {
-    updateCurrentSession((current) => ({
-      ...current,
-      topicSelection: {
-        ...current.topicSelection,
-        isCustomTopicComposerOpen: true,
-        isSupplementComposerOpen: false,
-        recommendationError: '',
-      },
-    }))
-  }
-
-  async function handleSaveSupplement() {
+  function handleSelectTopicPage(nextPageIndex) {
     if (!currentSessionId || !activeSession) {
       return
     }
 
-    const supplement = activeSession.topicSelection.supplement.trim()
-
-    if (!supplement) {
-      updateSession(currentSessionId, (current) => ({
-        ...current,
-        topicSelection: {
-          ...current.topicSelection,
-          isSupplementComposerOpen: false,
-          recommendationError: '',
-        },
-      }))
-      return
-    }
+    const clampedPageIndex = Math.min(Math.max(nextPageIndex, 0), topicPageCount - 1)
+    const nextRecommendations = createTopicRecommendations({
+      filterTypes: activeSession.topicSelection.filterTypes,
+      pageIndex: clampedPageIndex,
+    })
 
     updateSession(currentSessionId, (current) => ({
       ...current,
       topicSelection: {
         ...current.topicSelection,
-        isRefreshingRecommendations: true,
+        pageIndex: clampedPageIndex,
         recommendationError: '',
+        recommendations: nextRecommendations,
+        selectedTopicId: null,
+        source: 'preset',
       },
     }))
-
-    try {
-      const result = await requestTopicRecommendations({ supplement })
-      const nextRecommendations = normalizeRecommendedTopics(result.recommendations)
-
-      if (nextRecommendations.length < 6) {
-        throw new Error('AI 返回的推荐选题数量不足，请重试')
-      }
-
-      updateSession(currentSessionId, (current) => ({
-        ...current,
-        messages: [
-          ...current.messages,
-          {
-            id: createId('user'),
-            role: 'user',
-            content: `补充要求：${supplement}`,
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: createId('assistant'),
-            role: 'assistant',
-            content: result.summary || '我已经按你的偏好重新整理了一组新的选题方向。',
-            createdAt: new Date().toISOString(),
-          },
-        ],
-        topicSelection: {
-          ...current.topicSelection,
-          isRefreshingRecommendations: false,
-          isSupplementComposerOpen: false,
-          recommendationError: '',
-          recommendations: nextRecommendations,
-          selectedTopicId: null,
-        },
-      }))
-    } catch (error) {
-      updateSession(currentSessionId, (current) => ({
-        ...current,
-        topicSelection: {
-          ...current.topicSelection,
-          isRefreshingRecommendations: false,
-          recommendationError: error.message || '按偏好重推失败了，请稍后重试。',
-        },
-      }))
-    }
-  }
-
-  function handleCreateCustomTopic() {
-    if (!currentSessionId || !activeSession) {
-      return
-    }
-
-    const input = activeSession.topicSelection.customTopicInput.trim()
-
-    if (!input) {
-      return
-    }
-
-    const customTopic = buildCustomTopic(input)
-
-    updateSession(currentSessionId, (current) => ({
-      ...current,
-      topicSelection: {
-        ...current.topicSelection,
-        customTopicInput: '',
-        isCustomTopicComposerOpen: false,
-        recommendationError: '',
-        recommendations: [customTopic, ...current.topicSelection.recommendations].slice(0, 6),
-      },
-    }))
-
-    window.setTimeout(() => {
-      handleSelectTopic(customTopic.id, customTopic)
-    }, 0)
   }
 
   function handleSelectWorkbenchTab(tabId) {
@@ -2253,7 +2338,7 @@ export default function BenchmarkWorkbenchPage() {
         const nextVersion = buildVersionFromGeneratedResult({
           generated,
           note: rewriteInstruction,
-          supplement: current.topicSelection.supplement,
+          supplement: '',
           topic: currentTopic,
           versionNumber: current.draftReview.versions.length + 1,
         })
@@ -2296,7 +2381,7 @@ export default function BenchmarkWorkbenchPage() {
           action: 'revise',
           deepThinkingEnabled: activeSession.deepThinkingEnabled,
           note: rewriteInstruction,
-          supplement: activeSession.topicSelection.supplement,
+          supplement: '',
           topic: selectedTopic,
         }),
       sessionId: currentSessionId,
@@ -2338,7 +2423,7 @@ export default function BenchmarkWorkbenchPage() {
           const nextVersion = buildVersionFromGeneratedResult({
             generated,
             note: currentDraft,
-            supplement: current.topicSelection.supplement,
+            supplement: '',
             topic: currentTopic,
             versionNumber: current.draftReview.versions.length + 1,
           })
@@ -2382,7 +2467,7 @@ export default function BenchmarkWorkbenchPage() {
             action: 'revise',
             deepThinkingEnabled: activeSession.deepThinkingEnabled,
             note: currentDraft,
-            supplement: activeSession.topicSelection.supplement,
+            supplement: '',
             topic: selectedTopic,
           }),
         sessionId: currentSessionId,
@@ -2577,7 +2662,7 @@ export default function BenchmarkWorkbenchPage() {
 
   function getComposerPlaceholder() {
     if (currentStageId === 'topic') {
-      return '先在上方确认推荐选题，或点击“按偏好重推 / 我有题目”'
+      return '先在上方确认推荐选题，或通过筛选切换当前显示的选题类型'
     }
 
     if (currentStageId === 'draft') {
@@ -2644,44 +2729,21 @@ export default function BenchmarkWorkbenchPage() {
                     开始内容创作
                   </h1>
                   <p className="mx-auto mt-3 max-w-[720px] text-[15px] leading-7 text-muted-foreground">
-                    先从下面选一个方向，确认后系统会自动完成首稿生成、校验与排版预览。
+                    系统会先从选题库里随机加载 6 个预设选题。你可以直接选择，也可以先按类型筛选，再切换分页查看其他选题。
                   </p>
                   </div>
 
                   <div className="mt-8 w-full max-w-[1120px]">
                     <TopicStageCard
-                      onChangeSupplement={(value) =>
-                        updateCurrentSession((current) => ({
-                          ...current,
-                          topicSelection: {
-                            ...current.topicSelection,
-                            supplement: value,
-                          },
-                        }))
-                      }
-                      onChangeCustomTopic={(value) =>
-                        updateCurrentSession((current) => ({
-                          ...current,
-                          topicSelection: {
-                            ...current.topicSelection,
-                            customTopicInput: value,
-                          },
-                        }))
-                      }
-                      onCreateCustomTopic={handleCreateCustomTopic}
-                      onOpenCustomTopic={handleOpenCustomTopicComposer}
-                      onOpenSupplement={handleOpenSupplementComposer}
-                      onRefreshTopics={handleRefreshTopics}
-                      onSaveSupplement={handleSaveSupplement}
-                      customTopicInput={activeSession?.topicSelection?.customTopicInput ?? ''}
-                      customTopicOpen={activeSession?.topicSelection?.isCustomTopicComposerOpen ?? false}
-                      isRefreshing={activeSession?.topicSelection?.isRefreshingRecommendations ?? false}
+                      filterTypes={activeSession?.topicSelection?.filterTypes ?? []}
+                      onApplyFilters={handleApplyTopicFilters}
+                      onClearFilters={handleClearTopicFilters}
+                      onSelectPage={handleSelectTopicPage}
                       onSelectTopic={handleSelectTopic}
-                      recommendationError={activeSession?.topicSelection?.recommendationError ?? ''}
+                      pageCount={topicPageCount}
+                      pageIndex={activeSession?.topicSelection?.pageIndex ?? 0}
                       recommendations={activeSession?.topicSelection?.recommendations ?? []}
                       selectedTopicId={activeSession?.topicSelection?.selectedTopicId ?? null}
-                      supplement={activeSession?.topicSelection?.supplement ?? ''}
-                      supplementOpen={activeSession?.topicSelection?.isSupplementComposerOpen ?? false}
                     />
                   </div>
                 </div>
