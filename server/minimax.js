@@ -1,7 +1,7 @@
 const DEFAULT_MODEL = 'MiniMax-M2.7'
 const MINIMAX_API_URL = 'https://api.minimaxi.com/v1/text/chatcompletion_v2'
 
-function buildSystemPrompt() {
+function buildBenchmarkSystemPrompt() {
   return [
     '你是一个直播带货话术拆解助手。',
     '你的职责是围绕素材拆解、表达分析、模板提炼和下一步建议来帮助用户。',
@@ -21,11 +21,11 @@ function serializeAttachments(attachments = []) {
     .join('\n')
 }
 
-function normalizeMessage(message) {
+function normalizeMessage(message, assistantName) {
   if (message.role === 'assistant') {
     return {
       role: 'assistant',
-      name: '话术拆解助手',
+      name: assistantName,
       content: message.content || '',
     }
   }
@@ -45,15 +45,35 @@ function normalizeMessage(message) {
   }
 }
 
-async function requestMiniMax(payload, apiKey) {
-  const response = await fetch(MINIMAX_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(payload),
-  })
+async function requestMiniMax(payload, apiKey, timeoutMs = 300000) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => {
+    controller.abort()
+  }, timeoutMs)
+
+  let response
+
+  try {
+    response = await fetch(MINIMAX_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      const timeoutError = new Error('MiniMax 请求超时，请稍后重试')
+      timeoutError.status = 504
+      throw timeoutError
+    }
+
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
 
   const data = await response.json().catch(() => ({}))
 
@@ -70,9 +90,14 @@ async function requestMiniMax(payload, apiKey) {
 }
 
 export async function chatWithMiniMax({
+  assistantName = '话术拆解助手',
   apiKey,
   messages = [],
   model = DEFAULT_MODEL,
+  systemPrompt = buildBenchmarkSystemPrompt(),
+  temperature = 0.2,
+  timeoutMs = 300000,
+  topP = 0.95,
 }) {
   if (!apiKey) {
     throw new Error('未配置 MINIMAX_API_KEY')
@@ -81,17 +106,17 @@ export async function chatWithMiniMax({
   const payload = {
     model,
     stream: false,
-    temperature: 0.2,
-    top_p: 0.95,
+    temperature,
+    top_p: topP,
     messages: [
       {
         role: 'system',
-        name: '话术拆解助手',
-        content: buildSystemPrompt(),
+        name: assistantName,
+        content: systemPrompt,
       },
-      ...messages.map(normalizeMessage),
+      ...messages.map((message) => normalizeMessage(message, assistantName)),
     ],
   }
 
-  return requestMiniMax(payload, apiKey)
+  return requestMiniMax(payload, apiKey, timeoutMs)
 }

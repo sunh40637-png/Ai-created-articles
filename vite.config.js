@@ -8,6 +8,7 @@ import {
   runBenchmarkAnalysis,
   runBenchmarkTranscription,
 } from './server/benchmarkPipeline.js'
+import { generateContentDraft } from './server/contentCreation.js'
 import { parseRequestFormData } from './server/httpFormData.js'
 import { chatWithMiniMax } from './server/minimax.js'
 
@@ -84,6 +85,52 @@ function minimaxDevApi(env) {
           res.end(
             JSON.stringify({
               error: error.message || '聊天请求失败',
+              details: error.payload ?? null,
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
+function contentCreationDevApi(env) {
+  return {
+    name: 'content-creation-dev-api',
+    configureServer(server) {
+      server.middlewares.use('/api/content-draft', async (req, res, next) => {
+        if (req.method !== 'POST') {
+          next()
+          return
+        }
+
+        try {
+          const chunks = []
+
+          for await (const chunk of req) {
+            chunks.push(chunk)
+          }
+
+          const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+          const result = await generateContentDraft({
+            action: body.action || 'initial',
+            apiKey: env.MINIMAX_API_KEY,
+            deepThinkingEnabled: body.deepThinkingEnabled ?? true,
+            model: body.model || env.MINIMAX_MODEL,
+            note: body.note || '',
+            supplement: body.supplement || '',
+            topic: body.topic || null,
+          })
+
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(result))
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error.message || '内容创作请求失败',
               details: error.payload ?? null,
             }),
           )
@@ -249,6 +296,7 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       minimaxDevApi(env),
+      contentCreationDevApi(env),
       benchmarkPipelineDevApi(env),
     ],
     resolve: {

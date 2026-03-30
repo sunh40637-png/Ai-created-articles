@@ -132,10 +132,10 @@
     @apply border-border outline-ring/50;
   }
   html {
-    @apply scroll-smooth font-sans antialiased;
+    @apply h-full scroll-smooth font-sans antialiased;
   }
   body {
-    @apply min-h-screen bg-background text-foreground;
+    @apply h-full min-h-screen bg-background text-foreground;
     font-size: 14px;
     line-height: 1.5;
   }
@@ -146,6 +146,7 @@
     background: rgba(232, 128, 60, 0.18);
   }
   #root {
+    height: 100%;
     min-height: 100vh;
   }
 }
