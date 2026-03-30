@@ -1,4 +1,5 @@
 import { chatWithMiniMax } from '../server/minimax.js'
+import { resolveMiniMaxConfig } from '../server/runtimeConfig.js'
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -7,15 +8,19 @@ export default async function handler(request, response) {
   }
 
   try {
-    const result = await chatWithMiniMax({
-      apiKey: process.env.MINIMAX_API_KEY,
+    const minimaxConfig = resolveMiniMaxConfig({
       model: request.body?.model || process.env.MINIMAX_MODEL,
+    })
+
+    const result = await chatWithMiniMax({
+      apiKey: minimaxConfig.apiKey,
+      model: minimaxConfig.model,
       messages: request.body?.messages ?? [],
     })
 
     response.status(200).json({
       content: result?.choices?.[0]?.message?.content ?? '',
-      model: result?.model ?? process.env.MINIMAX_MODEL ?? 'MiniMax-M2.7',
+      model: result?.model ?? minimaxConfig.model ?? 'MiniMax-M2.7',
       usage: result?.usage ?? null,
     })
   } catch (error) {

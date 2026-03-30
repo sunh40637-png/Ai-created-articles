@@ -1,4 +1,5 @@
 import { generateTopicRecommendations } from '../server/topicRecommendations.js'
+import { resolveMiniMaxConfig } from '../server/runtimeConfig.js'
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -7,9 +8,13 @@ export default async function handler(request, response) {
   }
 
   try {
-    const result = await generateTopicRecommendations({
-      apiKey: process.env.MINIMAX_API_KEY,
+    const minimaxConfig = resolveMiniMaxConfig({
       model: request.body?.model || process.env.MINIMAX_MODEL,
+    })
+
+    const result = await generateTopicRecommendations({
+      apiKey: minimaxConfig.apiKey,
+      model: minimaxConfig.model,
       supplement: request.body?.supplement || '',
     })
 

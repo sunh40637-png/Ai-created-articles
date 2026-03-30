@@ -1,4 +1,5 @@
 import { runBenchmarkAnalysis } from '../server/benchmarkPipeline.js'
+import { resolveMiniMaxConfig } from '../server/runtimeConfig.js'
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -7,10 +8,14 @@ export default async function handler(request, response) {
   }
 
   try {
+    const minimaxConfig = resolveMiniMaxConfig({
+      model: request.body?.model || process.env.MINIMAX_MODEL,
+    })
+
     const result = await runBenchmarkAnalysis({
       jobId: request.body?.jobId,
-      minimaxApiKey: process.env.MINIMAX_API_KEY,
-      minimaxModel: request.body?.model || process.env.MINIMAX_MODEL,
+      minimaxApiKey: minimaxConfig.apiKey,
+      minimaxModel: minimaxConfig.model,
       prompt: request.body?.prompt || '',
     })
 

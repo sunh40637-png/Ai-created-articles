@@ -1,4 +1,5 @@
 import { generateContentDraft } from '../server/contentCreation.js'
+import { resolveMiniMaxConfig } from '../server/runtimeConfig.js'
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -7,11 +8,15 @@ export default async function handler(request, response) {
   }
 
   try {
+    const minimaxConfig = resolveMiniMaxConfig({
+      model: request.body?.model || process.env.MINIMAX_MODEL,
+    })
+
     const result = await generateContentDraft({
       action: request.body?.action || 'initial',
-      apiKey: process.env.MINIMAX_API_KEY,
+      apiKey: minimaxConfig.apiKey,
       deepThinkingEnabled: request.body?.deepThinkingEnabled ?? true,
-      model: request.body?.model || process.env.MINIMAX_MODEL,
+      model: minimaxConfig.model,
       note: request.body?.note || '',
       supplement: request.body?.supplement || '',
       topic: request.body?.topic || null,

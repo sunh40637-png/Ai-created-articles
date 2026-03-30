@@ -47,6 +47,7 @@ function buildContentSystemPrompt() {
     '你必须严格围绕用户给出的选题、文章类型、笔名口吻、补充要求和修改意见来输出。',
     '正文必须使用 Markdown，适合公众号长文阅读，语言要自然、克制、有人味，避免 AI 套话。',
     '校验报告必须是 Markdown，并包含以下结构：结论、结构检查、风格检查、当前仍可优化的地方、AI 已处理动作。',
+    '校验报告优先使用规范 Markdown 结构：二级标题、简洁列表；涉及逐项对照时使用 Markdown 表格，表头尽量简短。',
     '你收到的写作结构规范和笔名风格规范都属于硬性约束，优先级高于泛化写作习惯。',
     '如果标题、结构、口吻与规范冲突，必须优先修正到符合规范。',
     '你的最终回复必须是一个 JSON 对象，且只输出 JSON，不要使用代码块，不要添加额外解释。',
@@ -129,7 +130,7 @@ function buildCompactRuleChecklist(topic) {
   return rules.join('\n')
 }
 
-function buildContentUserPrompt({ action, compact = false, deepThinkingEnabled, note = '', supplement = '', topic }) {
+function buildSharedContentContextLines({ action, compact = false, deepThinkingEnabled, note = '', supplement = '', topic }) {
   const taskLabel = action === 'revise' ? '根据修改意见重写当前文章' : '生成第一版文章'
   const modeLabel = deepThinkingEnabled ? '深度模式' : '标准模式'
   const ruleBlock = compact
@@ -159,14 +160,140 @@ function buildContentUserPrompt({ action, compact = false, deepThinkingEnabled, 
     buildPenExecutionNotes(topic?.penName),
     '',
     ruleBlock,
+  ]
+}
+
+function buildContentUserPrompt({ action, compact = false, deepThinkingEnabled, note = '', supplement = '', topic }) {
+  return [
+    ...buildSharedContentContextLines({
+      action,
+      compact,
+      deepThinkingEnabled,
+      note,
+      supplement,
+      topic,
+    }),
     '',
     '输出要求：',
     '- draftMarkdown：直接可读的公众号正文 Markdown，允许使用一级标题、引用、段落、小标题、列表。',
     '- reportMarkdown：详细校验报告 Markdown，按“结论 / 结构检查 / 风格检查 / 当前仍可优化的地方 / AI 已处理动作”输出。',
+    '- reportMarkdown 优先使用二级标题、列表和表格，不要输出大段没有层级的纯文本。',
     '- summary：一句适合展示在工作流里的简短总结。',
     '',
     '如果是首稿，请直接给出完整正文与完整报告。',
     '如果是改稿，请优先做局部优化；只有在修改意见明确要求结构重写时，才做较大幅度重构。',
+    '',
+    '再次提醒：只返回 JSON 对象本身，不要加 ```json 代码块。',
+  ].join('\n')
+}
+
+function buildDraftGenerationSystemPrompt() {
+  return [
+    '你是一个中文公众号写稿助手，只负责输出正文草稿。',
+    '你必须严格遵守用户提供的选题、类型、笔名口吻和硬性规则。',
+    '正文必须是自然、克制、有人味的中文 Markdown，不要夹带解释，不要输出报告。',
+    '你的最终回复必须是一个 JSON 对象，且只输出 JSON，不要使用代码块。',
+    'JSON 必须包含 draftMarkdown、summary 两个字符串字段。',
+  ].join('\n')
+}
+
+function buildDraftGenerationUserPrompt({ deepThinkingEnabled, supplement = '', topic }) {
+  return [
+    ...buildSharedContentContextLines({
+      action: 'initial',
+      compact: false,
+      deepThinkingEnabled,
+      note: '',
+      supplement,
+      topic,
+    }),
+    '',
+    '输出要求：',
+    '- draftMarkdown：直接可读的公众号正文 Markdown，允许使用一级标题、引用、段落、小标题、列表。',
+    '- summary：一句适合展示在工作流里的简短总结。',
+    '- 只输出正文草稿，不要输出审核报告。',
+    '',
+    '再次提醒：只返回 JSON 对象本身，不要加 ```json 代码块。',
+  ].join('\n')
+}
+
+function buildDraftAuditSystemPrompt() {
+  return [
+    '你是一个中文公众号内容审核助手，只负责审核文章并决定是否需要自动修订。',
+    '你必须严格依据选题要求、结构规则、笔名风格和硬性写作规范来审核。',
+    '你的最终回复必须是一个 JSON 对象，且只输出 JSON，不要使用代码块。',
+    'JSON 必须包含 reportMarkdown、decision、summary 三个字段。',
+    'decision 只能是 pass、partial、rewrite 三个值之一。',
+    '当文章整体可用时返回 pass；需要局部修改时返回 partial；结构方向明显不对时返回 rewrite。',
+  ].join('\n')
+}
+
+function buildDraftAuditUserPrompt({ deepThinkingEnabled, draftMarkdown = '', supplement = '', topic }) {
+  return [
+    ...buildSharedContentContextLines({
+      action: 'initial',
+      compact: true,
+      deepThinkingEnabled,
+      note: '',
+      supplement,
+      topic,
+    }),
+    '',
+    '待审核正文：',
+    draftMarkdown.trim(),
+    '',
+    '输出要求：',
+    '- reportMarkdown：详细校验报告 Markdown，按“结论 / 结构检查 / 风格检查 / 当前仍可优化的地方 / AI 已处理动作”输出。',
+    '- reportMarkdown 优先使用二级标题、列表和表格，不要输出大段没有层级的纯文本。',
+    '- decision：只能输出 pass / partial / rewrite 其中一个。',
+    '- summary：一句适合展示在工作流里的简短总结。',
+    '',
+    '再次提醒：只返回 JSON 对象本身，不要加 ```json 代码块。',
+  ].join('\n')
+}
+
+function buildDraftRevisionSystemPrompt() {
+  return [
+    '你是一个中文公众号内容修订助手，负责根据审核结果自动修订正文并给出最终可展示的审核报告。',
+    '你必须严格遵守选题、类型、笔名口吻和硬性写作规则。',
+    '修订时优先按审核结论执行：partial 做局部修订，rewrite 做整篇重构。',
+    '你的最终回复必须是一个 JSON 对象，且只输出 JSON，不要使用代码块。',
+    'JSON 必须包含 draftMarkdown、reportMarkdown、summary 三个字符串字段。',
+  ].join('\n')
+}
+
+function buildDraftRevisionUserPrompt({
+  decision = 'partial',
+  deepThinkingEnabled,
+  draftMarkdown = '',
+  reportMarkdown = '',
+  supplement = '',
+  topic,
+}) {
+  const revisionLabel = decision === 'rewrite' ? '整篇重写' : '局部修订'
+
+  return [
+    ...buildSharedContentContextLines({
+      action: 'revise',
+      compact: true,
+      deepThinkingEnabled,
+      note: reportMarkdown.trim(),
+      supplement,
+      topic,
+    }),
+    '',
+    `修订方式：${revisionLabel}`,
+    '',
+    '当前正文：',
+    draftMarkdown.trim(),
+    '',
+    '审核报告：',
+    reportMarkdown.trim(),
+    '',
+    '输出要求：',
+    '- draftMarkdown：修订后的最终正文 Markdown。',
+    '- reportMarkdown：基于修订后正文输出的最终校验报告 Markdown。',
+    '- summary：一句适合展示在工作流里的简短总结。',
     '',
     '再次提醒：只返回 JSON 对象本身，不要加 ```json 代码块。',
   ].join('\n')
@@ -199,6 +326,31 @@ async function requestContentGeneration({
           supplement,
           topic,
         }),
+      },
+    ],
+  })
+}
+
+async function requestStructuredContentStage({
+  apiKey,
+  assistantName = CONTENT_ASSISTANT_NAME,
+  model,
+  systemPrompt,
+  temperature,
+  timeoutMs = 300000,
+  userPrompt,
+}) {
+  return chatWithMiniMax({
+    apiKey,
+    assistantName,
+    model,
+    systemPrompt,
+    temperature,
+    timeoutMs,
+    messages: [
+      {
+        role: 'user',
+        content: userPrompt,
       },
     ],
   })
@@ -363,6 +515,328 @@ function buildQualityCheckSection({ adjustments, draftMarkdown, topic }) {
     `- 固定结尾语检查：${fixedEndingOk ? '通过。' : '未通过，建议补齐。'}`,
     adjustments.length > 0 ? `- 程序兜底修正：${adjustments.join(' ')}` : '- 程序兜底修正：本轮未触发。',
   ].join('\n')
+}
+
+function normalizeStageText(content) {
+  return normalizeTextContent(content).trim()
+}
+
+function readStringField(parsed, fieldName, fallback = '') {
+  return typeof parsed?.[fieldName] === 'string' && parsed[fieldName].trim() ? parsed[fieldName].trim() : fallback
+}
+
+function normalizeRevisionDecision(value, fallback = 'pass') {
+  if (typeof value !== 'string') {
+    return fallback
+  }
+
+  const normalized = value.trim().toLowerCase()
+
+  if (normalized === 'pass' || normalized === 'partial' || normalized === 'rewrite') {
+    return normalized
+  }
+
+  if (normalized === '无需修改' || normalized === '通过') {
+    return 'pass'
+  }
+
+  if (normalized === '局部修改' || normalized === '局部修订') {
+    return 'partial'
+  }
+
+  if (normalized === '重写' || normalized === '整篇重写') {
+    return 'rewrite'
+  }
+
+  return fallback
+}
+
+function createPipelineSteps(stepCount, startedAt) {
+  return Array.from({ length: stepCount }, (_, index) => ({
+    completedAt: null,
+    elapsedMs: 0,
+    startedAt: index === 0 ? startedAt : null,
+    status: index === 0 ? 'running' : 'waiting',
+  }))
+}
+
+function advancePipelineSteps(steps, currentIndex, movedAt) {
+  return steps.map((step, stepIndex) => {
+    if (stepIndex < currentIndex) {
+      return step
+    }
+
+    if (stepIndex === currentIndex) {
+      const startedAt = step.startedAt ?? movedAt
+
+      return {
+        ...step,
+        completedAt: movedAt,
+        elapsedMs: Math.max(0, movedAt - startedAt),
+        startedAt,
+        status: 'done',
+      }
+    }
+
+    if (stepIndex === currentIndex + 1) {
+      return {
+        ...step,
+        startedAt: step.startedAt ?? movedAt,
+        status: 'running',
+      }
+    }
+
+    return step
+  })
+}
+
+function skipPipelineStep(steps, skippedIndex, movedAt) {
+  return steps.map((step, stepIndex) => {
+    if (stepIndex < skippedIndex) {
+      return step
+    }
+
+    if (stepIndex === skippedIndex) {
+      return {
+        ...step,
+        completedAt: movedAt,
+        elapsedMs: 0,
+        startedAt: null,
+        status: 'skipped',
+      }
+    }
+
+    if (stepIndex === skippedIndex + 1 && step.status === 'waiting') {
+      return {
+        ...step,
+        startedAt: movedAt,
+        status: 'running',
+      }
+    }
+
+    return step
+  })
+}
+
+function completePipelineSteps(steps, finishedAt) {
+  return steps.map((step) => {
+    if (step.status === 'done' || step.status === 'skipped') {
+      return step
+    }
+
+    const startedAt = step.startedAt ?? finishedAt
+
+    return {
+      ...step,
+      completedAt: finishedAt,
+      elapsedMs: Math.max(0, finishedAt - startedAt),
+      startedAt,
+      status: 'done',
+    }
+  })
+}
+
+function clonePipelineSteps(steps) {
+  return steps.map((step) => ({
+    completedAt: step.completedAt,
+    elapsedMs: step.elapsedMs,
+    startedAt: step.startedAt,
+    status: step.status,
+  }))
+}
+
+async function requestDraftGenerationStage({ apiKey, deepThinkingEnabled, model, supplement, topic }) {
+  const result = await requestStructuredContentStage({
+    apiKey,
+    model,
+    systemPrompt: buildDraftGenerationSystemPrompt(),
+    temperature: deepThinkingEnabled ? 0.35 : 0.2,
+    userPrompt: buildDraftGenerationUserPrompt({
+      deepThinkingEnabled,
+      supplement,
+      topic,
+    }),
+  })
+  const rawContent = normalizeStageText(result?.choices?.[0]?.message?.content)
+  const parsed = extractJsonObject(rawContent)
+
+  return {
+    draftMarkdown: readStringField(parsed, 'draftMarkdown', rawContent),
+    model: result?.model ?? model,
+    rawContent,
+    summary: readStringField(parsed, 'summary', '正文初稿生成完成。'),
+    usage: result?.usage ?? null,
+  }
+}
+
+async function requestDraftAuditStage({ apiKey, deepThinkingEnabled, draftMarkdown, model, supplement, topic }) {
+  const result = await requestStructuredContentStage({
+    apiKey,
+    model,
+    systemPrompt: buildDraftAuditSystemPrompt(),
+    temperature: deepThinkingEnabled ? 0.2 : 0.1,
+    userPrompt: buildDraftAuditUserPrompt({
+      deepThinkingEnabled,
+      draftMarkdown,
+      supplement,
+      topic,
+    }),
+  })
+  const rawContent = normalizeStageText(result?.choices?.[0]?.message?.content)
+  const parsed = extractJsonObject(rawContent)
+
+  return {
+    decision: normalizeRevisionDecision(parsed?.decision, 'pass'),
+    model: result?.model ?? model,
+    rawContent,
+    reportMarkdown: readStringField(parsed, 'reportMarkdown', buildFallbackReport({ action: 'initial', supplement, topic })),
+    summary: readStringField(parsed, 'summary', '审核完成，已生成审核结果。'),
+    usage: result?.usage ?? null,
+  }
+}
+
+async function requestDraftRevisionStage({
+  apiKey,
+  decision,
+  deepThinkingEnabled,
+  draftMarkdown,
+  model,
+  reportMarkdown,
+  supplement,
+  topic,
+}) {
+  const result = await requestStructuredContentStage({
+    apiKey,
+    model,
+    systemPrompt: buildDraftRevisionSystemPrompt(),
+    temperature: deepThinkingEnabled ? 0.32 : 0.18,
+    userPrompt: buildDraftRevisionUserPrompt({
+      decision,
+      deepThinkingEnabled,
+      draftMarkdown,
+      reportMarkdown,
+      supplement,
+      topic,
+    }),
+  })
+  const rawContent = normalizeStageText(result?.choices?.[0]?.message?.content)
+  const parsed = extractJsonObject(rawContent)
+
+  return {
+    draftMarkdown: readStringField(parsed, 'draftMarkdown', draftMarkdown),
+    model: result?.model ?? model,
+    rawContent,
+    reportMarkdown: readStringField(parsed, 'reportMarkdown', reportMarkdown),
+    summary: readStringField(parsed, 'summary', '自动修订完成，已生成最终版本。'),
+    usage: result?.usage ?? null,
+  }
+}
+
+export async function runInitialContentPipeline({
+  apiKey,
+  deepThinkingEnabled = true,
+  model = DEFAULT_MODEL,
+  supplement = '',
+  topic,
+  onProgress,
+}) {
+  const startedAt = Date.now()
+  const stepCount = 8
+  let steps = createPipelineSteps(stepCount, startedAt)
+  const stageUsages = []
+  const stagePayloads = {}
+  const pushProgress = () => {
+    if (typeof onProgress === 'function') {
+      onProgress({
+        steps: clonePipelineSteps(steps),
+      })
+    }
+  }
+  const advance = (currentIndex) => {
+    steps = advancePipelineSteps(steps, currentIndex, Date.now())
+    pushProgress()
+  }
+
+  pushProgress()
+  advance(0)
+  advance(1)
+
+  const generationStage = await requestDraftGenerationStage({
+    apiKey,
+    deepThinkingEnabled,
+    model,
+    supplement,
+    topic,
+  })
+  stageUsages.push({ stage: 'draft', usage: generationStage.usage ?? null })
+  stagePayloads.generation = generationStage.rawContent
+
+  const initialDraft = sanitizeDraftMarkdown(generationStage.draftMarkdown, topic)
+  advance(2)
+  advance(3)
+
+  const auditStage = await requestDraftAuditStage({
+    apiKey,
+    deepThinkingEnabled,
+    draftMarkdown: initialDraft.draftMarkdown,
+    model,
+    supplement,
+    topic,
+  })
+  stageUsages.push({ stage: 'audit', usage: auditStage.usage ?? null })
+  stagePayloads.audit = auditStage.rawContent
+
+  advance(4)
+
+  const decision = normalizeRevisionDecision(auditStage.decision, 'pass')
+  let finalDraft = initialDraft
+  let finalReportMarkdown = auditStage.reportMarkdown
+  let finalSummary = auditStage.summary || generationStage.summary
+
+  advance(5)
+
+  if (decision === 'pass') {
+    steps = skipPipelineStep(steps, 6, Date.now())
+    pushProgress()
+  } else {
+    const revisionStage = await requestDraftRevisionStage({
+      apiKey,
+      decision,
+      deepThinkingEnabled,
+      draftMarkdown: initialDraft.draftMarkdown,
+      model,
+      reportMarkdown: auditStage.reportMarkdown,
+      supplement,
+      topic,
+    })
+    stageUsages.push({ stage: 'revision', usage: revisionStage.usage ?? null })
+    stagePayloads.revision = revisionStage.rawContent
+
+    finalDraft = sanitizeDraftMarkdown(revisionStage.draftMarkdown, topic)
+    finalReportMarkdown = revisionStage.reportMarkdown || auditStage.reportMarkdown
+    finalSummary = revisionStage.summary || finalSummary
+
+    advance(6)
+  }
+
+  const qualitySection = buildQualityCheckSection({
+    adjustments: finalDraft.adjustments,
+    draftMarkdown: finalDraft.draftMarkdown,
+    topic,
+  })
+  const finishedAt = Date.now()
+  steps = completePipelineSteps(steps, finishedAt)
+  pushProgress()
+
+  return {
+    decision,
+    draftMarkdown: finalDraft.draftMarkdown,
+    model,
+    rawContent: stagePayloads,
+    reportMarkdown: `${(finalReportMarkdown || buildFallbackReport({ action: 'initial', supplement, topic })).trim()}\n\n${qualitySection}`,
+    summary: (finalSummary || generationStage.summary || '首版稿件已经准备完成。').trim(),
+    usage: stageUsages,
+  }
 }
 
 export async function generateContentDraft({

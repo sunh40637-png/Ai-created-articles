@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   Copy,
   FileText,
   History,
@@ -25,7 +24,6 @@ import {
   ScrollText,
   Search,
   Smartphone,
-  Sparkles,
   Trash2,
   X,
 } from 'lucide-react'
@@ -36,7 +34,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import {
+  CONTENT_TOPIC_LIBRARY,
   createTopicRecommendations,
+  getTopicById,
+  getTopicStatusMap,
   getTopicRecommendationPageCount,
   TOPIC_LIBRARY_TYPES,
   useBenchmarkStore,
@@ -46,7 +47,25 @@ const reasoningModel = 'MiniMax-M2.7 深度模式'
 const highspeedModel = 'MiniMax-M2.7 标准模式'
 const LEFT_PANE_MIN_WIDTH = 640
 const RIGHT_PANE_MIN_WIDTH = 540
-const FLOW_DELAY_MS = 260
+const FLOW_STEP_MIN_MS = 420
+const FLOW_STEP_MAX_MS = 1100
+const FLOW_STEP_RATIO_MS = 160
+const CONTENT_FLOW_UI_PREVIEW = false
+const CONTENT_FLOW_RESET_KEY = 'content-creation-reset-after-preview-v1'
+const INITIAL_DRAFT_FLOW_TITLE = '正在准备首版稿件'
+const INITIAL_DRAFT_FLOW_SUMMARY = '正在完成从接收选题到首版稿件准备的处理流程。'
+const INITIAL_DRAFT_FLOW_INTRO_MESSAGE =
+  '已接收这个选题，正在生成首版稿件。系统会依次完成正文起草、内容审核和自动修订，处理完成后再把正文和校验报告展示在右侧。'
+const INITIAL_DRAFT_FLOW_STEPS = [
+  { label: '接收选题', seconds: 1 },
+  { label: '整理写作要求', seconds: 2 },
+  { label: '生成正文初稿', seconds: 16 },
+  { label: '开始内容审核', seconds: 8 },
+  { label: '输出审核结果', seconds: 10 },
+  { label: '判定修改方式', seconds: 2 },
+  { label: '自动修订内容', seconds: 6 },
+  { label: '呈现首版稿件', seconds: 1 },
+]
 
 const quickMessageItems = [
   {
@@ -88,218 +107,22 @@ const sidebarModules = [
   { id: 'library', label: '选题库', icon: LibraryBig },
 ]
 
-const topicLibraryItems = [
-  {
-    id: 'library-topic-01',
-    title: '真正有分寸的人，往往守住了这3条处世边界',
-    reason: '适合从普通人的处境切入，写出细腻但有后劲的人情道理。',
-    penName: '芷若',
-    theme: '做人处世智慧',
+const topicLibraryItems = CONTENT_TOPIC_LIBRARY
+
+const TOPIC_STATUS_META = {
+  completed: {
+    label: '已创作',
+    className: 'border border-emerald-200/80 bg-emerald-50 text-emerald-700',
   },
-  {
-    id: 'library-topic-02',
-    title: '婚姻走到后半程，女人最该守住的3件事',
-    reason: '适合落到家庭关系里的现实处境，清单式表达更有执行感。',
-    penName: '明远',
-    theme: '家庭关系',
+  'in-progress': {
+    label: '创作中',
+    className: 'border border-amber-200/80 bg-amber-50 text-amber-700',
   },
-  {
-    id: 'library-topic-03',
-    title: '人到晚年才明白，日子过稳了，靠的是这3种心态',
-    reason: '适合讲晚年自处的清醒和温柔，读者容易读出余味。',
-    penName: '芷若',
-    theme: '晚年自处',
+  pending: {
+    label: '待创作',
+    className: 'bg-secondary text-muted-foreground',
   },
-  {
-    id: 'library-topic-04',
-    title: '父母慢慢老去后，子女最不能忽视的3件事',
-    reason: '切中孝道与父母这个母题，适合做明确的提醒型内容。',
-    penName: '明远',
-    theme: '孝道与父母',
-  },
-  {
-    id: 'library-topic-05',
-    title: '一个人到了这个年纪，最该放在心上的3条养生道理',
-    reason: '健康与生命类内容适合用清单结构，读者容易收藏转发。',
-    penName: '明远',
-    theme: '健康与生命',
-  },
-  {
-    id: 'library-topic-06',
-    title: '真正聪明的人，到了一定年纪都会慢慢收住这3种脾气',
-    reason: '适合落到处世分寸和情绪管理，容易写出有现实感的提醒。',
-    penName: '明远',
-    theme: '做人处世智慧',
-  },
-  {
-    id: 'library-topic-07',
-    title: '真正靠谱的人，往往在这3件小事上看得出分寸',
-    reason: '做人处世智慧类母题，适合写成有力度的三点式文章。',
-    penName: '明远',
-    theme: '做人处世智慧',
-  },
-  {
-    id: 'library-topic-08',
-    title: '一个家能不能走长久，多半要看这3个地方有没有守住',
-    reason: '家庭关系母题下，清单型更适合给出明确抓手。',
-    penName: '明远',
-    theme: '家庭关系',
-  },
-  {
-    id: 'library-topic-09',
-    title: '人老了以后，最难得的不是热闹，而是守住这份清静',
-    reason: '晚年自处适合芷若的温柔叙述，容易写出安静的回味。',
-    penName: '芷若',
-    theme: '晚年自处',
-  },
-  {
-    id: 'library-topic-10',
-    title: '等父母老了以后，真正见孝心的，往往是这3件小事',
-    reason: '孝道母题下，清单结构清楚，适合落到具体行动。',
-    penName: '明远',
-    theme: '孝道与父母',
-  },
-  {
-    id: 'library-topic-11',
-    title: '一个人下半生最值钱的，不是存款，而是这3样东西',
-    reason: '健康与生命母题可以延展到身心状态和生命质量，适合实用表达。',
-    penName: '明远',
-    theme: '健康与生命',
-  },
-  {
-    id: 'library-topic-12',
-    title: '到了晚年以后，最能护住一个人的，往往是这3份清醒',
-    reason: '适合写晚年自处的安静和通透，文字更容易沉下来。',
-    penName: '芷若',
-    theme: '晚年自处',
-  },
-  {
-    id: 'library-topic-13',
-    title: '人情走到最后才懂，真正有格局的人守的是这3件事',
-    reason: '做人处世类内容，明远的力度和清单结构更容易讲透。',
-    penName: '明远',
-    theme: '做人处世智慧',
-  },
-  {
-    id: 'library-topic-14',
-    title: '一个家想过得安稳，夫妻之间最好别丢了这3样东西',
-    reason: '家庭关系里适合写清单式提醒，现实感更强。',
-    penName: '明远',
-    theme: '家庭关系',
-  },
-  {
-    id: 'library-topic-15',
-    title: '到了晚年以后，人最该看开的，不是得失，而是这件事',
-    reason: '晚年自处适合以故事和余味收束，芷若更贴近这个母题。',
-    penName: '芷若',
-    theme: '晚年自处',
-  },
-  {
-    id: 'library-topic-16',
-    title: '对父母最深的亏欠，往往不是没钱，而是晚了这3步',
-    reason: '孝道题适合写成明确的三点提醒，便于直达读者心里。',
-    penName: '明远',
-    theme: '孝道与父母',
-  },
-  {
-    id: 'library-topic-17',
-    title: '人过五十后才知道，真正保命的，是这3个生活习惯',
-    reason: '健康与生命母题适合做收藏型内容，结构清楚，传播性更好。',
-    penName: '明远',
-    theme: '健康与生命',
-  },
-  {
-    id: 'library-topic-18',
-    title: '一个家庭真正的福气，不是热闹，而是把这3件事过顺了',
-    reason: '适合家庭关系主题，表达上能兼顾温度和明确的现实抓手。',
-    penName: '明远',
-    theme: '家庭关系',
-  },
-  {
-    id: 'library-topic-19',
-    title: '真正有教养的人，从不在这3件事上让人难堪',
-    reason: '适合写人情边界和分寸感，标题抓力强，也利于转发。',
-    penName: '明远',
-    theme: '做人处世智慧',
-  },
-  {
-    id: 'library-topic-20',
-    title: '女人到了中年，最该远离的不是忙，而是这3种消耗',
-    reason: '适合女性情感和自我消耗主题，容易形成共鸣。',
-    penName: '明远',
-    theme: '家庭关系',
-  },
-  {
-    id: 'library-topic-21',
-    title: '晚年最好的活法，不是合群，而是把这3件事想明白',
-    reason: '更适合写通透和自处，语气可以安静但有后劲。',
-    penName: '芷若',
-    theme: '晚年自处',
-  },
-  {
-    id: 'library-topic-22',
-    title: '父母老了以后，真正让人心酸的，常常不是贫穷而是这件事',
-    reason: '适合从细节入手写孝道，不需要很重的说教也能动人。',
-    penName: '芷若',
-    theme: '孝道与父母',
-  },
-  {
-    id: 'library-topic-23',
-    title: '到了这个年纪，最该逼自己养成的，是这3个保命习惯',
-    reason: '健康主题做成明确清单，更适合收藏和二次传播。',
-    penName: '明远',
-    theme: '健康与生命',
-  },
-  {
-    id: 'library-topic-24',
-    title: '人这一生真正的体面，往往藏在这3次不争里',
-    reason: '适合做处世主题的克制表达，文风可以沉一点。',
-    penName: '芷若',
-    theme: '做人处世智慧',
-  },
-  {
-    id: 'library-topic-25',
-    title: '夫妻过到最后，比爱更重要的，其实是这3种能力',
-    reason: '家庭关系里适合写现实层面的经营感，读者会更容易代入。',
-    penName: '明远',
-    theme: '家庭关系',
-  },
-  {
-    id: 'library-topic-26',
-    title: '人老了以后，慢慢把这3样东西放下，日子反而顺了',
-    reason: '适合晚年自处主题，整体更偏安静和清醒的风格。',
-    penName: '芷若',
-    theme: '晚年自处',
-  },
-  {
-    id: 'library-topic-27',
-    title: '真正懂孝顺的人，不会只在父母生病时才想起这3件事',
-    reason: '孝道题更适合落到日常行动和情感亏欠上，容易打动人。',
-    penName: '明远',
-    theme: '孝道与父母',
-  },
-  {
-    id: 'library-topic-28',
-    title: '五十岁以后，最好的养生，不是补，而是先停掉这3种习惯',
-    reason: '适合健康主题的反常识切口，读者会更愿意点开。',
-    penName: '明远',
-    theme: '健康与生命',
-  },
-  {
-    id: 'library-topic-29',
-    title: '一个人真正成熟的开始，是学会在这3件事上闭嘴',
-    reason: '处世边界和语言分寸都是高频话题，容易写出力度。',
-    penName: '明远',
-    theme: '做人处世智慧',
-  },
-  {
-    id: 'library-topic-30',
-    title: '到了中晚年，一个家最怕的，不是没钱，而是丢了这3样东西',
-    reason: '适合家庭关系和晚年处境的结合题，读者接受度高。',
-    penName: '明远',
-    theme: '家庭关系',
-  },
-]
+}
 
 const markdownComponents = {
   h1: ({ node, ...props }) => <h1 className="mb-4 text-[22px] font-semibold leading-[1.45]" {...props} />,
@@ -315,6 +138,99 @@ const markdownComponents = {
   ),
 }
 
+const draftMarkdownComponents = {
+  h1: ({ node, ...props }) => (
+    <h1 className="mb-7 text-[24px] font-semibold leading-[1.42] tracking-[-0.035em] text-foreground" {...props} />
+  ),
+  h2: ({ node, ...props }) => (
+    <h2
+      className="mt-12 text-[21px] font-semibold leading-[1.55] tracking-[-0.03em] text-foreground first:mt-0 sm:text-[22px]"
+      {...props}
+    />
+  ),
+  h3: ({ node, ...props }) => (
+    <h3 className="mt-9 text-[17px] font-semibold leading-[1.65] text-foreground first:mt-0 sm:text-[18px]" {...props} />
+  ),
+  p: ({ node, ...props }) => (
+    <p className="mt-6 text-[15px] leading-[2] tracking-[0.01em] text-foreground/88 first:mt-0" {...props} />
+  ),
+  ul: ({ node, ...props }) => (
+    <ul className="mt-6 list-disc space-y-3 pl-6 text-[15px] leading-[1.95] text-foreground/86" {...props} />
+  ),
+  ol: ({ node, ...props }) => (
+    <ol className="mt-6 list-decimal space-y-3 pl-6 text-[15px] leading-[1.95] text-foreground/86" {...props} />
+  ),
+  li: ({ node, ...props }) => <li className="pl-1 marker:text-foreground/42" {...props} />,
+  strong: ({ node, ...props }) => <strong className="font-semibold text-foreground" {...props} />,
+  blockquote: ({ node, ...props }) => (
+    <blockquote
+      className="mt-8 rounded-[24px] border border-slate-200/70 bg-slate-50/70 px-5 py-4 text-[15px] leading-[1.92] text-foreground/74 sm:px-6 sm:text-[16px]"
+      {...props}
+    />
+  ),
+  hr: ({ node, ...props }) => <hr className="my-10 border-0 border-t border-border/70" {...props} />,
+  table: ({ node, ...props }) => (
+    <div className="my-8 overflow-x-auto rounded-[24px] border border-border/70 bg-white">
+      <table className="min-w-[720px] w-full border-collapse text-left" {...props} />
+    </div>
+  ),
+  thead: ({ node, ...props }) => <thead className="bg-secondary/45" {...props} />,
+  tbody: ({ node, ...props }) => <tbody className="bg-white" {...props} />,
+  tr: ({ node, ...props }) => <tr className="border-t border-border/60 first:border-t-0" {...props} />,
+  th: ({ node, ...props }) => (
+    <th className="min-w-[120px] px-4 py-3 text-[13px] font-semibold leading-6 text-foreground whitespace-normal align-top" {...props} />
+  ),
+  td: ({ node, ...props }) => (
+    <td className="min-w-[120px] px-4 py-3 text-[15px] leading-7 text-foreground/82 whitespace-normal align-top" {...props} />
+  ),
+  img: ({ node, alt = '', src = '', ...props }) => (
+    <img
+      alt={alt}
+      className="mt-8 block w-full rounded-[24px] border border-border/50 object-cover shadow-[0_16px_48px_rgba(15,23,42,0.06)]"
+      loading="lazy"
+      src={src}
+      {...props}
+    />
+  ),
+}
+
+const reportMarkdownComponents = {
+  h1: ({ node, ...props }) => <h1 className="mb-8 text-[28px] font-semibold tracking-[-0.03em] text-foreground" {...props} />,
+  h2: ({ node, ...props }) => (
+    <h2
+      className="mt-12 pt-2 text-[26px] font-semibold tracking-[-0.03em] text-foreground first:mt-0 first:pt-0"
+      {...props}
+    />
+  ),
+  h3: ({ node, ...props }) => <h3 className="mt-8 text-[18px] font-semibold leading-[1.5] text-foreground" {...props} />,
+  p: ({ node, ...props }) => <p className="mt-5 text-[15px] leading-[1.95] text-foreground/86 first:mt-0" {...props} />,
+  ul: ({ node, ...props }) => <ul className="mt-5 space-y-3 pl-5 text-[15px] leading-[1.9] text-foreground/84" {...props} />,
+  ol: ({ node, ...props }) => <ol className="mt-5 space-y-3 pl-5 text-[15px] leading-[1.9] text-foreground/84" {...props} />,
+  li: ({ node, ...props }) => <li className="pl-1 marker:text-foreground/45" {...props} />,
+  strong: ({ node, ...props }) => <strong className="font-semibold text-foreground" {...props} />,
+  blockquote: ({ node, ...props }) => (
+    <blockquote
+      className="mt-6 rounded-[20px] border border-emerald-200/70 bg-emerald-50/70 px-5 py-4 text-[14px] leading-[1.8] text-emerald-900/80"
+      {...props}
+    />
+  ),
+  hr: () => null,
+  table: ({ node, ...props }) => (
+    <div className="my-8 overflow-x-auto rounded-[24px] border border-border/70 bg-white">
+      <table className="min-w-[760px] w-full border-collapse text-left" {...props} />
+    </div>
+  ),
+  thead: ({ node, ...props }) => <thead className="bg-secondary/45" {...props} />,
+  tbody: ({ node, ...props }) => <tbody className="bg-white" {...props} />,
+  tr: ({ node, ...props }) => <tr className="border-t border-border/60 first:border-t-0" {...props} />,
+  th: ({ node, ...props }) => (
+    <th className="min-w-[120px] px-4 py-3 text-[13px] font-semibold leading-6 text-foreground whitespace-normal align-top" {...props} />
+  ),
+  td: ({ node, ...props }) => (
+    <td className="min-w-[120px] px-4 py-3 text-[14px] leading-7 text-foreground/82 whitespace-normal align-top" {...props} />
+  ),
+}
+
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
@@ -323,6 +239,194 @@ function delay(ms) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms)
   })
+}
+
+function clampFlowStepDuration(seconds = 1) {
+  return Math.min(Math.max(seconds * FLOW_STEP_RATIO_MS, FLOW_STEP_MIN_MS), FLOW_STEP_MAX_MS)
+}
+
+function formatFlowElapsedLabel(ms, status) {
+  if (status === 'skipped') {
+    return '已跳过'
+  }
+
+  if (status === 'waiting') {
+    return '--'
+  }
+
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return status === 'failed' ? '失败' : '0.1s'
+  }
+
+  const seconds = Math.max(0.1, ms / 1000)
+  return `${seconds.toFixed(1)}s`
+}
+
+function attachWorkflowToMessages(messages, messageId, workflow) {
+  if (!Array.isArray(messages) || !messageId) {
+    return messages ?? []
+  }
+
+  return messages.map((message) => {
+    if (message.id !== messageId) {
+      return message
+    }
+
+    return {
+      ...message,
+      workflow,
+    }
+  })
+}
+
+function updateMessageById(messages, messageId, updater) {
+  if (!Array.isArray(messages) || !messageId) {
+    return messages ?? []
+  }
+
+  return messages.map((message) => {
+    if (message.id !== messageId) {
+      return message
+    }
+
+    const patch = typeof updater === 'function' ? updater(message) : updater
+
+    if (!patch) {
+      return message
+    }
+
+    return {
+      ...message,
+      ...patch,
+    }
+  })
+}
+
+function mergeFlowProgressSteps(currentSteps, incomingSteps) {
+  if (!Array.isArray(currentSteps) || !Array.isArray(incomingSteps)) {
+    return currentSteps ?? []
+  }
+
+  return currentSteps.map((step, index) => {
+    const incomingStep = incomingSteps[index]
+
+    if (!incomingStep) {
+      return step
+    }
+
+    return {
+      ...step,
+      ...incomingStep,
+      id: step.id,
+      label: incomingStep.label ?? step.label,
+    }
+  })
+}
+
+function appendMessageParagraph(content = '', paragraph = '') {
+  return [content.trim(), paragraph.trim()].filter(Boolean).join('\n\n')
+}
+
+function resolveInitialDraftFlowOutcome(reportMarkdown = '', decisionHint = '') {
+  const normalizedDecision = typeof decisionHint === 'string' ? decisionHint.trim().toLowerCase() : ''
+
+  if (normalizedDecision === 'pass') {
+    return {
+      decision: '无需修改',
+      shouldSkipAutoRevision: true,
+    }
+  }
+
+  if (normalizedDecision === 'partial') {
+    return {
+      decision: '局部修改',
+      shouldSkipAutoRevision: false,
+    }
+  }
+
+  if (normalizedDecision === 'rewrite') {
+    return {
+      decision: '整篇重写',
+      shouldSkipAutoRevision: false,
+    }
+  }
+
+  if (!reportMarkdown) {
+    return {
+      decision: '无需修改',
+      shouldSkipAutoRevision: false,
+    }
+  }
+
+  const noAutoRevisionApplied = reportMarkdown.includes('程序兜底修正：本轮未触发。')
+
+  return {
+    decision: noAutoRevisionApplied ? '无需修改' : '局部修改',
+    shouldSkipAutoRevision: noAutoRevisionApplied,
+  }
+}
+
+function buildMockInitialDraftExperience({ current, topic }) {
+  const workflowMessageId = createId('assistant')
+  const startedAt = Date.now() - 9800
+  const flow = {
+    ...buildMockFlowSnapshot({
+      startedAt,
+      steps: [
+        { label: '接收选题', status: 'done', elapsedMs: 900 },
+        { label: '整理写作要求', status: 'done', elapsedMs: 1200 },
+        { label: '生成正文初稿', status: 'running' },
+        { label: '开始内容审核', status: 'waiting' },
+        { label: '输出审核结果', status: 'waiting' },
+        { label: '判定修改方式', status: 'waiting' },
+        { label: '自动修订内容', status: 'waiting' },
+        { label: '呈现首版稿件', status: 'waiting' },
+      ],
+    }),
+    messageId: workflowMessageId,
+  }
+
+  return {
+    activeWorkbenchTab: current.activeWorkbenchTab,
+    draftReview: {
+      ...current.draftReview,
+      activeVersionId: null,
+      latestNote: '',
+      versions: [],
+    },
+    draft: '',
+    isWorkbenchOpen: false,
+    lastFlowSummary: null,
+    messages: [
+      ...current.messages,
+      {
+        id: createId('user'),
+        role: 'user',
+        content: `我选这个：${topic.title}`,
+        createdAt: new Date(startedAt - 1500).toISOString(),
+      },
+      {
+        id: workflowMessageId,
+        role: 'assistant',
+        content: INITIAL_DRAFT_FLOW_INTRO_MESSAGE,
+        createdAt: new Date(startedAt).toISOString(),
+        workflow: flow,
+      },
+    ],
+    processingFlow: flow,
+    stageId: 'draft',
+    title: topic.title,
+    topicSelection: {
+      ...current.topicSelection,
+      recommendationError: '',
+      selectedTopicId: topic.id,
+      selectedTopic: topic,
+    },
+  }
+}
+
+function getTopicStatusMeta(status = 'pending') {
+  return TOPIC_STATUS_META[status] ?? TOPIC_STATUS_META.pending
 }
 
 function formatMessageTime(value) {
@@ -354,9 +458,9 @@ function clampRightPaneWidth(width, containerWidth) {
   return Math.min(Math.max(width, RIGHT_PANE_MIN_WIDTH), maxWidth)
 }
 
-function renderMarkdownBlock(content) {
+function renderMarkdownBlock(content, components = markdownComponents) {
   return (
-    <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
+    <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>
       {content}
     </ReactMarkdown>
   )
@@ -367,8 +471,12 @@ function getSessionById(sessionId) {
 }
 
 function getSelectedTopic(session) {
+  const selectedTopicId = session?.topicSelection?.selectedTopicId
+
   return (
-    session?.topicSelection?.recommendations?.find((topic) => topic.id === session.topicSelection.selectedTopicId) ??
+    session?.topicSelection?.selectedTopic ??
+    session?.topicSelection?.recommendations?.find((topic) => topic.id === selectedTopicId) ??
+    getTopicById(selectedTopicId) ??
     session?.topicSelection?.recommendations?.[0] ??
     null
   )
@@ -385,29 +493,6 @@ function getActiveVersion(session) {
     versions.find((version) => version.id === session?.draftReview?.activeVersionId) ??
     versions[versions.length - 1]
   )
-}
-
-function getStageIndex(stageId) {
-  return stageOrder.findIndex((stage) => stage.id === stageId)
-}
-
-function getStageStatus(stageId, currentStageId) {
-  if (currentStageId === 'completed') {
-    return 'done'
-  }
-
-  const currentIndex = getStageIndex(currentStageId)
-  const stageIndex = getStageIndex(stageId)
-
-  if (stageIndex < currentIndex) {
-    return 'done'
-  }
-
-  if (stageIndex === currentIndex) {
-    return 'current'
-  }
-
-  return 'pending'
 }
 
 function hasSessionHistory(session) {
@@ -507,7 +592,76 @@ function buildVersionFromGeneratedResult({ generated, note = '', supplement = ''
   }
 }
 
-async function requestGeneratedDraft({ action, deepThinkingEnabled, note = '', supplement = '', topic }) {
+function buildMockFlowSnapshot({ steps, startedAt, summary = INITIAL_DRAFT_FLOW_SUMMARY, title = INITIAL_DRAFT_FLOW_TITLE }) {
+  const flowId = createId('flow')
+  let cursor = startedAt
+
+  const preparedSteps = steps.map((step, index) => {
+    if (step.status === 'skipped') {
+      return {
+        ...step,
+        completedAt: cursor,
+        elapsedMs: 0,
+        id: `${flowId}-step-${index + 1}`,
+        startedAt: null,
+      }
+    }
+
+    if (step.status === 'running') {
+      return {
+        ...step,
+        completedAt: null,
+        elapsedMs: 0,
+        id: `${flowId}-step-${index + 1}`,
+        startedAt: cursor,
+      }
+    }
+
+    if (step.status === 'waiting' || step.status === 'failed') {
+      return {
+        ...step,
+        completedAt: null,
+        elapsedMs: 0,
+        id: `${flowId}-step-${index + 1}`,
+        startedAt: null,
+      }
+    }
+
+    const elapsedMs = Math.max(100, step.elapsedMs ?? 1000)
+    const stepStartedAt = cursor
+    const completedAt = cursor + elapsedMs
+    cursor = completedAt
+
+    return {
+      ...step,
+      completedAt,
+      elapsedMs,
+      id: `${flowId}-step-${index + 1}`,
+      startedAt: stepStartedAt,
+    }
+  })
+
+  const hasIncompleteStep = preparedSteps.some((step) => step.status === 'running' || step.status === 'waiting' || step.status === 'failed')
+
+  return {
+    completedAt: hasIncompleteStep ? null : new Date(cursor).toISOString(),
+    createdAt: new Date(startedAt).toISOString(),
+    id: flowId,
+    steps: preparedSteps,
+    summary,
+    title,
+  }
+}
+
+async function requestGeneratedDraft({
+  action,
+  deepThinkingEnabled,
+  note = '',
+  onProgress,
+  streamProgress = false,
+  supplement = '',
+  topic,
+}) {
   const response = await fetch('/api/content-draft', {
     method: 'POST',
     headers: {
@@ -517,10 +671,80 @@ async function requestGeneratedDraft({ action, deepThinkingEnabled, note = '', s
       action,
       deepThinkingEnabled,
       note,
+      streamProgress,
       supplement,
       topic,
     }),
   })
+
+  if (streamProgress) {
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      throw new Error(payload?.error || '内容创作请求失败')
+    }
+
+    const reader = response.body?.getReader()
+
+    if (!reader) {
+      throw new Error('内容创作流读取失败')
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let finalPayload = null
+
+    function handleEventLine(line) {
+      const trimmed = line.trim()
+
+      if (!trimmed) {
+        return
+      }
+
+      const event = JSON.parse(trimmed)
+
+      if (event.type === 'progress') {
+        onProgress?.(event)
+        return
+      }
+
+      if (event.type === 'result') {
+        finalPayload = event.data ?? null
+        return
+      }
+
+      if (event.type === 'error') {
+        const error = new Error(event.error || '内容创作请求失败')
+        error.payload = event.details ?? null
+        throw error
+      }
+    }
+
+    while (true) {
+      const { value, done } = await reader.read()
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        handleEventLine(line)
+      }
+
+      if (done) {
+        break
+      }
+    }
+
+    if (buffer.trim()) {
+      handleEventLine(buffer)
+    }
+
+    if (!finalPayload) {
+      throw new Error('内容创作流未返回最终结果')
+    }
+
+    return finalPayload
+  }
 
   const payload = await response.json().catch(() => ({}))
 
@@ -594,14 +818,96 @@ function getAvailableTabs(session) {
   return tabs
 }
 
-function formatEstimateLabel(steps = []) {
-  const total = steps.reduce((sum, step) => sum + (step.seconds ?? 0), 0)
+function createPreparedFlowSteps(flowId, steps, startedAt) {
+  return steps.map((step, index) => ({
+    ...step,
+    completedAt: null,
+    elapsedMs: 0,
+    id: `${flowId}-step-${index + 1}`,
+    startedAt: index === 0 ? startedAt : null,
+    status: index === 0 ? 'running' : 'waiting',
+  }))
+}
 
-  if (total <= 0) {
-    return ''
-  }
+function advanceFlowSteps(steps, currentIndex, movedAt) {
+  return steps.map((step, stepIndex) => {
+    if (stepIndex < currentIndex) {
+      return step
+    }
 
-  return `预计 ${total} 秒`
+    if (stepIndex === currentIndex) {
+      const startedAt = step.startedAt ?? movedAt
+
+      return {
+        ...step,
+        completedAt: movedAt,
+        elapsedMs: Math.max(0, movedAt - startedAt),
+        startedAt,
+        status: 'done',
+      }
+    }
+
+    if (stepIndex === currentIndex + 1) {
+      return {
+        ...step,
+        startedAt: step.startedAt ?? movedAt,
+        status: 'running',
+      }
+    }
+
+    return step
+  })
+}
+
+function completeFlowSteps(steps, finishedAt) {
+  return steps.map((step) => {
+    if (step.status === 'done' || step.status === 'skipped') {
+      return step
+    }
+
+    const startedAt = step.startedAt ?? finishedAt
+
+    return {
+      ...step,
+      completedAt: finishedAt,
+      elapsedMs: Math.max(0, finishedAt - startedAt),
+      startedAt,
+      status: 'done',
+    }
+  })
+}
+
+function failFlowSteps(steps, finishedAt) {
+  const runningIndex = steps.findIndex((step) => step.status === 'running')
+  const failureIndex = runningIndex === -1 ? steps.findLastIndex((step) => step.status === 'done') : runningIndex
+
+  return steps.map((step, index) => {
+    if (index === failureIndex) {
+      const startedAt = step.startedAt ?? finishedAt
+
+      return {
+        ...step,
+        completedAt: finishedAt,
+        elapsedMs: Math.max(0, finishedAt - startedAt),
+        startedAt,
+        status: 'failed',
+      }
+    }
+
+    if (step.status === 'running') {
+      const startedAt = step.startedAt ?? finishedAt
+
+      return {
+        ...step,
+        completedAt: finishedAt,
+        elapsedMs: Math.max(0, finishedAt - startedAt),
+        startedAt,
+        status: index < failureIndex ? 'done' : 'waiting',
+      }
+    }
+
+    return step
+  })
 }
 
 function AttachmentPills({ attachments, onRemove, align = 'left' }) {
@@ -848,34 +1154,9 @@ function SidebarExpandedItem({ icon: Icon, label, onClick, selected = false }) {
   )
 }
 
-function NodeProgressRail({ currentStageId }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {stageOrder.map((stage, index) => {
-        const status = getStageStatus(stage.id, currentStageId)
+function TopicCard({ disabled = false, isSelected, onSelect, topic, topicStatus = 'pending' }) {
+  const topicStatusMeta = getTopicStatusMeta(topicStatus)
 
-        return (
-          <div
-            className={cn(
-              'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] transition-colors',
-              status === 'done' && 'border-primary/20 bg-primary/10 text-primary',
-              status === 'current' && 'border-foreground/15 bg-foreground text-white',
-              status === 'pending' && 'border-border/70 bg-white text-muted-foreground',
-            )}
-            key={stage.id}
-          >
-            <span className="flex size-4 items-center justify-center rounded-full bg-white/80 text-[10px] text-current">
-              {index + 1}
-            </span>
-            <span>{stage.label}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function TopicCard({ disabled = false, isSelected, onSelect, topic }) {
   return (
     <button
       className={cn(
@@ -901,6 +1182,7 @@ function TopicCard({ disabled = false, isSelected, onSelect, topic }) {
         ) : null}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
+        <span className={cn('rounded-full px-2.5 py-1 text-[11px]', topicStatusMeta.className)}>{topicStatusMeta.label}</span>
         <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.penName}</span>
         <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.theme}</span>
       </div>
@@ -908,7 +1190,9 @@ function TopicCard({ disabled = false, isSelected, onSelect, topic }) {
   )
 }
 
-function TopicLibraryCard({ topic }) {
+function TopicLibraryCard({ topic, topicStatus = 'pending' }) {
+  const topicStatusMeta = getTopicStatusMeta(topicStatus)
+
   return (
     <article className="rounded-[24px] border border-border/70 bg-white px-5 py-5 transition-all hover:border-foreground/15 hover:bg-secondary/25">
       <div className="min-w-0">
@@ -916,6 +1200,7 @@ function TopicLibraryCard({ topic }) {
         <p className="mt-2 text-[13px] leading-6 text-muted-foreground">{topic.reason}</p>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
+        <span className={cn('rounded-full px-2.5 py-1 text-[11px]', topicStatusMeta.className)}>{topicStatusMeta.label}</span>
         <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.penName}</span>
         <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.theme}</span>
       </div>
@@ -923,78 +1208,88 @@ function TopicLibraryCard({ topic }) {
   )
 }
 
-function WorkflowCard({ flow, onOpenTab }) {
+function WorkflowTimeline({ flow }) {
   if (!flow) {
     return null
   }
 
+  const hasRunningStep = flow.steps.some((step) => step.status === 'running')
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!hasRunningStep) {
+      return
+    }
+
+    const timerId = window.setInterval(() => {
+      setNow(Date.now())
+    }, 100)
+
+    return () => {
+      window.clearInterval(timerId)
+    }
+  }, [hasRunningStep])
+
   return (
-    <div className="rounded-[28px] border border-border/70 bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.04)]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-[12px] text-muted-foreground">
-            <Sparkles size={12} />
-            自动流程
-          </div>
-          <h3 className="mt-3 text-[18px] font-semibold text-foreground">{flow.title}</h3>
-          {flow.summary ? <p className="mt-1 text-[13px] leading-6 text-muted-foreground">{flow.summary}</p> : null}
-        </div>
-        {flow.estimatedTimeLabel ? (
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-3 py-1 text-[12px] text-muted-foreground">
-            <Clock3 size={12} />
-            {flow.estimatedTimeLabel}
-          </div>
-        ) : null}
-      </div>
+    <div className="mt-4 space-y-2.5">
+      {flow.steps.map((step, index) => {
+        const isRunning = step.status === 'running'
+        const isDone = step.status === 'done'
+        const isFailed = step.status === 'failed'
+        const isSkipped = step.status === 'skipped'
+        const isWaiting = step.status === 'waiting'
+        const elapsedMs = isRunning ? now - (step.startedAt ?? now) : step.elapsedMs ?? 0
 
-      <div className="mt-5 space-y-2.5">
-        {flow.steps.map((step) => {
-          const isRunning = step.status === 'running'
-          const isDone = step.status === 'done'
-          const isFailed = step.status === 'failed'
+        return (
+          <div className="relative flex min-h-[30px] items-center gap-2.5 pl-6" key={step.id}>
+            {index < flow.steps.length - 1 ? (
+              <span
+                className={cn(
+                  'absolute left-[9px] top-5.5 h-[calc(100%+8px)] w-px',
+                  isDone || isSkipped ? 'bg-border/90' : 'bg-border/55',
+                )}
+              />
+            ) : null}
 
-          return (
-            <button
+            <span
               className={cn(
-                'flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left transition-colors',
-                isRunning && 'border-primary/25 bg-primary/5',
-                isDone && 'border-border/70 bg-white',
-                isFailed && 'border-red-200 bg-red-50/70',
-                step.status === 'pending' && 'border-border/65 bg-secondary/20',
+                'absolute left-0 top-1.5 inline-flex size-[18px] items-center justify-center rounded-full border bg-white',
+                isRunning && 'border-primary/25 text-primary shadow-[0_0_0_4px_rgba(14,159,110,0.08)]',
+                isDone && 'border-foreground/10 text-foreground',
+                isSkipped && 'border-border/80 text-muted-foreground',
+                isFailed && 'border-red-200 text-red-600',
+                isWaiting && 'border-border/70 text-muted-foreground',
               )}
-              disabled={!step.tabId}
-              key={step.id}
-              onClick={() => step.tabId && onOpenTab(step.tabId)}
-              type="button"
             >
-              <div className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    'inline-flex size-7 items-center justify-center rounded-full',
-                    isRunning && 'bg-primary text-white',
-                    isDone && 'bg-secondary text-foreground',
-                    isFailed && 'bg-red-100 text-red-600',
-                    step.status === 'pending' && 'bg-white text-muted-foreground',
-                  )}
-                >
-                  {isRunning ? <LoaderCircle className="animate-spin" size={14} /> : null}
-                  {isDone ? <Check size={14} /> : null}
-                  {isFailed ? <X size={14} /> : null}
-                  {step.status === 'pending' ? <History size={13} /> : null}
-                </span>
-                <div>
-                  <div className="text-[13px] font-medium text-foreground">{step.label}</div>
-                  {step.helper ? <div className="mt-0.5 text-[12px] text-muted-foreground">{step.helper}</div> : null}
-                </div>
+              {isRunning ? <LoaderCircle className="animate-spin" size={10} /> : null}
+              {isDone ? <Check size={10} /> : null}
+              {isSkipped ? <History size={10} /> : null}
+              {isFailed ? <X size={10} /> : null}
+              {isWaiting ? <span className="size-1.5 rounded-full bg-current" /> : null}
+            </span>
+
+            <div className="flex max-w-full items-center gap-2">
+              <div
+                className={cn(
+                  'inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] leading-none transition-colors',
+                  isRunning && 'border-primary/20 bg-primary/[0.06] text-primary',
+                  isDone && 'border-border/70 bg-white text-foreground/80',
+                  isSkipped && 'border-border/70 bg-secondary/20 text-muted-foreground',
+                  isFailed && 'border-red-200 bg-red-50/70 text-red-600',
+                  isWaiting && 'border-border/70 bg-white text-muted-foreground',
+                )}
+              >
+                <span className="max-w-[220px] truncate sm:max-w-[280px]">{step.label}</span>
               </div>
-              <div className="flex items-center gap-2">
-                {step.durationLabel ? <span className="text-[12px] text-muted-foreground">{step.durationLabel}</span> : null}
-                {step.tabId ? <ChevronRight className="text-muted-foreground" size={14} /> : null}
-              </div>
-            </button>
-          )
-        })}
-      </div>
+
+              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                {formatFlowElapsedLabel(elapsedMs, step.status)}
+              </span>
+            </div>
+
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -1009,6 +1304,7 @@ function TopicStageCard({
   pageIndex,
   recommendations,
   selectedTopicId,
+  topicStatusById,
 }) {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [draftFilterTypes, setDraftFilterTypes] = useState(filterTypes)
@@ -1161,6 +1457,7 @@ function TopicStageCard({
               key={topic.id}
               onSelect={onSelectTopic}
               topic={topic}
+              topicStatus={topicStatusById[topic.id] ?? 'pending'}
             />
           ))
         )}
@@ -1214,41 +1511,38 @@ function DraftStageCard({ activeVersion, onConfirmDraft, onOpenTab, onRewriteAll
 
   return (
     <div className="rounded-[28px] border border-border/70 bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.04)]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-[12px] font-medium tracking-[0.08em] text-muted-foreground">节点二</div>
-          <h3 className="mt-2 text-[22px] font-semibold text-foreground">文字稿确认</h3>
-          <p className="mt-1 text-[14px] leading-6 text-muted-foreground">
-            正文和详细校验都在右侧。你可以直接确认，也可以通过底部输入框继续提修改意见。
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-full bg-secondary px-3 py-1.5 text-[12px] text-muted-foreground">{activeVersion.label}</span>
-          <span className="rounded-full bg-secondary px-3 py-1.5 text-[12px] text-muted-foreground">{activeVersion.wordCount} 字</span>
-        </div>
+      <div className="max-w-[640px]">
+        <h3 className="text-[22px] font-semibold text-foreground">文字稿确认</h3>
+        <p className="mt-2 text-[14px] leading-6 text-muted-foreground">
+          先查看右侧文字稿，确认这一版是否可以进入下一步。需要调整的话，也可以继续通过底部输入框补充修改意见。
+        </p>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button className="rounded-full" onClick={() => onOpenTab('draft')} size="sm" type="button" variant="outline">
-          <FileText size={14} />
-          看文字稿
-        </Button>
-        <Button className="rounded-full" onClick={() => onOpenTab('report')} size="sm" type="button" variant="outline">
-          <ScrollText size={14} />
-          看校验报告
-        </Button>
-      </div>
+      <div className="mt-6 rounded-[24px] border border-border/70 bg-secondary/35 px-4 py-5 sm:px-5">
+        <div className="flex flex-col gap-5">
+          <div>
+            <p className="text-[15px] font-medium text-foreground">这版文字稿可以继续了吗？</p>
+            <p className="mt-1 text-[13px] leading-6 text-muted-foreground">
+              确认通过后会进入排版预览；如果还不满意，可以直接整篇重写。
+            </p>
+          </div>
 
-      <div className="mt-5 flex flex-wrap gap-3">
-        <Button className="rounded-full bg-[#171b22] px-5 text-white hover:bg-black" onClick={() => onConfirmDraft('确认通过')} type="button">
-          确认通过
-        </Button>
-        <Button className="rounded-full" onClick={() => onConfirmDraft('无需修改')} type="button" variant="outline">
-          无需修改
-        </Button>
-        <Button className="rounded-full" onClick={onRewriteAll} type="button" variant="outline">
-          整篇重写
-        </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              className="rounded-full bg-[#171b22] px-5 text-white hover:bg-black"
+              onClick={() => onConfirmDraft('确认通过')}
+              type="button"
+            >
+              确认通过
+            </Button>
+            <Button className="rounded-full" onClick={() => onConfirmDraft('无需修改')} type="button" variant="outline">
+              无需修改
+            </Button>
+            <Button className="rounded-full" onClick={onRewriteAll} type="button" variant="outline">
+              整篇重写
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -1514,6 +1808,7 @@ function DeleteSessionDialog({ onClose, onConfirm, open, sessionTitle }) {
 function MessageBubble({ copiedMessageId, message, onCopy }) {
   const isAssistant = message.role === 'assistant'
   const isUser = message.role === 'user'
+  const hasWorkflow = isAssistant && Boolean(message.workflow)
 
   return (
     <div
@@ -1531,15 +1826,19 @@ function MessageBubble({ copiedMessageId, message, onCopy }) {
       <div
         className={cn(
           'text-[15px] leading-[1.7] text-foreground sm:text-[16px]',
+          hasWorkflow && 'max-w-[720px]',
           isUser && 'ml-auto w-fit max-w-full rounded-[24px] bg-secondary/65 px-6 py-5 text-left font-medium',
         )}
       >
         {isAssistant ? renderMarkdownBlock(message.content) : message.content}
       </div>
 
+      {hasWorkflow ? <WorkflowTimeline flow={message.workflow} /> : null}
+
       <div
         className={cn(
-          'mt-3 flex items-center gap-2 text-[12px] text-muted-foreground opacity-0 transition-opacity duration-150 group-hover/message:opacity-100',
+          'flex items-center gap-2 text-[12px] text-muted-foreground opacity-0 transition-opacity duration-150 group-hover/message:opacity-100',
+          hasWorkflow ? 'mt-4' : 'mt-3',
           isAssistant && 'justify-start',
           isUser && 'justify-end',
         )}
@@ -1557,15 +1856,24 @@ function DraftWorkbench({ version }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[760px] rounded-[28px] border border-border/70 bg-white p-6">
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-secondary px-3 py-1.5 text-[12px] text-muted-foreground">{version.label}</span>
-        <span className="rounded-full bg-secondary px-3 py-1.5 text-[12px] text-muted-foreground">{version.wordCount} 字</span>
-        <span className="rounded-full bg-secondary px-3 py-1.5 text-[12px] text-muted-foreground">
-          {formatMessageTime(version.createdAt)}
-        </span>
+    <div className="px-4 py-6 sm:px-6 sm:py-7">
+      <div className="mx-auto max-w-[780px]">
+        <div className="mb-6 flex flex-wrap items-center gap-2.5">
+          <span className="rounded-full border border-border/70 bg-secondary/55 px-3 py-1.5 text-[12px] text-muted-foreground">
+            {version.label}
+          </span>
+          <span className="rounded-full border border-border/70 bg-secondary/55 px-3 py-1.5 text-[12px] text-muted-foreground">
+            {version.wordCount} 字
+          </span>
+          <span className="rounded-full border border-border/70 bg-secondary/55 px-3 py-1.5 text-[12px] text-muted-foreground">
+            {formatMessageTime(version.createdAt)}
+          </span>
+        </div>
+
+        <article className="border-t border-border/65 pt-8 sm:pt-10">
+          {renderMarkdownBlock(version.draftMarkdown, draftMarkdownComponents)}
+        </article>
       </div>
-      {renderMarkdownBlock(version.draftMarkdown)}
     </div>
   )
 }
@@ -1576,8 +1884,10 @@ function ReportWorkbench({ version }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[760px] rounded-[28px] border border-border/70 bg-white p-6">
-      {renderMarkdownBlock(version.reportMarkdown)}
+    <div className="px-4 py-6 sm:px-6 sm:py-7">
+      <div className="mx-auto max-w-[720px]">
+        {renderMarkdownBlock(version.reportMarkdown, reportMarkdownComponents)}
+      </div>
     </div>
   )
 }
@@ -1589,7 +1899,7 @@ function ArticlePreview({ fontSize, session }) {
   const previewComponents = useMemo(() => getPreviewMarkdownComponents(fontSize), [fontSize])
 
   return (
-    <div className="rounded-[26px] border border-black/8 bg-white p-6 shadow-[0_20px_44px_rgba(15,23,42,0.05)] sm:p-8">
+    <div className="px-4 py-6 sm:px-6 sm:py-7">
       <div className="mx-auto max-w-[720px]">
         <header className="text-center">
           <h2 className="mx-auto max-w-[640px] text-[29px] font-semibold leading-[1.45] tracking-[-0.02em] text-black sm:text-[31px]">
@@ -1741,7 +2051,6 @@ function VersionsWorkbench({ activeVersionId, onSelectVersion, versions }) {
 
 function RightWorkbenchShell({
   activeTabId,
-  onClose,
   onOpenTab,
   onSelectVersion,
   onSetDevice,
@@ -1775,8 +2084,7 @@ function RightWorkbenchShell({
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-tl-[30px] border-l border-t border-border/70 bg-white">
       <div className="border-b border-border/70 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="benchmark-scroll-hidden flex min-w-0 gap-2 overflow-x-auto pb-1">
+        <div className="benchmark-scroll-hidden flex min-w-0 gap-2 overflow-x-auto pb-1">
             {tabs.map((tabId) => {
               const tab = workbenchTabs.find((item) => item.id === tabId)
 
@@ -1787,8 +2095,10 @@ function RightWorkbenchShell({
               return (
                 <button
                   className={cn(
-                    'inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-[13px] transition-colors',
-                    activeTabId === tab.id ? 'bg-secondary text-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary/40',
+                    'inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-[13px] transition-colors',
+                    activeTabId === tab.id
+                      ? 'border-border/75 bg-white text-foreground'
+                      : 'border-transparent text-muted-foreground hover:bg-secondary/40 hover:text-foreground',
                   )}
                   key={tab.id}
                   onClick={() => onOpenTab(tab.id)}
@@ -1799,33 +2109,24 @@ function RightWorkbenchShell({
                 </button>
               )
             })}
-          </div>
-
-          <button
-            className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={16} />
-          </button>
         </div>
       </div>
 
-      <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-[#FCFCFD] px-6 py-6">
+      <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white px-6 py-6">
         {renderBody()}
       </div>
     </aside>
   )
 }
 
-function LibraryModuleCanvas() {
+function LibraryModuleCanvas({ topicStatusById }) {
   return (
     <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white">
       <div className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-5 lg:px-6">
         <div className="mb-6">
           <h1 className="text-[30px] font-semibold tracking-[-0.03em] text-foreground sm:text-[34px]">选题库</h1>
           <p className="mt-2 text-[14px] leading-6 text-muted-foreground">
-            先用同一套选题卡样式整理 30 个预备选题。当前只做列表展示，后续再补“已创作”标注和更新交互。
+            当前选题状态会和创作流程联动，已创作或创作中的选题会在这里同步标记。
           </p>
           <div className="mt-4 inline-flex rounded-full bg-secondary px-3 py-1.5 text-[12px] text-muted-foreground">
             当前预置 {topicLibraryItems.length} 个选题
@@ -1834,7 +2135,7 @@ function LibraryModuleCanvas() {
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {topicLibraryItems.map((topic) => (
-            <TopicLibraryCard key={topic.id} topic={topic} />
+            <TopicLibraryCard key={topic.id} topic={topic} topicStatus={topicStatusById[topic.id] ?? 'pending'} />
           ))}
         </div>
       </div>
@@ -1847,6 +2148,7 @@ export default function BenchmarkWorkbenchPage() {
   const createSession = useBenchmarkStore((state) => state.createSession)
   const deleteSession = useBenchmarkStore((state) => state.deleteSession)
   const isSidebarCollapsed = useBenchmarkStore((state) => state.isSidebarCollapsed)
+  const resetAllSessions = useBenchmarkStore((state) => state.resetAllSessions)
   const setSidebarCollapsed = useBenchmarkStore((state) => state.setSidebarCollapsed)
   const sessions = useBenchmarkStore((state) => state.sessions)
   const setActiveSessionId = useBenchmarkStore((state) => state.setActiveSessionId)
@@ -1876,6 +2178,7 @@ export default function BenchmarkWorkbenchPage() {
     [searchQuery, sessions],
   )
   const historySessions = useMemo(() => orderedSessions.filter(hasSessionHistory), [orderedSessions])
+  const topicStatusById = useMemo(() => getTopicStatusMap(sessions), [sessions])
 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? orderedSessions[0] ?? sessions[0] ?? null
@@ -1884,7 +2187,36 @@ export default function BenchmarkWorkbenchPage() {
   const selectedTopic = activeSession ? getSelectedTopic(activeSession) : null
   const activeVersion = activeSession ? getActiveVersion(activeSession) : null
   const activeFilterTypes = activeSession?.topicSelection?.filterTypes ?? []
-  const topicPageCount = getTopicRecommendationPageCount(activeFilterTypes)
+  const visibleTopicRecommendations = useMemo(() => {
+    if (!activeSession) {
+      return []
+    }
+
+    if (activeSession.topicSelection.source !== 'preset') {
+      return activeSession.topicSelection.recommendations ?? []
+    }
+
+    return createTopicRecommendations({
+      filterTypes: activeFilterTypes,
+      pageIndex: activeSession.topicSelection.pageIndex ?? 0,
+      excludeSessionId: activeSession.id,
+      sessions,
+    })
+  }, [activeFilterTypes, activeSession, sessions])
+  const topicPageCount = useMemo(() => {
+    if (!activeSession) {
+      return 1
+    }
+
+    if (activeSession.topicSelection.source !== 'preset') {
+      return Math.max(1, Math.ceil((activeSession.topicSelection.recommendations?.length ?? 0) / 6))
+    }
+
+    return getTopicRecommendationPageCount(activeFilterTypes, {
+      excludeSessionId: activeSession.id,
+      sessions,
+    })
+  }, [activeFilterTypes, activeSession, sessions])
   const availableTabs = activeSession ? getAvailableTabs(activeSession) : []
   const isBusy = Boolean(activeSession?.processingFlow)
   const isContentModule = activeModule === 'content'
@@ -1893,6 +2225,19 @@ export default function BenchmarkWorkbenchPage() {
   const hasWorkbenchOutputs = availableTabs.length > 0
   const shouldRenderHero = isContentModule && currentStageId === 'topic' && !activeSession?.topicSelection?.selectedTopicId
   const showWorkbench = isContentModule && activeSession?.isWorkbenchOpen && hasWorkbenchOutputs
+
+  useEffect(() => {
+    if (CONTENT_FLOW_UI_PREVIEW || typeof window === 'undefined') {
+      return
+    }
+
+    if (window.localStorage.getItem(CONTENT_FLOW_RESET_KEY) === 'done') {
+      return
+    }
+
+    resetAllSessions()
+    window.localStorage.setItem(CONTENT_FLOW_RESET_KEY, 'done')
+  }, [resetAllSessions])
 
   useEffect(() => {
     if (!currentSessionId && orderedSessions[0]) {
@@ -1911,6 +2256,34 @@ export default function BenchmarkWorkbenchPage() {
       })
     }
   }, [activeSession, availableTabs, updateSession])
+
+  useEffect(() => {
+    if (!activeSession || activeSession.topicSelection.source !== 'preset') {
+      return
+    }
+
+    const currentPageIndex = activeSession.topicSelection.pageIndex ?? 0
+    const clampedPageIndex = Math.min(Math.max(currentPageIndex, 0), topicPageCount - 1)
+
+    if (clampedPageIndex === currentPageIndex) {
+      return
+    }
+
+    updateSession(activeSession.id, (current) => ({
+      ...current,
+      topicSelection: {
+        ...current.topicSelection,
+        pageIndex: clampedPageIndex,
+        recommendationError: '',
+        recommendations: createTopicRecommendations({
+          filterTypes: current.topicSelection.filterTypes,
+          pageIndex: clampedPageIndex,
+          excludeSessionId: current.id,
+          sessions,
+        }),
+      },
+    }))
+  }, [activeSession, sessions, topicPageCount, updateSession])
 
   useLayoutEffect(() => {
     const container = splitContainerRef.current
@@ -1980,31 +2353,89 @@ export default function BenchmarkWorkbenchPage() {
     updateSession(currentSessionId, updater)
   }
 
-  async function runFlow({ onComplete, onError, resolveResult, sessionId, summary, steps, title }) {
+  async function runFlow({
+    awaitResultStepIndex,
+    introMessageContent,
+    onComplete,
+    onError,
+    resolveFlowOnComplete,
+    resolveResult,
+    resolveStepDelayMs,
+    sessionId,
+    summary,
+    steps,
+    title,
+  }) {
     const flowId = createId('flow')
-    const preparedSteps = steps.map((step, index) => ({
-      ...step,
-      id: `${flowId}-step-${index + 1}`,
-      status: index === 0 ? 'running' : 'pending',
-    }))
-    const resultPromise = resolveResult ? Promise.resolve().then(resolveResult) : Promise.resolve(null)
+    const messageId = createId('assistant')
+    const startedAt = Date.now()
+    const holdStepIndex = Math.min(Math.max(awaitResultStepIndex ?? steps.length - 1, 0), steps.length - 1)
+    const preparedSteps = createPreparedFlowSteps(flowId, steps, startedAt)
 
     const startedFlow = {
-      createdAt: new Date().toISOString(),
-      estimatedTimeLabel: formatEstimateLabel(steps),
+      createdAt: new Date(startedAt).toISOString(),
       id: flowId,
+      messageId,
       steps: preparedSteps,
       summary,
       title,
     }
 
-    updateSession(sessionId, {
+    updateSession(sessionId, (current) => ({
+      ...current,
+      messages: [
+        ...current.messages,
+        {
+          content: introMessageContent || summary || title,
+          createdAt: new Date(startedAt).toISOString(),
+          id: messageId,
+          role: 'assistant',
+          workflow: startedFlow,
+        },
+      ],
       processingFlow: startedFlow,
-    })
+    }))
 
-    for (let index = 0; index < preparedSteps.length; index += 1) {
-      await delay(FLOW_DELAY_MS)
-      const isLastStep = index === preparedSteps.length - 1
+    const updateExternalFlowSteps = (incomingSteps) => {
+      updateSession(sessionId, (current) => {
+        const activeFlow = current.processingFlow
+
+        if (!activeFlow || activeFlow.id !== flowId) {
+          return current
+        }
+
+        const nextFlow = {
+          ...activeFlow,
+          steps: mergeFlowProgressSteps(activeFlow.steps, incomingSteps),
+        }
+
+        return {
+          ...current,
+          messages: attachWorkflowToMessages(current.messages, messageId, nextFlow),
+          processingFlow: nextFlow,
+        }
+      })
+    }
+
+    const resultPromise = resolveResult
+      ? Promise.resolve().then(() =>
+          resolveResult({
+            flowId,
+            messageId,
+            startedAt,
+            updateFlowSteps: updateExternalFlowSteps,
+          }),
+        )
+      : Promise.resolve(null)
+
+    for (let index = 0; index < holdStepIndex; index += 1) {
+      const step = preparedSteps[index]
+      const stepDelayMs =
+        typeof resolveStepDelayMs === 'function'
+          ? Math.max(0, resolveStepDelayMs(step, index, preparedSteps))
+          : clampFlowStepDuration(step?.seconds ?? 1)
+
+      await delay(stepDelayMs)
 
       updateSession(sessionId, (current) => {
         const activeFlow = current.processingFlow
@@ -2013,28 +2444,16 @@ export default function BenchmarkWorkbenchPage() {
           return current
         }
 
-        const nextSteps = activeFlow.steps.map((step, stepIndex) => {
-          if (stepIndex < index) {
-            return { ...step, status: 'done' }
-          }
-
-          if (stepIndex === index) {
-            return { ...step, status: isLastStep ? 'running' : 'done' }
-          }
-
-          if (stepIndex === index + 1) {
-            return { ...step, status: 'running' }
-          }
-
-          return step
-        })
+        const nextSteps = advanceFlowSteps(activeFlow.steps, index, Date.now())
+        const nextFlow = {
+          ...activeFlow,
+          steps: nextSteps,
+        }
 
         return {
           ...current,
-          processingFlow: {
-            ...activeFlow,
-            steps: nextSteps,
-          },
+          messages: attachWorkflowToMessages(current.messages, messageId, nextFlow),
+          processingFlow: nextFlow,
         }
       })
     }
@@ -2044,36 +2463,28 @@ export default function BenchmarkWorkbenchPage() {
     try {
       resolvedResult = await resultPromise
     } catch (error) {
-      const failedSteps = preparedSteps.map((step, index) => ({
-        ...step,
-        status: index === preparedSteps.length - 1 ? 'failed' : 'done',
-      }))
-      const failedFlow = {
-        ...startedFlow,
-        errorMessage: error.message,
-        steps: failedSteps,
-      }
-
       updateSession(sessionId, (current) => {
+        const activeFlow = current.processingFlow?.id === flowId ? current.processingFlow : startedFlow
+        const failedFlow = {
+          ...activeFlow,
+          completedAt: new Date().toISOString(),
+          errorMessage: error.message,
+          steps: failFlowSteps(activeFlow.steps, Date.now()),
+        }
         const nextSession = onError
-          ? onError(current, error)
+          ? onError(current, error, { flowId, messageId, startedAt })
           : {
               activeWorkbenchTab: 'draft',
               isWorkbenchOpen: true,
-              messages: [
-                ...current.messages,
-                {
-                  id: createId('assistant'),
-                  role: 'assistant',
-                  content: `这一步执行失败了：${error.message}`,
-                  createdAt: new Date().toISOString(),
-                },
-              ],
+              messages: updateMessageById(current.messages, messageId, (message) => ({
+                content: appendMessageParagraph(message.content, `这一步执行失败了：${error.message}`),
+              })),
             }
 
         return {
           ...current,
           ...nextSession,
+          messages: attachWorkflowToMessages(nextSession.messages ?? current.messages, messageId, failedFlow),
           lastFlowSummary: failedFlow,
           processingFlow: null,
           runLogs: [failedFlow, ...(current.runLogs ?? [])].slice(0, 12),
@@ -2083,22 +2494,26 @@ export default function BenchmarkWorkbenchPage() {
       return
     }
 
-    const finalSteps = preparedSteps.map((step) => ({
-      ...step,
-      status: 'done',
-    }))
-
-    const completedFlow = {
-      ...startedFlow,
-      steps: finalSteps,
-    }
-
     updateSession(sessionId, (current) => {
-      const nextSession = onComplete(current, resolvedResult)
+      const activeFlow = current.processingFlow?.id === flowId ? current.processingFlow : startedFlow
+      const finishedAt = Date.now()
+      let finalSteps = completeFlowSteps(activeFlow.steps, finishedAt)
+
+      if (resolveFlowOnComplete) {
+        finalSteps = resolveFlowOnComplete(finalSteps, resolvedResult, finishedAt)
+      }
+
+      const completedFlow = {
+        ...activeFlow,
+        completedAt: new Date(finishedAt).toISOString(),
+        steps: finalSteps,
+      }
+      const nextSession = onComplete(current, resolvedResult, { flowId, messageId, startedAt })
 
       return {
         ...current,
         ...nextSession,
+        messages: attachWorkflowToMessages(nextSession.messages ?? current.messages, messageId, completedFlow),
         lastFlowSummary: completedFlow,
         processingFlow: null,
         runLogs: [completedFlow, ...(current.runLogs ?? [])].slice(0, 12),
@@ -2113,9 +2528,14 @@ export default function BenchmarkWorkbenchPage() {
 
     const topic =
       topicOverride ??
-      activeSession.topicSelection.recommendations.find((item) => item.id === topicId)
+      visibleTopicRecommendations.find((item) => item.id === topicId)
 
     if (!topic) {
+      return
+    }
+
+    if (CONTENT_FLOW_UI_PREVIEW) {
+      updateSession(currentSessionId, (current) => buildMockInitialDraftExperience({ current, topic }))
       return
     }
 
@@ -2135,11 +2555,14 @@ export default function BenchmarkWorkbenchPage() {
         ...current.topicSelection,
         recommendationError: '',
         selectedTopicId: topicId,
+        selectedTopic: topic,
       },
     }))
 
     await runFlow({
-      onComplete: (current, generated) => {
+      awaitResultStepIndex: 0,
+      introMessageContent: INITIAL_DRAFT_FLOW_INTRO_MESSAGE,
+      onComplete: (current, generated, { messageId }) => {
         const currentTopic = getSelectedTopic(current)
         const version = buildVersionFromGeneratedResult({
           generated,
@@ -2158,51 +2581,71 @@ export default function BenchmarkWorkbenchPage() {
             versions: [version],
           },
           isWorkbenchOpen: true,
-          messages: [
-            ...current.messages,
-            {
-              id: createId('assistant'),
-              role: 'assistant',
-              content: '第一版文字稿已经准备好了，右侧可以查看正文和详细校验报告。你确认后，我会继续生成排版预览。',
-              createdAt: new Date().toISOString(),
-            },
-          ],
+          messages: updateMessageById(current.messages, messageId, (message) => ({
+            content: appendMessageParagraph(
+              message.content,
+              '首版稿件已经准备好了，右侧可以查看正文和校验报告。你确认后，我会继续生成排版预览。',
+            ),
+          })),
           stageId: 'draft',
         }
       },
-      onError: (current, error) => ({
+      onError: (current, error, { messageId }) => ({
         activeWorkbenchTab: 'draft',
         isWorkbenchOpen: true,
-        messages: [
-          ...current.messages,
-          {
-            id: createId('assistant'),
-            role: 'assistant',
-            content: `第一版文字稿生成失败了：${error.message}。你可以重新点击当前选题，再试一次。`,
-            createdAt: new Date().toISOString(),
-          },
-        ],
+        messages: updateMessageById(current.messages, messageId, (message) => ({
+          content: appendMessageParagraph(
+            message.content,
+            `首版稿件生成失败了：${error.message}。你可以重新点击当前选题，再试一次。`,
+          ),
+        })),
         topicSelection: {
           ...current.topicSelection,
           selectedTopicId: null,
+          selectedTopic: null,
         },
       }),
-      resolveResult: () =>
+      resolveResult: ({ updateFlowSteps }) =>
         requestGeneratedDraft({
           action: 'initial',
           deepThinkingEnabled: activeSession.deepThinkingEnabled,
+          onProgress: (event) => {
+            updateFlowSteps(event.steps)
+          },
+          streamProgress: true,
           supplement: '',
           topic,
         }),
+      resolveFlowOnComplete: (flowSteps, generated, finishedAt) => {
+        const { decision, shouldSkipAutoRevision } = resolveInitialDraftFlowOutcome(
+          generated?.reportMarkdown ?? '',
+          generated?.decision ?? '',
+        )
+        return flowSteps.map((step, index) => {
+          if (index === 5) {
+            return {
+              ...step,
+              label: `判定修改方式（${decision}）`,
+            }
+          }
+
+          if (index !== 6 || !shouldSkipAutoRevision) {
+            return step
+          }
+
+          return {
+            ...step,
+            completedAt: finishedAt,
+            elapsedMs: 0,
+            startedAt: null,
+            status: 'skipped',
+          }
+        })
+      },
       sessionId: currentSessionId,
-      summary: '已确认选题，系统开始自动完成正文、校验与首版修订。',
-      steps: [
-        { label: '锁定文章结构与笔名口吻', seconds: 5, tabId: 'draft' },
-        { label: '生成第一版正文', seconds: 8, tabId: 'draft' },
-        { label: '输出详细校验报告', seconds: 6, tabId: 'report' },
-        { label: '完成自动修订', seconds: 4, tabId: 'versions' },
-      ],
-      title: '正在生成第一版文字稿',
+      summary: INITIAL_DRAFT_FLOW_SUMMARY,
+      steps: INITIAL_DRAFT_FLOW_STEPS,
+      title: INITIAL_DRAFT_FLOW_TITLE,
     })
   }
 
@@ -2215,6 +2658,8 @@ export default function BenchmarkWorkbenchPage() {
     const nextRecommendations = createTopicRecommendations({
       filterTypes: normalizedFilterTypes,
       pageIndex: 0,
+      excludeSessionId: currentSessionId,
+      sessions,
     })
 
     updateSession(currentSessionId, (current) => ({
@@ -2226,6 +2671,7 @@ export default function BenchmarkWorkbenchPage() {
         recommendationError: '',
         recommendations: nextRecommendations,
         selectedTopicId: null,
+        selectedTopic: null,
         source: 'preset',
       },
     }))
@@ -2244,6 +2690,8 @@ export default function BenchmarkWorkbenchPage() {
     const nextRecommendations = createTopicRecommendations({
       filterTypes: activeSession.topicSelection.filterTypes,
       pageIndex: clampedPageIndex,
+      excludeSessionId: currentSessionId,
+      sessions,
     })
 
     updateSession(currentSessionId, (current) => ({
@@ -2254,6 +2702,7 @@ export default function BenchmarkWorkbenchPage() {
         recommendationError: '',
         recommendations: nextRecommendations,
         selectedTopicId: null,
+        selectedTopic: null,
         source: 'preset',
       },
     }))
@@ -2286,18 +2735,17 @@ export default function BenchmarkWorkbenchPage() {
     }))
 
     await runFlow({
-      onComplete: (current) => {
+      introMessageContent:
+        '收到，这一版文字稿已确认。我现在开始整理排版预览，完成后右侧会显示可确认的排版效果。',
+      onComplete: (current, _generated, { messageId }) => {
         return {
           activeWorkbenchTab: 'preview',
-          messages: [
-            ...current.messages,
-            {
-              id: createId('assistant'),
-              role: 'assistant',
-              content: '极简排版预览已经准备好了。右侧可以切换 PC / 移动端和字号，确认后这轮内容创作就完成了。',
-              createdAt: new Date().toISOString(),
-            },
-          ],
+          messages: updateMessageById(current.messages, messageId, (message) => ({
+            content: appendMessageParagraph(
+              message.content,
+              '极简排版预览已经准备好了。右侧可以切换 PC、移动端和字号，确认后这轮内容创作就完成了。',
+            ),
+          })),
           stageId: 'preview',
         }
       },
@@ -2333,7 +2781,9 @@ export default function BenchmarkWorkbenchPage() {
     }))
 
     await runFlow({
-      onComplete: (current, generated) => {
+      introMessageContent:
+        '收到，我会按整篇重写的方式重新处理这一版文字稿。完成后，右侧会同步更新正文和校验报告。',
+      onComplete: (current, generated, { messageId }) => {
         const currentTopic = getSelectedTopic(current)
         const nextVersion = buildVersionFromGeneratedResult({
           generated,
@@ -2352,29 +2802,23 @@ export default function BenchmarkWorkbenchPage() {
             versions: [...current.draftReview.versions, nextVersion],
           },
           isWorkbenchOpen: true,
-          messages: [
-            ...current.messages,
-            {
-              id: createId('assistant'),
-              role: 'assistant',
-              content: '我已经按“整篇重写”的方式重新生成了一版。右侧的正文和校验报告都已更新。',
-              createdAt: new Date().toISOString(),
-            },
-          ],
+          messages: updateMessageById(current.messages, messageId, (message) => ({
+            content: appendMessageParagraph(
+              message.content,
+              '我已经按“整篇重写”的方式重新生成了一版，右侧的正文和校验报告都更新好了。',
+            ),
+          })),
         }
       },
-      onError: (current, error) => ({
+      onError: (current, error, { messageId }) => ({
         activeWorkbenchTab: 'draft',
         isWorkbenchOpen: true,
-        messages: [
-          ...current.messages,
-          {
-            id: createId('assistant'),
-            role: 'assistant',
-            content: `整篇重写失败了：${error.message}。你可以稍后再试，或改用局部修改。`,
-            createdAt: new Date().toISOString(),
-          },
-        ],
+        messages: updateMessageById(current.messages, messageId, (message) => ({
+          content: appendMessageParagraph(
+            message.content,
+            `整篇重写失败了：${error.message}。你可以稍后再试，或改用局部修改。`,
+          ),
+        })),
       }),
       resolveResult: () =>
         requestGeneratedDraft({
@@ -2418,7 +2862,9 @@ export default function BenchmarkWorkbenchPage() {
 
     if (currentStageId === 'draft') {
       await runFlow({
-        onComplete: (current, generated) => {
+        introMessageContent:
+          '收到，我先根据你的修改意见重新处理这一版文字稿。完成后，右侧会同步更新正文和校验报告。',
+        onComplete: (current, generated, { messageId }) => {
           const currentTopic = getSelectedTopic(current)
           const nextVersion = buildVersionFromGeneratedResult({
             generated,
@@ -2437,30 +2883,24 @@ export default function BenchmarkWorkbenchPage() {
               versions: [...current.draftReview.versions, nextVersion],
             },
             isWorkbenchOpen: true,
-            messages: [
-              ...current.messages,
-              {
-                id: createId('assistant'),
-                role: 'assistant',
-                content: '我已经按你的修改意见完成重写。这一版正文和详细校验报告都更新在右侧了。',
-                createdAt: new Date().toISOString(),
-              },
-            ],
+            messages: updateMessageById(current.messages, messageId, (message) => ({
+              content: appendMessageParagraph(
+                message.content,
+                '我已经按你的修改意见完成重写，这一版正文和校验报告都更新在右侧了。',
+              ),
+            })),
           }
         },
-        onError: (current, error) => ({
+        onError: (current, error, { messageId }) => ({
           activeWorkbenchTab: 'draft',
           draft: currentDraft,
           isWorkbenchOpen: true,
-          messages: [
-            ...current.messages,
-            {
-              id: createId('assistant'),
-              role: 'assistant',
-              content: `这轮改稿失败了：${error.message}。修改意见我先帮你保留在输入框里了，处理好后可以直接重试。`,
-              createdAt: new Date().toISOString(),
-            },
-          ],
+          messages: updateMessageById(current.messages, messageId, (message) => ({
+            content: appendMessageParagraph(
+              message.content,
+              `这轮改稿失败了：${error.message}。修改意见我先帮你保留在输入框里了，处理好后可以直接重试。`,
+            ),
+          })),
         }),
         resolveResult: () =>
           requestGeneratedDraft({
@@ -2528,17 +2968,16 @@ export default function BenchmarkWorkbenchPage() {
     }))
 
     await runFlow({
-      onComplete: (current) => ({
+      introMessageContent:
+        '收到，我正在完成这轮排版确认并收束最终结果。完成后，当前版本会进入已确认状态。',
+      onComplete: (current, _generated, { messageId }) => ({
         activeWorkbenchTab: 'preview',
-        messages: [
-          ...current.messages,
-          {
-            id: createId('assistant'),
-            role: 'assistant',
-            content: '当前版本已经完成排版确认。你可以继续在右侧查看正文、校验报告和最终预览。',
-            createdAt: new Date().toISOString(),
-          },
-        ],
+        messages: updateMessageById(current.messages, messageId, (message) => ({
+          content: appendMessageParagraph(
+            message.content,
+            '当前版本已经完成排版确认。你可以继续在右侧查看正文、校验报告和最终预览。',
+          ),
+        })),
         stageId: 'completed',
       }),
       sessionId: currentSessionId,
@@ -2573,13 +3012,6 @@ export default function BenchmarkWorkbenchPage() {
     updateCurrentSession((current) => ({
       ...current,
       isWorkbenchOpen: !current.isWorkbenchOpen,
-    }))
-  }
-
-  function handleCloseWorkbench() {
-    updateCurrentSession((current) => ({
-      ...current,
-      isWorkbenchOpen: false,
     }))
   }
 
@@ -2661,6 +3093,10 @@ export default function BenchmarkWorkbenchPage() {
   }
 
   function getComposerPlaceholder() {
+    if (isBusy) {
+      return '当前正在生成首版稿件，请先等待这轮处理完成'
+    }
+
     if (currentStageId === 'topic') {
       return '先在上方确认推荐选题，或通过筛选切换当前显示的选题类型'
     }
@@ -2720,17 +3156,17 @@ export default function BenchmarkWorkbenchPage() {
             }}
           >
             {!isContentModule ? (
-              <LibraryModuleCanvas />
+              <LibraryModuleCanvas topicStatusById={topicStatusById} />
             ) : shouldRenderHero ? (
               <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto">
                 <div className="mx-auto flex w-full max-w-[1240px] flex-col items-center px-6 py-8 sm:px-8 lg:px-12">
-                  <div className="max-w-3xl text-center">
-                  <h1 className="text-[34px] font-semibold tracking-[-0.03em] text-foreground sm:text-[42px]">
-                    开始内容创作
-                  </h1>
-                  <p className="mx-auto mt-3 max-w-[720px] text-[15px] leading-7 text-muted-foreground">
-                    系统会先从选题库里随机加载 6 个预设选题。你可以直接选择，也可以先按类型筛选，再切换分页查看其他选题。
-                  </p>
+                  <div className="max-w-[880px] text-center">
+                    <h1 className="text-[34px] font-semibold tracking-[-0.03em] text-foreground sm:text-[42px]">
+                      开始内容创作
+                    </h1>
+                    <p className="mx-auto mt-3 max-w-[820px] text-[15px] leading-7 text-muted-foreground">
+                      系统会优先从未进入创作的选题里随机加载 6 个预设选题。你也可以按类型筛选后翻页查看更多选题。
+                    </p>
                   </div>
 
                   <div className="mt-8 w-full max-w-[1120px]">
@@ -2742,21 +3178,18 @@ export default function BenchmarkWorkbenchPage() {
                       onSelectTopic={handleSelectTopic}
                       pageCount={topicPageCount}
                       pageIndex={activeSession?.topicSelection?.pageIndex ?? 0}
-                      recommendations={activeSession?.topicSelection?.recommendations ?? []}
+                      recommendations={visibleTopicRecommendations}
                       selectedTopicId={activeSession?.topicSelection?.selectedTopicId ?? null}
+                      topicStatusById={topicStatusById}
                     />
                   </div>
                 </div>
               </div>
             ) : (
               <div className="mx-auto flex min-h-0 w-full max-w-[1240px] flex-1 flex-col px-4 sm:px-6 lg:px-8">
-                <div className="shrink-0 py-4">
-                  <NodeProgressRail currentStageId={currentStageId} />
-                </div>
-
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <div className="benchmark-scroll-hidden h-full overflow-y-auto pb-1">
-                    <div className="flex flex-col gap-8 pb-6 pt-2">
+                    <div className="flex flex-col gap-8 pb-6 pt-6">
                       {(activeSession?.messages ?? []).map((message) => (
                         <MessageBubble
                           copiedMessageId={copiedMessageId}
@@ -2765,11 +3198,6 @@ export default function BenchmarkWorkbenchPage() {
                           onCopy={handleCopyMessage}
                         />
                       ))}
-
-                      <WorkflowCard
-                        flow={activeSession?.processingFlow ?? activeSession?.lastFlowSummary}
-                        onOpenTab={handleSelectWorkbenchTab}
-                      />
 
                       {!isBusy && currentStageId === 'draft' ? (
                         <DraftStageCard
@@ -2850,7 +3278,6 @@ export default function BenchmarkWorkbenchPage() {
               </button>
               <RightWorkbenchShell
                 activeTabId={activeSession.activeWorkbenchTab}
-                onClose={handleCloseWorkbench}
                 onOpenTab={handleSelectWorkbenchTab}
                 onSelectVersion={(versionId) =>
                   updateCurrentSession((current) => ({

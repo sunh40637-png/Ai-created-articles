@@ -3,6 +3,11 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 
 const MAX_ARTICLE_SESSIONS = 16
 const TOPIC_PAGE_SIZE = 6
+const TOPIC_STATUS_PRIORITY = {
+  pending: 0,
+  'in-progress': 1,
+  completed: 2,
+}
 
 export const TOPIC_LIBRARY_TYPES = ['A型', 'B型', 'C型']
 
@@ -261,33 +266,106 @@ function normalizeTopicFilterTypes(filterTypes = []) {
   return Array.from(new Set(filterTypes.filter((type) => TOPIC_LIBRARY_TYPES.includes(type)))).slice(0, 3)
 }
 
-export function getFilteredTopicLibrary(filterTypes = []) {
-  const normalizedTypes = normalizeTopicFilterTypes(filterTypes)
-
-  if (normalizedTypes.length === 0) {
-    return CONTENT_TOPIC_LIBRARY
+export function getTopicById(topicId) {
+  if (typeof topicId !== 'string' || !topicId.trim()) {
+    return null
   }
 
-  return CONTENT_TOPIC_LIBRARY.filter((topic) => normalizedTypes.includes(topic.type))
+  return CONTENT_TOPIC_LIBRARY.find((topic) => topic.id === topicId) ?? null
 }
 
-export function getTopicRecommendationPageCount(filterTypes = []) {
-  const filteredTopics = getFilteredTopicLibrary(filterTypes)
+export function getTopicStatusMap(sessions = []) {
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    return {}
+  }
+
+  return sessions.reduce((statusMap, session) => {
+    const topicId =
+      typeof session?.topicSelection?.selectedTopicId === 'string'
+        ? session.topicSelection.selectedTopicId
+        : typeof session?.topicSelection?.selectedTopic?.id === 'string'
+          ? session.topicSelection.selectedTopic.id
+          : ''
+
+    if (!topicId) {
+      return statusMap
+    }
+
+    const nextStatus = session?.stageId === 'completed' ? 'completed' : 'in-progress'
+    const currentStatus = statusMap[topicId] ?? 'pending'
+
+    if (TOPIC_STATUS_PRIORITY[nextStatus] > TOPIC_STATUS_PRIORITY[currentStatus]) {
+      statusMap[topicId] = nextStatus
+    }
+
+    return statusMap
+  }, {})
+}
+
+function resolveExcludedTopicIds({ excludeSessionId = null, sessions = [] } = {}) {
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    return new Set()
+  }
+
+  return sessions.reduce((excludedTopicIds, session) => {
+    if (!session || session.id === excludeSessionId) {
+      return excludedTopicIds
+    }
+
+    const topicId =
+      typeof session?.topicSelection?.selectedTopicId === 'string'
+        ? session.topicSelection.selectedTopicId
+        : typeof session?.topicSelection?.selectedTopic?.id === 'string'
+          ? session.topicSelection.selectedTopic.id
+          : ''
+
+    if (topicId) {
+      excludedTopicIds.add(topicId)
+    }
+
+    return excludedTopicIds
+  }, new Set())
+}
+
+export function getFilteredTopicLibrary(filterTypes = [], options = {}) {
+  const normalizedTypes = normalizeTopicFilterTypes(filterTypes)
+  const excludedTopicIds = resolveExcludedTopicIds(options)
+
+  const filteredTopics =
+    normalizedTypes.length === 0
+      ? CONTENT_TOPIC_LIBRARY
+      : CONTENT_TOPIC_LIBRARY.filter((topic) => normalizedTypes.includes(topic.type))
+
+  if (excludedTopicIds.size === 0) {
+    return filteredTopics
+  }
+
+  return filteredTopics.filter((topic) => !excludedTopicIds.has(topic.id))
+}
+
+export function getTopicRecommendationPageCount(filterTypes = [], options = {}) {
+  const filteredTopics = getFilteredTopicLibrary(filterTypes, options)
 
   return Math.max(1, Math.ceil(filteredTopics.length / TOPIC_PAGE_SIZE))
 }
 
-export function createTopicRecommendations({ filterTypes = [], pageIndex = 0 } = {}) {
-  const filteredTopics = getFilteredTopicLibrary(filterTypes)
-  const pageCount = getTopicRecommendationPageCount(filterTypes)
+export function createTopicRecommendations({ filterTypes = [], pageIndex = 0, ...options } = {}) {
+  const filteredTopics = getFilteredTopicLibrary(filterTypes, options)
+  const pageCount = getTopicRecommendationPageCount(filterTypes, options)
   const safePageIndex = Math.min(Math.max(pageIndex, 0), pageCount - 1)
   const startIndex = safePageIndex * TOPIC_PAGE_SIZE
 
   return filteredTopics.slice(startIndex, startIndex + TOPIC_PAGE_SIZE)
 }
 
-function createRandomTopicPageIndex(filterTypes = []) {
-  const pageCount = getTopicRecommendationPageCount(filterTypes)
+function createRandomTopicPageIndex(filterTypes = [], options = {}) {
+  const filteredTopics = getFilteredTopicLibrary(filterTypes, options)
+
+  if (filteredTopics.length === 0) {
+    return 0
+  }
+
+  const pageCount = getTopicRecommendationPageCount(filterTypes, options)
   return Math.floor(Math.random() * pageCount)
 }
 
@@ -307,9 +385,9 @@ function createSessionTitle(index = 1) {
   return `新的文章 ${index}`
 }
 
-function createSession(index = 1) {
+function createSession(index = 1, options = {}) {
   const now = new Date().toISOString()
-  const pageIndex = createRandomTopicPageIndex()
+  const pageIndex = createRandomTopicPageIndex([], options)
 
   return {
     id: createId('content-session'),
@@ -327,8 +405,9 @@ function createSession(index = 1) {
       isRefreshingRecommendations: false,
       pageIndex,
       recommendationError: '',
-      recommendations: createTopicRecommendations({ pageIndex }),
+      recommendations: createTopicRecommendations({ pageIndex, ...options }),
       selectedTopicId: null,
+      selectedTopic: null,
       source: 'preset',
     },
     draftReview: {
@@ -370,15 +449,21 @@ function ensureSessionsShape(state) {
   }
 
   const normalizedSessions = sessions.map((session, index) => {
-    const fallbackSession = createSession(index + 1)
+    const fallbackSession = createSession(index + 1, { excludeSessionId: session?.id, sessions })
     const normalizedFilterTypes = normalizeTopicFilterTypes(session?.topicSelection?.filterTypes)
+    const pageCount = getTopicRecommendationPageCount(normalizedFilterTypes, {
+      excludeSessionId: session?.id,
+      sessions,
+    })
     const normalizedPageIndex =
       typeof session?.topicSelection?.pageIndex === 'number' && session.topicSelection.pageIndex >= 0
-        ? session.topicSelection.pageIndex
+        ? Math.min(session.topicSelection.pageIndex, pageCount - 1)
         : fallbackSession.topicSelection.pageIndex
     const fallbackRecommendations = createTopicRecommendations({
       filterTypes: normalizedFilterTypes,
       pageIndex: normalizedPageIndex,
+      excludeSessionId: session?.id,
+      sessions,
     })
     const currentRecommendations = Array.isArray(session?.topicSelection?.recommendations)
       ? session.topicSelection.recommendations
@@ -420,6 +505,10 @@ function ensureSessionsShape(state) {
         filterTypes: normalizedFilterTypes,
         pageIndex: normalizedPageIndex,
         recommendations: normalizedRecommendations.length > 0 ? normalizedRecommendations : fallbackRecommendations,
+        selectedTopic:
+          session?.topicSelection?.selectedTopic ??
+          getTopicById(session?.topicSelection?.selectedTopicId) ??
+          fallbackSession.topicSelection.selectedTopic,
         recommendationError:
           typeof session?.topicSelection?.recommendationError === 'string' ? session.topicSelection.recommendationError : '',
         source:
@@ -475,7 +564,7 @@ export const useBenchmarkStore = create(
         isSidebarCollapsed: false,
         sessions: [initialSession],
         createSession: () => {
-          const nextSession = createSession(get().sessions.length + 1)
+          const nextSession = createSession(get().sessions.length + 1, { sessions: get().sessions })
 
           set((state) => ({
             activeSessionId: nextSession.id,
@@ -527,6 +616,16 @@ export const useBenchmarkStore = create(
           set(() => ({
             isSidebarCollapsed: Boolean(nextValue),
           })),
+        resetAllSessions: () => {
+          const replacementSession = createSession(1)
+
+          set(() => ({
+            activeSessionId: replacementSession.id,
+            sessions: [replacementSession],
+          }))
+
+          return replacementSession.id
+        },
         updateSession: (sessionId, updater) =>
           set((state) => ({
             sessions: state.sessions.map((session) => {

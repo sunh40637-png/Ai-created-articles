@@ -8,9 +8,13 @@ import {
   runBenchmarkAnalysis,
   runBenchmarkTranscription,
 } from './server/benchmarkPipeline.js'
-import { generateContentDraft } from './server/contentCreation.js'
+import {
+  generateContentDraft,
+  runInitialContentPipeline,
+} from './server/contentCreation.js'
 import { parseRequestFormData } from './server/httpFormData.js'
 import { chatWithMiniMax } from './server/minimax.js'
+import { resolveMiniMaxConfig } from './server/runtimeConfig.js'
 import { generateTopicRecommendations } from './server/topicRecommendations.js'
 
 function parseRangeHeader(rangeHeader, size) {
@@ -99,6 +103,20 @@ function contentCreationDevApi(env) {
   return {
     name: 'content-creation-dev-api',
     configureServer(server) {
+      async function readJsonBody(req) {
+        const chunks = []
+
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+
+        return chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+      }
+
+      function writeStreamEvent(res, payload) {
+        res.write(`${JSON.stringify(payload)}\n`)
+      }
+
       server.middlewares.use('/api/content-draft', async (req, res, next) => {
         if (req.method !== 'POST') {
           next()
@@ -106,13 +124,46 @@ function contentCreationDevApi(env) {
         }
 
         try {
-          const chunks = []
+          const body = await readJsonBody(req)
 
-          for await (const chunk of req) {
-            chunks.push(chunk)
+          if (body.streamProgress && body.action === 'initial') {
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+            res.setHeader('Cache-Control', 'no-cache, no-transform')
+            res.setHeader('Connection', 'keep-alive')
+            res.flushHeaders?.()
+
+            try {
+              const result = await runInitialContentPipeline({
+                apiKey: env.MINIMAX_API_KEY,
+                deepThinkingEnabled: body.deepThinkingEnabled ?? true,
+                model: body.model || env.MINIMAX_MODEL,
+                supplement: body.supplement || '',
+                topic: body.topic || null,
+                onProgress: (progress) => {
+                  writeStreamEvent(res, {
+                    type: 'progress',
+                    ...progress,
+                  })
+                },
+              })
+
+              writeStreamEvent(res, {
+                type: 'result',
+                data: result,
+              })
+            } catch (error) {
+              writeStreamEvent(res, {
+                type: 'error',
+                details: error.payload ?? null,
+                error: error.message || '内容创作请求失败',
+              })
+            }
+
+            res.end()
+            return
           }
 
-          const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
           const result = await generateContentDraft({
             action: body.action || 'initial',
             apiKey: env.MINIMAX_API_KEY,
@@ -333,15 +384,24 @@ function benchmarkPipelineDevApi(env) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const minimaxConfig = resolveMiniMaxConfig({
+    apiKey: env.MINIMAX_API_KEY,
+    model: env.MINIMAX_MODEL,
+  })
+  const runtimeEnv = {
+    ...env,
+    MINIMAX_API_KEY: minimaxConfig.apiKey,
+    MINIMAX_MODEL: minimaxConfig.model,
+  }
 
   return {
     plugins: [
       react(),
       tailwindcss(),
-      minimaxDevApi(env),
-      contentCreationDevApi(env),
-      topicRecommendationDevApi(env),
-      benchmarkPipelineDevApi(env),
+      minimaxDevApi(runtimeEnv),
+      contentCreationDevApi(runtimeEnv),
+      topicRecommendationDevApi(runtimeEnv),
+      benchmarkPipelineDevApi(runtimeEnv),
     ],
     resolve: {
       alias: {
