@@ -40,6 +40,13 @@ export const CONTENT_TOPIC_BATCHES = [
       reason: '健康与生命类内容适合用清单结构，读者容易收藏转发。',
       theme: '健康与生命',
     },
+    {
+      title: '真正聪明的人，到了一定年纪都会慢慢收住这3种脾气',
+      type: 'B型',
+      penName: '明远',
+      reason: '适合落到处世分寸和情绪管理，容易写出有现实感的提醒。',
+      theme: '做人处世智慧',
+    },
   ],
   [
     {
@@ -76,6 +83,13 @@ export const CONTENT_TOPIC_BATCHES = [
       penName: '明远',
       reason: '健康与生命母题可以延展到身心状态和生命质量，适合实用表达。',
       theme: '健康与生命',
+    },
+    {
+      title: '到了晚年以后，最能护住一个人的，往往是这3份清醒',
+      type: 'A型',
+      penName: '芷若',
+      reason: '适合写晚年自处的安静和通透，文字更容易沉下来。',
+      theme: '晚年自处',
     },
   ],
   [
@@ -114,6 +128,13 @@ export const CONTENT_TOPIC_BATCHES = [
       reason: '健康与生命母题适合做收藏型内容，结构清楚，传播性更好。',
       theme: '健康与生命',
     },
+    {
+      title: '一个家庭真正的福气，不是热闹，而是把这3件事过顺了',
+      type: 'B型',
+      penName: '明远',
+      reason: '适合家庭关系主题，表达上能兼顾温度和明确的现实抓手。',
+      theme: '家庭关系',
+    },
   ],
 ]
 
@@ -136,7 +157,7 @@ function createInitialMessages() {
       id: createId('assistant'),
       role: 'assistant',
       content:
-        '我先根据账号调性准备了 5 个推荐选题。你确认之后，系统会自动完成写作、校验和极简排版预览。',
+        '我先根据账号调性准备了 6 个推荐选题。你可以直接选择，也可以按偏好重推，或者直接输入自己的题目。',
       createdAt: new Date().toISOString(),
     },
   ]
@@ -165,7 +186,9 @@ function createSession(index = 1) {
       batchIndex,
       isSupplementComposerOpen: false,
       isCustomTopicComposerOpen: false,
+      isRefreshingRecommendations: false,
       customTopicInput: '',
+      recommendationError: '',
       recommendations: createTopicRecommendations(batchIndex),
       selectedTopicId: null,
       supplement: '',
@@ -210,6 +233,20 @@ function ensureSessionsShape(state) {
 
   const normalizedSessions = sessions.map((session, index) => {
     const fallbackSession = createSession(index + 1)
+    const fallbackRecommendations = fallbackSession.topicSelection.recommendations
+    const currentRecommendations = Array.isArray(session?.topicSelection?.recommendations)
+      ? session.topicSelection.recommendations
+      : []
+    const normalizedRecommendations =
+      currentRecommendations.length >= 6
+        ? currentRecommendations
+        : [
+            ...currentRecommendations,
+            ...fallbackRecommendations.filter(
+              (fallbackTopic) =>
+                !currentRecommendations.some((currentTopic) => currentTopic.title === fallbackTopic.title),
+            ),
+          ].slice(0, 6)
     const normalizedStageId =
       session?.stageId === 'images'
         ? 'preview'
@@ -243,12 +280,11 @@ function ensureSessionsShape(state) {
       topicSelection: {
         ...fallbackSession.topicSelection,
         ...(session?.topicSelection ?? {}),
-        recommendations:
-          Array.isArray(session?.topicSelection?.recommendations) && session.topicSelection.recommendations.length > 0
-            ? session.topicSelection.recommendations
-            : fallbackSession.topicSelection.recommendations,
+        recommendations: normalizedRecommendations.length > 0 ? normalizedRecommendations : fallbackRecommendations,
         customTopicInput:
           typeof session?.topicSelection?.customTopicInput === 'string' ? session.topicSelection.customTopicInput : '',
+        recommendationError:
+          typeof session?.topicSelection?.recommendationError === 'string' ? session.topicSelection.recommendationError : '',
       },
       draftReview: {
         ...fallbackSession.draftReview,
@@ -371,7 +407,7 @@ export const useBenchmarkStore = create(
     },
     {
       name: 'content-creation-sessions-v1',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         activeSessionId: state.activeSessionId,

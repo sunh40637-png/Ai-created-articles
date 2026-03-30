@@ -10,10 +10,13 @@ import {
   Copy,
   FileText,
   History,
+  LibraryBig,
   LayoutTemplate,
   LoaderCircle,
   MessageSquareText,
   Monitor,
+  PanelLeftClose,
+  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   Paperclip,
@@ -75,6 +78,10 @@ const workbenchTabs = [
   { id: 'report', label: '校验报告', icon: ScrollText },
   { id: 'preview', label: '排版预览', icon: LayoutTemplate },
   { id: 'versions', label: '版本记录', icon: History },
+]
+
+const sidebarModules = [
+  { id: 'library', label: '选题库', icon: LibraryBig },
 ]
 
 const markdownComponents = {
@@ -186,15 +193,43 @@ function getStageStatus(stageId, currentStageId) {
   return 'pending'
 }
 
-function applyTopicSupplement(recommendations, supplement) {
-  if (!supplement.trim()) {
-    return recommendations
+function hasSessionHistory(session) {
+  if (!session) {
+    return false
   }
 
-  return recommendations.map((topic) => ({
-    ...topic,
-    reason: `${topic.reason} 已吸收你的补充：${supplement.trim()}`,
-  }))
+  const messages = Array.isArray(session.messages) ? session.messages : []
+  const hasUserMessage = messages.some((message) => message?.role === 'user')
+  const hasSelectedTopic = Boolean(session?.topicSelection?.selectedTopicId)
+  const hasGeneratedVersions = (session?.draftReview?.versions?.length ?? 0) > 0
+  const hasAdvancedStage = typeof session?.stageId === 'string' && session.stageId !== 'topic'
+  const hasFlow = Boolean(session?.processingFlow || session?.lastFlowSummary)
+
+  return hasUserMessage || hasSelectedTopic || hasGeneratedVersions || hasAdvancedStage || hasFlow
+}
+
+function normalizeRecommendedTopics(recommendations = []) {
+  return recommendations
+    .map((topic, index) => {
+      const title = typeof topic?.title === 'string' ? topic.title.trim() : ''
+
+      if (!title) {
+        return null
+      }
+
+      return {
+        id: typeof topic?.id === 'string' ? topic.id : createId(`recommended-topic-${index + 1}`),
+        penName: typeof topic?.penName === 'string' && topic.penName.trim() ? topic.penName : '明远',
+        reason:
+          typeof topic?.reason === 'string' && topic.reason.trim()
+            ? topic.reason.trim()
+            : '这个方向更贴近你刚才补充的选题偏好。',
+        theme: typeof topic?.theme === 'string' && topic.theme.trim() ? topic.theme.trim() : '做人处世智慧',
+        title,
+        type: typeof topic?.type === 'string' && topic.type.trim() ? topic.type.trim() : 'B型',
+      }
+    })
+    .filter(Boolean)
 }
 
 function inferTopicTheme(title = '') {
@@ -347,6 +382,26 @@ async function requestGeneratedDraft({ action, deepThinkingEnabled, note = '', s
 
   if (!response.ok) {
     throw new Error(payload?.error || 'MiniMax 内容创作失败')
+  }
+
+  return payload
+}
+
+async function requestTopicRecommendations({ supplement = '' }) {
+  const response = await fetch('/api/topic-recommendations', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      supplement,
+    }),
+  })
+
+  const payload = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '推荐选题生成失败')
   }
 
   return payload
@@ -586,6 +641,89 @@ function SearchField({ onChange, value }) {
   )
 }
 
+function PlaceholderAvatar({ compact = false }) {
+  return (
+    <div
+      className={cn(
+        'relative overflow-hidden rounded-full border border-white/80 bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]',
+        compact ? 'h-11 w-11' : 'h-12 w-12',
+      )}
+    >
+      <img alt="内容创作头像" className="h-full w-full object-cover" src="/sidebar-avatar.png" />
+    </div>
+  )
+}
+
+function SidebarRailButton({ children, label, onClick, popup, selected = false, type = 'button' }) {
+  return (
+    <div className="relative">
+      <button
+        aria-label={label}
+        className={cn(
+          'inline-flex h-11 w-11 items-center justify-center rounded-[14px] border transition-all',
+          selected
+            ? 'border-border/80 bg-white text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.04)]'
+            : 'border-transparent bg-transparent text-muted-foreground hover:border-border/70 hover:bg-white hover:text-foreground',
+        )}
+        onClick={onClick}
+        type={type}
+      >
+        {children}
+      </button>
+      {popup}
+    </div>
+  )
+}
+
+function HistoryHoverCard({ activeSessionId, onSelectSession, sessions }) {
+  return (
+    <div className="pointer-events-none absolute left-[calc(100%+16px)] top-1/2 z-40 w-[280px] -translate-y-1/2 rounded-[18px] border border-border/80 bg-white p-4 opacity-0 shadow-[0_24px_60px_rgba(15,23,42,0.14)] transition-all duration-150 group-hover/history-card:pointer-events-auto group-hover/history-card:opacity-100">
+      <div className="relative">
+        <span className="absolute left-[-21px] top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 rounded-[3px] border-l border-t border-border/80 bg-white" />
+        <div className="text-[12px] font-medium tracking-[0.08em] text-muted-foreground">历史记录</div>
+        {sessions.length === 0 ? (
+          <div className="mt-4 rounded-[16px] border border-border/70 bg-secondary/20 px-4 py-10 text-center text-[14px] text-muted-foreground">
+            暂无历史对话
+          </div>
+        ) : (
+          <div className="mt-3 space-y-0">
+            {sessions.slice(0, 8).map((session) => (
+              <button
+                className={cn(
+                  'flex w-full items-center justify-between rounded-[14px] px-3 py-2.5 text-left text-[14px] transition-colors',
+                  session.id === activeSessionId ? 'bg-secondary text-foreground' : 'text-foreground/84 hover:bg-secondary/35',
+                )}
+                key={session.id}
+                onClick={() => onSelectSession(session.id)}
+                type="button"
+              >
+                <span className="truncate">{session.title}</span>
+                {session.id === activeSessionId ? <span className="ml-3 text-[11px] text-muted-foreground">当前</span> : null}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SidebarExpandedItem({ icon: Icon, label, onClick, selected = false }) {
+  return (
+    <button
+      className={cn(
+        'flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left transition-colors',
+        selected ? 'bg-white text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.05)]' : 'text-foreground/82 hover:bg-white/80',
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      <Icon className={cn(selected ? 'text-foreground' : 'text-muted-foreground')} size={20} strokeWidth={1.9} />
+      <span className="text-[14px] font-medium">{label}</span>
+    </button>
+  )
+}
+
 function NodeProgressRail({ currentStageId }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -613,26 +751,24 @@ function NodeProgressRail({ currentStageId }) {
   )
 }
 
-function TopicCard({ isSelected, onSelect, topic }) {
+function TopicCard({ disabled = false, isSelected, onSelect, topic }) {
   return (
     <button
       className={cn(
-        'w-full rounded-[24px] border px-4 py-4 text-left transition-all',
+        'w-full rounded-[24px] border px-5 py-5 text-left transition-all',
         isSelected
           ? 'border-primary/30 bg-primary/5 shadow-[0_10px_30px_rgba(14,159,110,0.08)]'
           : 'border-border/70 bg-white hover:border-foreground/15 hover:bg-secondary/25',
+        disabled && 'cursor-not-allowed opacity-65',
       )}
+      disabled={disabled}
       onClick={() => onSelect(topic.id)}
       type="button"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[15px] font-semibold leading-[1.55] text-foreground">{topic.title}</div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.type}</span>
-            <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.penName}</span>
-            <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.theme}</span>
-          </div>
+          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">{topic.reason}</p>
         </div>
         {isSelected ? (
           <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-white">
@@ -640,7 +776,10 @@ function TopicCard({ isSelected, onSelect, topic }) {
           </span>
         ) : null}
       </div>
-      <p className="mt-3 text-[13px] leading-6 text-muted-foreground">{topic.reason}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.penName}</span>
+        <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.theme}</span>
+      </div>
     </button>
   )
 }
@@ -735,55 +874,63 @@ function TopicStageCard({
   customTopicInput,
   customTopicOpen,
   supplementOpen,
+  isRefreshing,
+  recommendationError,
   onSelectTopic,
 }) {
   return (
     <div className="rounded-[30px] border border-border/70 bg-white p-5 shadow-[0_24px_50px_rgba(15,23,42,0.04)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-[12px] font-medium tracking-[0.08em] text-muted-foreground">节点一</div>
-          <h3 className="mt-2 text-[22px] font-semibold text-foreground">选题确认</h3>
-          <p className="mt-1 text-[14px] leading-6 text-muted-foreground">
-            先从推荐选题里点一个方向，确认后系统会自动开始写作。
-          </p>
-        </div>
+        <h3 className="text-[22px] font-semibold text-foreground">选题确认</h3>
         <div className="flex flex-wrap gap-2">
           <Button
             className="rounded-full"
+            disabled={isRefreshing}
             onClick={onRefreshTopics}
             size="sm"
             type="button"
             variant="outline"
           >
-            <RefreshCw size={14} />
-            重新推荐
+            {isRefreshing ? <LoaderCircle className="animate-spin" size={14} /> : <RefreshCw size={14} />}
+            换一批
           </Button>
           <Button
             className="rounded-full"
+            disabled={isRefreshing}
             onClick={onOpenCustomTopic}
             size="sm"
             type="button"
             variant="outline"
           >
             <Plus size={14} />
-            自定义选题
+            我有题目
           </Button>
           <Button
             className="rounded-full"
+            disabled={isRefreshing}
             onClick={onOpenSupplement}
             size="sm"
             type="button"
             variant="outline"
           >
             <PenSquare size={14} />
-            我要补充
+            按偏好重推
           </Button>
         </div>
       </div>
 
+      {recommendationError ? (
+        <div className="mt-4 rounded-[20px] border border-red-200 bg-red-50/70 px-4 py-3 text-[13px] leading-6 text-red-700">
+          {recommendationError}
+        </div>
+      ) : null}
+
       {supplementOpen ? (
         <div className="mt-4 rounded-[24px] border border-border/70 bg-secondary/20 p-4">
-          <div className="text-[13px] font-medium text-foreground">补充这轮选题偏好</div>
+          <div className="text-[13px] font-medium text-foreground">按偏好重推</div>
+          <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
+            写清你想要的方向，系统会重新生成 6 个更贴近偏好的选题。
+          </p>
           <Textarea
             className="mt-3 min-h-[92px] border-border/70 bg-white text-[14px]"
             onChange={(event) => onChangeSupplement(event.target.value)}
@@ -791,8 +938,15 @@ function TopicStageCard({
             value={supplement}
           />
           <div className="mt-3 flex justify-end">
-            <Button className="rounded-full" onClick={onSaveSupplement} size="sm" type="button">
-              保存补充
+            <Button
+              className="rounded-full"
+              disabled={!supplement.trim() || isRefreshing}
+              onClick={onSaveSupplement}
+              size="sm"
+              type="button"
+            >
+              {isRefreshing ? <LoaderCircle className="animate-spin" size={14} /> : null}
+              重新生成推荐
             </Button>
           </div>
         </div>
@@ -800,7 +954,7 @@ function TopicStageCard({
 
       {customTopicOpen ? (
         <div className="mt-4 rounded-[24px] border border-border/70 bg-secondary/20 p-4">
-          <div className="text-[13px] font-medium text-foreground">输入自定义选题</div>
+          <div className="text-[13px] font-medium text-foreground">我有题目</div>
           <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
             限 30 字以内。系统会自动判断文章类型、建议笔名和所属母题。
           </p>
@@ -815,12 +969,12 @@ function TopicStageCard({
             <div className="text-[12px] text-muted-foreground">{customTopicInput.length}/30</div>
             <Button
               className="rounded-full"
-              disabled={!customTopicInput.trim()}
+              disabled={!customTopicInput.trim() || isRefreshing}
               onClick={onCreateCustomTopic}
               size="sm"
               type="button"
             >
-              生成这条选题
+              使用这个选题
             </Button>
           </div>
         </div>
@@ -829,6 +983,7 @@ function TopicStageCard({
       <div className="mt-5 grid gap-3 lg:grid-cols-2">
         {recommendations.map((topic) => (
           <TopicCard
+            disabled={isRefreshing}
             isSelected={topic.id === selectedTopicId}
             key={topic.id}
             onSelect={onSelectTopic}
@@ -939,69 +1094,126 @@ function CompletedStageCard({ onOpenTab }) {
 }
 
 function SessionSidebar({
+  activeModule,
   activeSessionId,
   isCollapsed,
+  onChangeModule,
   onCreateSession,
   onDeleteSession,
-  onSearchChange,
   onSelectSession,
   onToggleCollapsed,
-  searchQuery,
   sessions,
 }) {
-  return (
-    <aside
-      className={cn(
-        'flex h-full shrink-0 flex-col overflow-hidden border-r border-border/70 bg-white',
-        isCollapsed ? 'w-[88px]' : 'w-[280px]',
-      )}
-    >
-      <div className={cn('border-b border-border/70 py-4', isCollapsed ? 'px-3' : 'px-4')}>
-        <div className={cn('flex items-center', isCollapsed ? 'justify-center' : 'gap-3 px-1')}>
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <MessageSquareText size={18} />
-          </div>
-          {!isCollapsed ? (
-            <div className="min-w-0">
-              <div className="text-[15px] font-semibold text-foreground">内容创作</div>
-              <div className="text-[12px] text-muted-foreground">AI 驱动的文章生成流程</div>
-            </div>
-          ) : null}
+  if (isCollapsed) {
+    return (
+      <aside className="relative flex h-full w-[88px] shrink-0 flex-col items-center border-r border-border/70 bg-[#f5f5f5] px-3 py-4">
+        <div className="flex w-full justify-center">
+          <button
+            aria-label="展开导航"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-border/70 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.05)] transition-colors hover:border-foreground/15 hover:bg-secondary/45"
+            onClick={onToggleCollapsed}
+            type="button"
+          >
+            <PanelLeftOpen size={18} strokeWidth={1.9} />
+          </button>
         </div>
 
-        {!isCollapsed ? <SearchField onChange={onSearchChange} value={searchQuery} /> : null}
+        <div className="mt-7 flex w-full flex-col items-center gap-2">
+          <SidebarRailButton label="新建" onClick={onCreateSession} selected={activeModule === 'content'}>
+            <Plus size={20} strokeWidth={1.9} />
+          </SidebarRailButton>
 
+          {sidebarModules.map((module) => (
+            <SidebarRailButton
+              key={module.id}
+              label={module.label}
+              onClick={() => onChangeModule(module.id)}
+              selected={activeModule === module.id}
+            >
+              <module.icon size={20} strokeWidth={1.9} />
+            </SidebarRailButton>
+          ))}
+        </div>
+
+        <div className="mt-6 h-px w-10 rounded-full bg-border/70" />
+
+        <div className="mt-4">
+          <div className="group/history-card relative">
+            <SidebarRailButton
+              label="AI 对话历史"
+              onClick={() => onChangeModule('content')}
+              popup={
+                <HistoryHoverCard
+                  activeSessionId={activeSessionId}
+                  onSelectSession={onSelectSession}
+                  sessions={sessions}
+                />
+              }
+            >
+              <History size={20} strokeWidth={1.9} />
+            </SidebarRailButton>
+          </div>
+        </div>
+      </aside>
+    )
+  }
+
+  return (
+    <aside className="flex h-full w-[320px] shrink-0 flex-col border-r border-border/70 bg-[#f5f5f5] px-4 py-5">
+      <div className="flex items-center gap-3">
         <button
-          className={cn(
-            'mt-3 inline-flex w-full rounded-2xl border border-border/75 bg-white text-left text-[14px] text-foreground transition-colors hover:border-foreground/15 hover:bg-secondary/45',
-            isCollapsed ? 'justify-center px-0 py-2.5' : 'items-center gap-2 px-3 py-2.5',
-          )}
-          onClick={onCreateSession}
-          title="新建文章"
+          aria-label="收起导航"
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-border/70 bg-white text-muted-foreground shadow-[0_8px_18px_rgba(15,23,42,0.05)] transition-colors hover:border-foreground/15 hover:bg-secondary/45 hover:text-foreground"
+          onClick={onToggleCollapsed}
           type="button"
         >
-          <Plus size={16} />
-          {!isCollapsed ? <span>新建文章</span> : null}
+          <PanelLeftClose size={18} strokeWidth={1.9} />
         </button>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-3">
+            <PlaceholderAvatar />
+            <div className="truncate text-[14px] font-medium text-foreground">内容创作</div>
+          </div>
+        </div>
       </div>
 
-      {isCollapsed ? <div className="min-h-0 flex-1" /> : (
-        <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto px-3 py-4">
-          <div className="space-y-1.5">
+      <div className="mt-8 space-y-1.5">
+        <SidebarExpandedItem icon={Plus} label="新建" onClick={onCreateSession} selected={activeModule === 'content'} />
+        {sidebarModules.map((module) => (
+          <SidebarExpandedItem
+            icon={module.icon}
+            key={module.id}
+            label={module.label}
+            onClick={() => onChangeModule(module.id)}
+            selected={activeModule === module.id}
+          />
+        ))}
+      </div>
+
+      <div className="mt-8 text-[12px] font-medium tracking-[0.08em] text-muted-foreground">AI 对话历史</div>
+
+      <div className="benchmark-scroll-hidden mt-3 min-h-0 flex-1 overflow-y-auto pb-4">
+        {sessions.length === 0 ? (
+          <div className="rounded-[16px] border border-border/70 bg-white px-4 py-10 text-center text-[14px] text-muted-foreground shadow-[0_8px_18px_rgba(15,23,42,0.04)]">
+            暂无历史对话
+          </div>
+        ) : (
+          <div className="space-y-0">
             {sessions.map((session) => (
               <div
-                key={session.id}
                 className={cn(
-                  'group/session flex items-center gap-2 rounded-2xl transition-colors',
-                  session.id === activeSessionId ? 'bg-secondary' : 'hover:bg-secondary/45',
+                  'group/session flex items-center gap-2 rounded-[14px] border px-3 py-2.5 transition-colors',
+                  session.id === activeSessionId
+                    ? 'border-border/80 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.04)]'
+                    : 'border-transparent bg-transparent hover:border-border/70 hover:bg-white/75',
                 )}
+                key={session.id}
               >
                 <button
                   className={cn(
-                    'min-w-0 flex-1 rounded-2xl px-3 py-3 text-left text-[13px] transition-colors',
-                    session.id === activeSessionId
-                      ? 'text-foreground'
-                      : 'text-muted-foreground group-hover/session:text-foreground',
+                    'min-w-0 flex-1 text-left text-[14px] transition-colors',
+                    session.id === activeSessionId ? 'text-foreground' : 'text-foreground/78 group-hover/session:text-foreground',
                   )}
                   onClick={() => onSelectSession(session.id)}
                   title={session.title}
@@ -1012,7 +1224,7 @@ function SessionSidebar({
 
                 <button
                   aria-label={`删除 ${session.title}`}
-                  className="mr-2 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-all hover:bg-white hover:text-foreground group-hover/session:opacity-100"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-all hover:bg-secondary hover:text-foreground group-hover/session:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation()
                     onDeleteSession(session)
@@ -1024,23 +1236,8 @@ function SessionSidebar({
               </div>
             ))}
           </div>
+        )}
         </div>
-      )}
-
-      <div className={cn('border-t border-border/70 py-3', isCollapsed ? 'px-2' : 'px-3')}>
-        <button
-          className={cn(
-            'inline-flex w-full rounded-2xl px-3 py-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-secondary/45 hover:text-foreground',
-            isCollapsed ? 'justify-center' : 'items-center gap-2',
-          )}
-          onClick={onToggleCollapsed}
-          title={isCollapsed ? '展开侧栏' : '收起侧栏'}
-          type="button"
-        >
-          {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          {!isCollapsed ? <span>收起侧栏</span> : null}
-        </button>
-      </div>
     </aside>
   )
 }
@@ -1409,6 +1606,12 @@ function RightWorkbenchShell({
   )
 }
 
+function LibraryModuleCanvas() {
+  return (
+    <div className="flex min-h-0 flex-1 bg-white" />
+  )
+}
+
 export default function BenchmarkWorkbenchPage() {
   const activeSessionId = useBenchmarkStore((state) => state.activeSessionId)
   const createSession = useBenchmarkStore((state) => state.createSession)
@@ -1420,6 +1623,7 @@ export default function BenchmarkWorkbenchPage() {
   const updateSession = useBenchmarkStore((state) => state.updateSession)
 
   const [searchQuery, setSearchQuery] = useState('')
+  const [activeModule, setActiveModule] = useState('content')
   const [sessionPendingDelete, setSessionPendingDelete] = useState(null)
   const [copiedMessageId, setCopiedMessageId] = useState(null)
   const [isResizingSplit, setIsResizingSplit] = useState(false)
@@ -1441,6 +1645,7 @@ export default function BenchmarkWorkbenchPage() {
         .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()),
     [searchQuery, sessions],
   )
+  const historySessions = useMemo(() => orderedSessions.filter(hasSessionHistory), [orderedSessions])
 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? orderedSessions[0] ?? sessions[0] ?? null
@@ -1450,10 +1655,12 @@ export default function BenchmarkWorkbenchPage() {
   const activeVersion = activeSession ? getActiveVersion(activeSession) : null
   const availableTabs = activeSession ? getAvailableTabs(activeSession) : []
   const isBusy = Boolean(activeSession?.processingFlow)
+  const isContentModule = activeModule === 'content'
   const composerDisabled = currentStageId !== 'draft' || isBusy
   const canSend = !composerDisabled && Boolean(activeSession?.draft.trim())
   const hasWorkbenchOutputs = availableTabs.length > 0
-  const shouldRenderHero = currentStageId === 'topic' && !activeSession?.topicSelection?.selectedTopicId
+  const shouldRenderHero = isContentModule && currentStageId === 'topic' && !activeSession?.topicSelection?.selectedTopicId
+  const showWorkbench = isContentModule && activeSession?.isWorkbenchOpen && hasWorkbenchOutputs
 
   useEffect(() => {
     if (!currentSessionId && orderedSessions[0]) {
@@ -1694,6 +1901,7 @@ export default function BenchmarkWorkbenchPage() {
       title: topic.title,
       topicSelection: {
         ...current.topicSelection,
+        recommendationError: '',
         selectedTopicId: topicId,
       },
     }))
@@ -1771,6 +1979,60 @@ export default function BenchmarkWorkbenchPage() {
       return
     }
 
+    const supplement = activeSession.topicSelection.supplement.trim()
+
+    if (supplement) {
+      updateSession(currentSessionId, (current) => ({
+        ...current,
+        topicSelection: {
+          ...current.topicSelection,
+          isRefreshingRecommendations: true,
+          recommendationError: '',
+        },
+      }))
+
+      requestTopicRecommendations({ supplement })
+        .then((result) => {
+          const nextRecommendations = normalizeRecommendedTopics(result.recommendations)
+
+          if (nextRecommendations.length < 6) {
+            throw new Error('AI 返回的推荐选题数量不足，请重试')
+          }
+
+          updateSession(currentSessionId, (current) => ({
+            ...current,
+            messages: [
+              ...current.messages,
+              {
+                id: createId('assistant'),
+                role: 'assistant',
+                content: result.summary || '我已经按你的偏好重新整理了一组新的选题方向。',
+                createdAt: new Date().toISOString(),
+              },
+            ],
+            topicSelection: {
+              ...current.topicSelection,
+              isRefreshingRecommendations: false,
+              recommendationError: '',
+              recommendations: nextRecommendations,
+              selectedTopicId: null,
+            },
+          }))
+        })
+        .catch((error) => {
+          updateSession(currentSessionId, (current) => ({
+            ...current,
+            topicSelection: {
+              ...current.topicSelection,
+              isRefreshingRecommendations: false,
+              recommendationError: error.message || '按偏好重推失败了，请稍后重试。',
+            },
+          }))
+        })
+
+      return
+    }
+
     const nextBatchIndex = (activeSession.topicSelection.batchIndex + 1) % 3
 
     updateSession(currentSessionId, (current) => ({
@@ -1778,10 +2040,8 @@ export default function BenchmarkWorkbenchPage() {
       topicSelection: {
         ...current.topicSelection,
         batchIndex: nextBatchIndex,
-        recommendations: applyTopicSupplement(
-          createTopicRecommendations(nextBatchIndex),
-          current.topicSelection.supplement,
-        ),
+        recommendationError: '',
+        recommendations: createTopicRecommendations(nextBatchIndex),
         selectedTopicId: null,
       },
     }))
@@ -1794,6 +2054,7 @@ export default function BenchmarkWorkbenchPage() {
         ...current.topicSelection,
         isCustomTopicComposerOpen: false,
         isSupplementComposerOpen: true,
+        recommendationError: '',
       },
     }))
   }
@@ -1805,42 +2066,83 @@ export default function BenchmarkWorkbenchPage() {
         ...current.topicSelection,
         isCustomTopicComposerOpen: true,
         isSupplementComposerOpen: false,
+        recommendationError: '',
       },
     }))
   }
 
-  function handleSaveSupplement() {
+  async function handleSaveSupplement() {
     if (!currentSessionId || !activeSession) {
       return
     }
 
     const supplement = activeSession.topicSelection.supplement.trim()
 
+    if (!supplement) {
+      updateSession(currentSessionId, (current) => ({
+        ...current,
+        topicSelection: {
+          ...current.topicSelection,
+          isSupplementComposerOpen: false,
+          recommendationError: '',
+        },
+      }))
+      return
+    }
+
     updateSession(currentSessionId, (current) => ({
       ...current,
-      messages: supplement
-        ? [
-            ...current.messages,
-            {
-              id: createId('user'),
-              role: 'user',
-              content: `补充要求：${supplement}`,
-              createdAt: new Date().toISOString(),
-            },
-            {
-              id: createId('assistant'),
-              role: 'assistant',
-              content: '我记下这条补充要求了。接下来你可以继续从当前推荐选题里做选择，或者重新推荐一批方向。',
-              createdAt: new Date().toISOString(),
-            },
-          ]
-        : current.messages,
       topicSelection: {
         ...current.topicSelection,
-        isSupplementComposerOpen: false,
-        recommendations: applyTopicSupplement(current.topicSelection.recommendations, supplement),
+        isRefreshingRecommendations: true,
+        recommendationError: '',
       },
     }))
+
+    try {
+      const result = await requestTopicRecommendations({ supplement })
+      const nextRecommendations = normalizeRecommendedTopics(result.recommendations)
+
+      if (nextRecommendations.length < 6) {
+        throw new Error('AI 返回的推荐选题数量不足，请重试')
+      }
+
+      updateSession(currentSessionId, (current) => ({
+        ...current,
+        messages: [
+          ...current.messages,
+          {
+            id: createId('user'),
+            role: 'user',
+            content: `补充要求：${supplement}`,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: createId('assistant'),
+            role: 'assistant',
+            content: result.summary || '我已经按你的偏好重新整理了一组新的选题方向。',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        topicSelection: {
+          ...current.topicSelection,
+          isRefreshingRecommendations: false,
+          isSupplementComposerOpen: false,
+          recommendationError: '',
+          recommendations: nextRecommendations,
+          selectedTopicId: null,
+        },
+      }))
+    } catch (error) {
+      updateSession(currentSessionId, (current) => ({
+        ...current,
+        topicSelection: {
+          ...current.topicSelection,
+          isRefreshingRecommendations: false,
+          recommendationError: error.message || '按偏好重推失败了，请稍后重试。',
+        },
+      }))
+    }
   }
 
   function handleCreateCustomTopic() {
@@ -1862,7 +2164,8 @@ export default function BenchmarkWorkbenchPage() {
         ...current.topicSelection,
         customTopicInput: '',
         isCustomTopicComposerOpen: false,
-        recommendations: [customTopic, ...current.topicSelection.recommendations].slice(0, 5),
+        recommendationError: '',
+        recommendations: [customTopic, ...current.topicSelection.recommendations].slice(0, 6),
       },
     }))
 
@@ -2197,6 +2500,7 @@ export default function BenchmarkWorkbenchPage() {
 
   function handleCreateSession() {
     const nextSessionId = createSession()
+    setActiveModule('content')
     setCopiedMessageId(null)
 
     if (nextSessionId) {
@@ -2228,6 +2532,7 @@ export default function BenchmarkWorkbenchPage() {
   }
 
   function handleSelectSession(sessionId) {
+    setActiveModule('content')
     setActiveSessionId(sessionId)
     setCopiedMessageId(null)
   }
@@ -2272,7 +2577,7 @@ export default function BenchmarkWorkbenchPage() {
 
   function getComposerPlaceholder() {
     if (currentStageId === 'topic') {
-      return '先在上方确认推荐选题，或点击“我要补充 / 自定义选题”'
+      return '先在上方确认推荐选题，或点击“按偏好重推 / 我有题目”'
     }
 
     if (currentStageId === 'draft') {
@@ -2289,32 +2594,36 @@ export default function BenchmarkWorkbenchPage() {
   return (
     <section className="flex h-screen min-h-0 overflow-hidden bg-white">
       <SessionSidebar
+        activeModule={activeModule}
         activeSessionId={currentSessionId}
         isCollapsed={isSidebarCollapsed}
+        onChangeModule={setActiveModule}
         onCreateSession={handleCreateSession}
         onDeleteSession={handleRequestDeleteSession}
         onSearchChange={setSearchQuery}
         onSelectSession={handleSelectSession}
         onToggleCollapsed={handleToggleSidebarCollapsed}
         searchQuery={searchQuery}
-        sessions={orderedSessions}
+        sessions={historySessions}
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
         <div className="flex h-[76px] shrink-0 items-center justify-end bg-white px-6">
-          <button
-            aria-label={activeSession?.isWorkbenchOpen ? '收起右侧工作区' : '展开右侧工作区'}
-            className="inline-flex h-11 min-w-11 items-center justify-center rounded-2xl border border-border/80 bg-white px-3 text-muted-foreground transition-colors hover:text-foreground"
-            disabled={!hasWorkbenchOutputs}
-            onClick={handleToggleWorkbench}
-            type="button"
-          >
-            {activeSession?.isWorkbenchOpen ? (
-              <PanelRightClose className={cn(!hasWorkbenchOutputs && 'opacity-35')} size={18} strokeWidth={1.9} />
-            ) : (
-              <PanelRightOpen className={cn(!hasWorkbenchOutputs && 'opacity-35')} size={18} strokeWidth={1.9} />
-            )}
-          </button>
+          {isContentModule && !shouldRenderHero ? (
+            <button
+              aria-label={activeSession?.isWorkbenchOpen ? '收起右侧工作区' : '展开右侧工作区'}
+              className="inline-flex h-11 min-w-11 items-center justify-center rounded-2xl border border-border/80 bg-white px-3 text-muted-foreground transition-colors hover:text-foreground"
+              disabled={!hasWorkbenchOutputs}
+              onClick={handleToggleWorkbench}
+              type="button"
+            >
+              {activeSession?.isWorkbenchOpen ? (
+                <PanelRightClose className={cn(!hasWorkbenchOutputs && 'opacity-35')} size={18} strokeWidth={1.9} />
+              ) : (
+                <PanelRightOpen className={cn(!hasWorkbenchOutputs && 'opacity-35')} size={18} strokeWidth={1.9} />
+              )}
+            </button>
+          ) : null}
         </div>
 
         <div ref={splitContainerRef} className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -2322,54 +2631,59 @@ export default function BenchmarkWorkbenchPage() {
             className="flex min-h-0 min-w-0 flex-1 flex-col bg-white"
             style={{
               minWidth: `${LEFT_PANE_MIN_WIDTH}px`,
-              width: activeSession?.isWorkbenchOpen ? `calc(100% - ${rightPaneWidth}px)` : '100%',
+              width: showWorkbench ? `calc(100% - ${rightPaneWidth}px)` : '100%',
             }}
           >
-            {shouldRenderHero ? (
-              <div className="mx-auto flex min-h-0 flex-1 w-full max-w-[1240px] flex-col items-center justify-center px-6 py-8 sm:px-8 lg:px-12">
-                <div className="max-w-3xl text-center">
-                  <NodeProgressRail currentStageId={currentStageId} />
-                  <h1 className="mt-6 text-[34px] font-semibold tracking-[-0.03em] text-foreground sm:text-[42px]">
+            {!isContentModule ? (
+              <LibraryModuleCanvas />
+            ) : shouldRenderHero ? (
+              <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto flex w-full max-w-[1240px] flex-col items-center px-6 py-8 sm:px-8 lg:px-12">
+                  <div className="max-w-3xl text-center">
+                  <h1 className="text-[34px] font-semibold tracking-[-0.03em] text-foreground sm:text-[42px]">
                     开始内容创作
                   </h1>
                   <p className="mx-auto mt-3 max-w-[720px] text-[15px] leading-7 text-muted-foreground">
-                    这一版先专注跑通内容创作主链路。你确认选题，系统完成正文与校验，然后直接进入极简排版预览。
+                    先从下面选一个方向，确认后系统会自动完成首稿生成、校验与排版预览。
                   </p>
-                </div>
+                  </div>
 
-                <div className="mt-8 w-full max-w-[1120px]">
-                  <TopicStageCard
-                    onChangeSupplement={(value) =>
-                      updateCurrentSession((current) => ({
-                        ...current,
-                        topicSelection: {
-                          ...current.topicSelection,
-                          supplement: value,
-                        },
-                      }))
-                    }
-                    onChangeCustomTopic={(value) =>
-                      updateCurrentSession((current) => ({
-                        ...current,
-                        topicSelection: {
-                          ...current.topicSelection,
-                          customTopicInput: value,
-                        },
-                      }))
-                    }
-                    onCreateCustomTopic={handleCreateCustomTopic}
-                    onOpenCustomTopic={handleOpenCustomTopicComposer}
-                    onOpenSupplement={handleOpenSupplementComposer}
-                    onRefreshTopics={handleRefreshTopics}
-                    onSaveSupplement={handleSaveSupplement}
-                    customTopicInput={activeSession?.topicSelection?.customTopicInput ?? ''}
-                    customTopicOpen={activeSession?.topicSelection?.isCustomTopicComposerOpen ?? false}
-                    onSelectTopic={handleSelectTopic}
-                    recommendations={activeSession?.topicSelection?.recommendations ?? []}
-                    selectedTopicId={activeSession?.topicSelection?.selectedTopicId ?? null}
-                    supplement={activeSession?.topicSelection?.supplement ?? ''}
-                    supplementOpen={activeSession?.topicSelection?.isSupplementComposerOpen ?? false}
-                  />
+                  <div className="mt-8 w-full max-w-[1120px]">
+                    <TopicStageCard
+                      onChangeSupplement={(value) =>
+                        updateCurrentSession((current) => ({
+                          ...current,
+                          topicSelection: {
+                            ...current.topicSelection,
+                            supplement: value,
+                          },
+                        }))
+                      }
+                      onChangeCustomTopic={(value) =>
+                        updateCurrentSession((current) => ({
+                          ...current,
+                          topicSelection: {
+                            ...current.topicSelection,
+                            customTopicInput: value,
+                          },
+                        }))
+                      }
+                      onCreateCustomTopic={handleCreateCustomTopic}
+                      onOpenCustomTopic={handleOpenCustomTopicComposer}
+                      onOpenSupplement={handleOpenSupplementComposer}
+                      onRefreshTopics={handleRefreshTopics}
+                      onSaveSupplement={handleSaveSupplement}
+                      customTopicInput={activeSession?.topicSelection?.customTopicInput ?? ''}
+                      customTopicOpen={activeSession?.topicSelection?.isCustomTopicComposerOpen ?? false}
+                      isRefreshing={activeSession?.topicSelection?.isRefreshingRecommendations ?? false}
+                      onSelectTopic={handleSelectTopic}
+                      recommendationError={activeSession?.topicSelection?.recommendationError ?? ''}
+                      recommendations={activeSession?.topicSelection?.recommendations ?? []}
+                      selectedTopicId={activeSession?.topicSelection?.selectedTopicId ?? null}
+                      supplement={activeSession?.topicSelection?.supplement ?? ''}
+                      supplementOpen={activeSession?.topicSelection?.isSupplementComposerOpen ?? false}
+                    />
+                  </div>
                 </div>
               </div>
             ) : (
@@ -2456,7 +2770,7 @@ export default function BenchmarkWorkbenchPage() {
             )}
           </div>
 
-          {activeSession?.isWorkbenchOpen && hasWorkbenchOutputs ? (
+          {showWorkbench ? (
             <div
               className="relative min-h-0 shrink-0 bg-white"
               style={{ minWidth: `${RIGHT_PANE_MIN_WIDTH}px`, width: `${rightPaneWidth}px` }}
