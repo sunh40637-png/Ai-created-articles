@@ -13,7 +13,9 @@ import {
   LayoutTemplate,
   ListFilter,
   LoaderCircle,
+  Maximize2,
   MessageSquareText,
+  Minimize2,
   Monitor,
   PanelLeftClose,
   PanelLeftOpen,
@@ -768,10 +770,10 @@ function stripPreviewHeading(markdown = '') {
 function getPreviewMarkdownComponents(fontSize) {
   const bodyClassName =
     fontSize === 'small'
-      ? 'text-[13px] leading-[2.05]'
+      ? 'text-[14px] leading-[2.05]'
       : fontSize === 'large'
-        ? 'text-[16px] leading-[2.15]'
-        : 'text-[14px] leading-[2.1]'
+        ? 'text-[17px] leading-[2.15]'
+        : 'text-[15px] leading-[2.1]'
 
   return {
     h1: ({ node, ...props }) => <h2 className="mt-10 text-[22px] font-semibold leading-[1.6] text-black first:mt-0" {...props} />,
@@ -796,6 +798,109 @@ function getPreviewMarkdownComponents(fontSize) {
     ),
     hr: ({ node, ...props }) => <hr className="my-10 border-0 border-t border-black/8" {...props} />,
   }
+}
+
+function getWechatCopyComponents(fontSize) {
+  const bodySize = fontSize === 'small' ? '14px' : fontSize === 'large' ? '17px' : '15px'
+  const bodyLineHeight = fontSize === 'small' ? '2.05' : fontSize === 'large' ? '2.15' : '2.1'
+
+  return {
+    h1: ({ node, ...props }) => (
+      <h2 style={{ marginTop: '28px', fontSize: '22px', fontWeight: 600, lineHeight: 1.6, color: '#000000' }} {...props} />
+    ),
+    h2: ({ node, ...props }) => (
+      <h2 style={{ marginTop: '28px', fontSize: '22px', fontWeight: 600, lineHeight: 1.6, color: '#000000' }} {...props} />
+    ),
+    h3: ({ node, ...props }) => (
+      <h3 style={{ marginTop: '22px', fontSize: '18px', fontWeight: 600, lineHeight: 1.7, color: '#000000' }} {...props} />
+    ),
+    p: ({ node, ...props }) => (
+      <p style={{ marginTop: '14px', fontSize: bodySize, lineHeight: bodyLineHeight, color: '#000000' }} {...props} />
+    ),
+    ul: ({ node, ...props }) => (
+      <ul
+        style={{
+          marginTop: '14px',
+          paddingLeft: '20px',
+          fontSize: bodySize,
+          lineHeight: bodyLineHeight,
+          color: '#000000',
+          listStyleType: 'disc',
+        }}
+        {...props}
+      />
+    ),
+    ol: ({ node, ...props }) => (
+      <ol
+        style={{
+          marginTop: '14px',
+          paddingLeft: '20px',
+          fontSize: bodySize,
+          lineHeight: bodyLineHeight,
+          color: '#000000',
+          listStyleType: 'decimal',
+        }}
+        {...props}
+      />
+    ),
+    li: ({ node, ...props }) => <li style={{ paddingLeft: '4px', marginBottom: '6px' }} {...props} />,
+    strong: ({ node, ...props }) => <strong style={{ fontWeight: 600, color: '#000000' }} {...props} />,
+    blockquote: ({ node, ...props }) => (
+      <blockquote
+        style={{
+          marginTop: '18px',
+          borderLeft: '2px solid rgba(0,0,0,0.15)',
+          paddingLeft: '16px',
+          fontSize: '13px',
+          lineHeight: 2,
+          color: 'rgba(0,0,0,0.72)',
+        }}
+        {...props}
+      />
+    ),
+    img: ({ node, alt = '', src = '', ...props }) => (
+      <img
+        alt={alt}
+        src={src}
+        style={{ marginTop: '22px', display: 'block', width: '100%', objectFit: 'cover' }}
+        {...props}
+      />
+    ),
+    hr: ({ node, ...props }) => (
+      <hr style={{ margin: '28px 0', border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)' }} {...props} />
+    ),
+  }
+}
+
+async function copyHtmlToClipboard(html, plainText) {
+  if (window.ClipboardItem && navigator.clipboard && window.isSecureContext) {
+    const item = new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([plainText], { type: 'text/plain' }),
+    })
+    await navigator.clipboard.write([item])
+    return true
+  }
+
+  const tmp = document.createElement('div')
+  tmp.contentEditable = 'true'
+  tmp.innerHTML = html
+  Object.assign(tmp.style, {
+    left: '-9999px',
+    opacity: '0',
+    position: 'fixed',
+  })
+
+  document.body.appendChild(tmp)
+  const range = document.createRange()
+  range.selectNodeContents(tmp)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+  document.execCommand('copy')
+  selection?.removeAllRanges()
+  document.body.removeChild(tmp)
+  return true
 }
 
 function getAvailableTabs(session) {
@@ -1107,9 +1212,10 @@ function SidebarRailButton({ children, label, onClick, popup, selected = false, 
 
 function HistoryHoverCard({ activeSessionId, onSelectSession, sessions }) {
   return (
-    <div className="pointer-events-none absolute left-[calc(100%+16px)] top-1/2 z-40 w-[280px] -translate-y-1/2 rounded-[18px] border border-border/80 bg-white p-4 opacity-0 shadow-[0_24px_60px_rgba(15,23,42,0.14)] transition-all duration-150 group-hover/history-card:pointer-events-auto group-hover/history-card:opacity-100">
+    <div className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-40 w-[280px] -translate-y-1/2 rounded-[18px] border border-border/80 bg-white p-4 opacity-0 shadow-[0_24px_60px_rgba(15,23,42,0.14)] transition-all duration-150 group-hover/history-card:pointer-events-auto group-hover/history-card:opacity-100">
       <div className="relative">
-        <span className="absolute left-[-21px] top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 rounded-[3px] border-l border-t border-border/80 bg-white" />
+        <span className="absolute left-[-15px] top-[-18px] h-[calc(100%+36px)] w-5" aria-hidden="true" />
+        <span className="absolute left-[-15px] top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 rounded-[3px] border-l border-t border-border/80 bg-white" />
         <div className="text-[12px] font-medium tracking-[0.08em] text-muted-foreground">历史记录</div>
         {sessions.length === 0 ? (
           <div className="mt-4 rounded-[16px] border border-border/70 bg-secondary/20 px-4 py-10 text-center text-[14px] text-muted-foreground">
@@ -1128,7 +1234,6 @@ function HistoryHoverCard({ activeSessionId, onSelectSession, sessions }) {
                 type="button"
               >
                 <span className="truncate">{session.title}</span>
-                {session.id === activeSessionId ? <span className="ml-3 text-[11px] text-muted-foreground">当前</span> : null}
               </button>
             ))}
           </div>
@@ -1504,7 +1609,7 @@ function TopicStageCard({
   )
 }
 
-function DraftStageCard({ activeVersion, onConfirmDraft, onOpenTab, onRewriteAll }) {
+function DraftStageCard({ activeVersion, onProceedWithoutChanges, onOpenTab, onRewriteAll }) {
   if (!activeVersion) {
     return null
   }
@@ -1513,29 +1618,17 @@ function DraftStageCard({ activeVersion, onConfirmDraft, onOpenTab, onRewriteAll
     <div className="rounded-[28px] border border-border/70 bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.04)]">
       <div className="max-w-[640px]">
         <h3 className="text-[22px] font-semibold text-foreground">文字稿确认</h3>
-        <p className="mt-2 text-[14px] leading-6 text-muted-foreground">
-          先查看右侧文字稿，确认这一版是否可以进入下一步。需要调整的话，也可以继续通过底部输入框补充修改意见。
-        </p>
       </div>
 
       <div className="mt-6 rounded-[24px] border border-border/70 bg-secondary/35 px-4 py-5 sm:px-5">
         <div className="flex flex-col gap-5">
           <div>
-            <p className="text-[15px] font-medium text-foreground">这版文字稿可以继续了吗？</p>
-            <p className="mt-1 text-[13px] leading-6 text-muted-foreground">
-              确认通过后会进入排版预览；如果还不满意，可以直接整篇重写。
-            </p>
+            <p className="text-[15px] font-medium text-foreground">右侧已更新当前版本</p>
+            <p className="mt-1 text-[13px] leading-6 text-muted-foreground">继续修改，或直接进入排版。</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button
-              className="rounded-full bg-[#171b22] px-5 text-white hover:bg-black"
-              onClick={() => onConfirmDraft('确认通过')}
-              type="button"
-            >
-              确认通过
-            </Button>
-            <Button className="rounded-full" onClick={() => onConfirmDraft('无需修改')} type="button" variant="outline">
+            <Button className="rounded-full bg-[#171b22] px-5 text-white hover:bg-black" onClick={onProceedWithoutChanges} type="button">
               无需修改
             </Button>
             <Button className="rounded-full" onClick={onRewriteAll} type="button" variant="outline">
@@ -1551,23 +1644,26 @@ function DraftStageCard({ activeVersion, onConfirmDraft, onOpenTab, onRewriteAll
 function PreviewStageCard({ onConfirm, onOpenTab }) {
   return (
     <div className="rounded-[28px] border border-border/70 bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.04)]">
-      <div className="text-[12px] font-medium tracking-[0.08em] text-muted-foreground">节点三</div>
-      <h3 className="mt-2 text-[22px] font-semibold text-foreground">排版效果确认</h3>
-      <p className="mt-1 text-[14px] leading-6 text-muted-foreground">
-        右侧是极简白底黑字的真实预览。你可以切换 PC / 移动端和字号大小，确认后当前版本就完成了。
-      </p>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button className="rounded-full" onClick={() => onOpenTab('preview')} size="sm" type="button" variant="outline">
-          <LayoutTemplate size={14} />
-          查看排版预览
-        </Button>
+      <div className="max-w-[640px]">
+        <h3 className="text-[22px] font-semibold text-foreground">排版效果确认</h3>
       </div>
 
-      <div className="mt-5">
-        <Button className="rounded-full bg-[#171b22] px-5 text-white hover:bg-black" onClick={onConfirm} type="button">
-          确认排版
-        </Button>
+      <div className="mt-6 rounded-[24px] border border-border/70 bg-secondary/35 px-4 py-5 sm:px-5">
+        <div className="flex flex-col gap-5">
+          <div>
+            <p className="text-[15px] font-medium text-foreground">右侧已更新排版预览</p>
+            <p className="mt-1 text-[13px] leading-6 text-muted-foreground">确认无误后完成本轮创作。</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button className="rounded-full bg-[#171b22] px-5 text-white hover:bg-black" onClick={onConfirm} type="button">
+              确认排版
+            </Button>
+            <Button className="rounded-full" onClick={() => onOpenTab('preview')} type="button" variant="outline">
+              查看排版预览
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -1645,6 +1741,7 @@ function SessionSidebar({
 
         <div className="mt-4">
           <div className="group/history-card relative">
+            <span className="absolute left-full top-[-18px] h-[84px] w-5" aria-hidden="true" />
             <SidebarRailButton
               label="AI 对话历史"
               onClick={() => onChangeModule('content')}
@@ -1850,10 +1947,12 @@ function MessageBubble({ copiedMessageId, message, onCopy }) {
   )
 }
 
-function DraftWorkbench({ version }) {
+function DraftWorkbench({ session, version }) {
   if (!version) {
     return <div className="text-[14px] text-muted-foreground">当前还没有文字稿。</div>
   }
+
+  const topic = getSelectedTopic(session)
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-7">
@@ -1866,7 +1965,10 @@ function DraftWorkbench({ version }) {
             {version.wordCount} 字
           </span>
           <span className="rounded-full border border-border/70 bg-secondary/55 px-3 py-1.5 text-[12px] text-muted-foreground">
-            {formatMessageTime(version.createdAt)}
+            {topic?.penName || '未命名作者'}
+          </span>
+          <span className="rounded-full border border-border/70 bg-secondary/55 px-3 py-1.5 text-[12px] text-muted-foreground">
+            {topic?.type || '未分类'}
           </span>
         </div>
 
@@ -1902,7 +2004,7 @@ function ArticlePreview({ fontSize, session }) {
     <div className="px-4 py-6 sm:px-6 sm:py-7">
       <div className="mx-auto max-w-[720px]">
         <header className="text-center">
-          <h2 className="mx-auto max-w-[640px] text-[29px] font-semibold leading-[1.45] tracking-[-0.02em] text-black sm:text-[31px]">
+          <h2 className="mx-auto max-w-[640px] text-[24px] font-semibold leading-[1.45] tracking-[-0.02em] text-black">
             {topic?.title}
           </h2>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[12px] tracking-[0.08em] text-black/42">
@@ -1939,11 +2041,125 @@ function ArticlePreview({ fontSize, session }) {
 
 function PreviewWorkbench({ onSetDevice, onSetFontSize, session }) {
   const { device, fontSize } = session.layoutReview
+  const [copyStatus, setCopyStatus] = useState('idle')
+  const copySourceRef = useRef(null)
+  const topic = getSelectedTopic(session)
+  const version = getActiveVersion(session)
+  const previewMarkdown = stripPreviewHeading(version?.draftMarkdown ?? '')
+  const wechatComponents = useMemo(() => getWechatCopyComponents(fontSize), [fontSize])
+
+  async function handleCopyWechat() {
+    if (!copySourceRef.current) {
+      return
+    }
+
+    try {
+      await copyHtmlToClipboard(copySourceRef.current.innerHTML, copySourceRef.current.innerText)
+      setCopyStatus('copied')
+      window.setTimeout(() => {
+        setCopyStatus('idle')
+      }, 2000)
+    } catch {
+      setCopyStatus('error')
+      window.setTimeout(() => {
+        setCopyStatus('idle')
+      }, 2000)
+    }
+  }
 
   return (
     <div className="benchmark-scroll-hidden min-h-0 overflow-y-auto px-6 py-6">
+      <div ref={copySourceRef} style={{ left: '-9999px', opacity: 0, pointerEvents: 'none', position: 'fixed', top: 0 }}>
+        <div style={{ maxWidth: '680px', margin: '0 auto', padding: '20px', backgroundColor: '#ffffff' }}>
+          <h2
+            style={{
+              color: '#000000',
+              fontSize: '24px',
+              fontWeight: 600,
+              lineHeight: 1.45,
+              margin: '0 auto',
+              maxWidth: '620px',
+              textAlign: 'center',
+            }}
+          >
+            {topic?.title || ''}
+          </h2>
+          <div
+            style={{
+              color: 'rgba(0,0,0,0.42)',
+              display: 'flex',
+              flexWrap: 'wrap',
+              fontSize: '12px',
+              gap: '12px',
+              justifyContent: 'center',
+              letterSpacing: '0.08em',
+              marginTop: '16px',
+            }}
+          >
+            <span>{topic?.penName || ''}</span>
+            <span>{topic?.type || ''}</span>
+            <span>{version?.wordCount ?? 0} 字</span>
+          </div>
+          <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', marginTop: '32px', paddingTop: '32px' }}>
+            <ReactMarkdown components={wechatComponents} remarkPlugins={[remarkGfm]}>
+              {previewMarkdown}
+            </ReactMarkdown>
+          </div>
+          <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', marginTop: '56px', paddingTop: '40px', textAlign: 'center' }}>
+            <div
+              style={{
+                alignItems: 'center',
+                backgroundColor: '#f7f4ee',
+                border: '1px solid rgba(0,0,0,0.1)',
+                borderRadius: '9999px',
+                color: '#000000',
+                display: 'flex',
+                fontSize: '15px',
+                fontWeight: 600,
+                height: '56px',
+                justifyContent: 'center',
+                margin: '0 auto',
+                width: '56px',
+              }}
+            >
+              煮
+            </div>
+            <div style={{ color: '#000000', fontSize: '14px', fontWeight: 600, letterSpacing: '0.12em', marginTop: '16px' }}>
+              煮酒问人生
+            </div>
+            <p
+              style={{
+                color: 'rgba(0,0,0,0.56)',
+                fontSize: '13px',
+                lineHeight: 1.9,
+                margin: '12px auto 0',
+                maxWidth: '420px',
+              }}
+            >
+              在这里继续读人情、家事、晚年与人生。看完这一篇，也欢迎把它留给同样需要的人。
+            </p>
+            <div
+              style={{
+                backgroundColor: '#fbfaf7',
+                border: '1px solid rgba(0,0,0,0.1)',
+                borderRadius: '22px',
+                margin: '24px auto 0',
+                maxWidth: '320px',
+                padding: '16px 20px',
+              }}
+            >
+              <div style={{ color: 'rgba(0,0,0,0.48)', fontSize: '12px', letterSpacing: '0.12em' }}>固定引导关注区域</div>
+              <div style={{ color: '#000000', fontSize: '14px', fontWeight: 500, marginTop: '8px' }}>关注“煮酒问人生”</div>
+              <div style={{ color: 'rgba(0,0,0,0.56)', fontSize: '12px', lineHeight: 1.8, marginTop: '4px' }}>
+                持续查看同风格的晚年、关系和处世文章。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="mx-auto flex w-full max-w-[980px] flex-col gap-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-border/70 bg-white px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
           <div className="flex flex-wrap gap-2">
             <div className="inline-flex rounded-full bg-secondary/70 p-1">
               {[
@@ -1968,7 +2184,7 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session }) {
             <div className="inline-flex rounded-full bg-secondary/70 p-1">
               {[
                 { id: 'small', label: '小' },
-                { id: 'medium', label: '中' },
+                { id: 'medium', label: '推荐' },
                 { id: 'large', label: '大' },
               ].map((item) => (
                 <button
@@ -1980,14 +2196,31 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session }) {
                   onClick={() => onSetFontSize(item.id)}
                   type="button"
                 >
-                  字号{item.label}
+                  {item.label}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="text-[12px] text-muted-foreground">
-            当前查看：{device === 'mobile' ? '移动端预览' : 'PC 预览'}
+          <div className="flex items-center gap-3">
+            <Button className="rounded-full" onClick={handleCopyWechat} size="sm" type="button" variant="outline">
+              {copyStatus === 'copied' ? (
+                <>
+                  <Check size={13} className="mr-1.5" />
+                  已复制
+                </>
+              ) : copyStatus === 'error' ? (
+                <>
+                  <X size={13} className="mr-1.5" />
+                  复制失败
+                </>
+              ) : (
+                <>
+                  <Copy size={13} className="mr-1.5" />
+                  复制微信样式
+                </>
+              )}
+            </Button>
           </div>
         </div>
 
@@ -2059,11 +2292,30 @@ function RightWorkbenchShell({
   tabs,
 }) {
   const activeVersion = getActiveVersion(session)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      return
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setIsFullscreen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isFullscreen])
 
   function renderBody() {
     switch (activeTabId) {
       case 'draft':
-        return <DraftWorkbench version={activeVersion} />
+        return <DraftWorkbench session={session} version={activeVersion} />
       case 'report':
         return <ReportWorkbench version={activeVersion} />
       case 'preview':
@@ -2081,9 +2333,14 @@ function RightWorkbenchShell({
     }
   }
 
-  return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-tl-[30px] border-l border-t border-border/70 bg-white">
-      <div className="border-b border-border/70 px-4 py-3">
+  const shellContent = (
+    <aside
+      className={cn(
+        'flex min-h-0 flex-col overflow-hidden bg-white',
+        isFullscreen ? 'fixed inset-0 z-50 rounded-none border-none' : 'h-full rounded-tl-[30px] border-l border-t border-border/70',
+      )}
+    >
+      <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
         <div className="benchmark-scroll-hidden flex min-w-0 gap-2 overflow-x-auto pb-1">
             {tabs.map((tabId) => {
               const tab = workbenchTabs.find((item) => item.id === tabId)
@@ -2110,6 +2367,14 @@ function RightWorkbenchShell({
               )
             })}
         </div>
+        <button
+          aria-label={isFullscreen ? '退出全屏' : '全屏视图'}
+          className="ml-2 inline-flex shrink-0 items-center justify-center rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+          onClick={() => setIsFullscreen((prev) => !prev)}
+          type="button"
+        >
+          {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        </button>
       </div>
 
       <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white px-6 py-6">
@@ -2117,6 +2382,12 @@ function RightWorkbenchShell({
       </div>
     </aside>
   )
+
+  if (isFullscreen) {
+    return createPortal(shellContent, document.body)
+  }
+
+  return shellContent
 }
 
 function LibraryModuleCanvas({ topicStatusById }) {
@@ -2716,7 +2987,7 @@ export default function BenchmarkWorkbenchPage() {
     }))
   }
 
-  async function handleConfirmDraft(actionLabel) {
+  async function handleProceedWithoutChanges() {
     if (!currentSessionId) {
       return
     }
@@ -2728,7 +2999,7 @@ export default function BenchmarkWorkbenchPage() {
         {
           id: createId('user'),
           role: 'user',
-          content: actionLabel,
+          content: '无需修改',
           createdAt: new Date().toISOString(),
         },
       ],
@@ -3202,8 +3473,8 @@ export default function BenchmarkWorkbenchPage() {
                       {!isBusy && currentStageId === 'draft' ? (
                         <DraftStageCard
                           activeVersion={activeVersion}
-                          onConfirmDraft={handleConfirmDraft}
                           onOpenTab={handleSelectWorkbenchTab}
+                          onProceedWithoutChanges={handleProceedWithoutChanges}
                           onRewriteAll={handleRewriteWholeDraft}
                         />
                       ) : null}
