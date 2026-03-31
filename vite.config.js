@@ -138,6 +138,7 @@ function contentCreationDevApi(env) {
                 apiKey: env.MINIMAX_API_KEY,
                 deepThinkingEnabled: body.deepThinkingEnabled ?? true,
                 model: body.model || env.MINIMAX_MODEL,
+                ruleProfileId: body.ruleProfileId,
                 supplement: body.supplement || '',
                 topic: body.topic || null,
                 onProgress: (progress) => {
@@ -170,6 +171,7 @@ function contentCreationDevApi(env) {
             deepThinkingEnabled: body.deepThinkingEnabled ?? true,
             model: body.model || env.MINIMAX_MODEL,
             note: body.note || '',
+            ruleProfileId: body.ruleProfileId,
             supplement: body.supplement || '',
             topic: body.topic || null,
           })

@@ -1,151 +1,56 @@
 import { chatWithMiniMax } from './minimax.js'
+import {
+  DEFAULT_CONTENT_RULE_PROFILE_ID,
+  resolveContentRuleProfile,
+} from './contentRuleProfiles.js'
 
 const DEFAULT_MODEL = 'MiniMax-M2.7'
 const CONTENT_ASSISTANT_NAME = '内容创作助手'
-const WRITING_RULES_SUMMARY = [
-  '账号：煮酒问人生。',
-  '所有文章都必须严格遵守：不写娱乐八卦、游戏、科技、财经等偏赛道内容。',
-  '句子尽量短，多用句号断句，多用排比或对比，避免长句和空话。',
-  '古文引用格式必须统一为《书名》有言："......"或《书名》有云："......"，且引用必须真实存在，引用后必须有白话解释。',
-  '故事必须有名有姓、有具体地点、有具体细节、有对话、有转折、有结果，并且要有打中情绪的那一刻。',
-  '禁止使用破折号（——）。禁止省略号超过一次。',
-  '禁止使用这些 AI 腔词汇：总的来说、综上所述、值得注意的是、不得不说、毋庸置疑、显而易见、由此可见、总而言之、在某种程度上、不仅如此。',
-  '禁止直接说教，道理必须藏在故事里。禁止在正文里出现第一人称“我”。',
-].join('\n')
-const MINGYUAN_STYLE_SUMMARY = [
-  '明远：见过是非、说话直接的长者口吻，直接、有力、不拖泥带水。',
-  '更适合历史人物、真实名人、官员、文人、商人或冲突更强的故事。',
-  '喜欢短句和长句交替，关键结论可以单独成段。',
-  '喜欢对比结构、反问句和像锤子落地一样的总结句。',
-  '结尾要把结论讲透，行动感更强，不能温吞，也不能太含蓄。',
-  '禁止整篇都写成细腻轻声讲述。禁止主角一直软弱无反击。',
-].join('\n')
-const ZHIRUO_STYLE_SUMMARY = [
-  '芷若：经历过生活起伏的中年女性口吻，温柔、细腻、有温度，但不软弱。',
-  '更适合普通人主角，尤其是古代、民国背景的小人物。',
-  '喜欢短句，一句话一个呼吸。情绪推进时句子越来越短。',
-  '喜欢用物件承载情感，并在结尾形成细节回环。',
-  '结尾点到为止，不直接说教，道理藏在一个让人鼻酸的瞬间里。',
-  '禁止激烈喊话式语气。禁止励志鸡汤式结尾。禁止人物过于完美。',
-].join('\n')
-const FORBIDDEN_AI_PHRASES = [
-  '总的来说',
-  '综上所述',
-  '值得注意的是',
-  '不得不说',
-  '毋庸置疑',
-  '显而易见',
-  '由此可见',
-  '总而言之',
-  '在某种程度上',
-  '不仅如此',
-]
-
-function buildContentSystemPrompt() {
-  return [
-    '你是一个中文公众号内容创作助手，负责生成文章正文和详细校验报告。',
-    '你必须严格围绕用户给出的选题、文章类型、笔名口吻、补充要求和修改意见来输出。',
-    '正文必须使用 Markdown，适合公众号长文阅读，语言要自然、克制、有人味，避免 AI 套话。',
-    '校验报告必须是 Markdown，并包含以下结构：结论、结构检查、风格检查、当前仍可优化的地方、AI 已处理动作。',
-    '校验报告优先使用规范 Markdown 结构：二级标题、简洁列表；涉及逐项对照时使用 Markdown 表格，表头尽量简短。',
-    '你收到的写作结构规范和笔名风格规范都属于硬性约束，优先级高于泛化写作习惯。',
-    '如果标题、结构、口吻与规范冲突，必须优先修正到符合规范。',
-    '你的最终回复必须是一个 JSON 对象，且只输出 JSON，不要使用代码块，不要添加额外解释。',
-    'JSON 必须包含 draftMarkdown、reportMarkdown、summary 三个字符串字段。',
-  ].join('\n')
+function buildContentSystemPrompt(ruleProfile) {
+  return ruleProfile.contentSystemPrompt
 }
 
-function getPenStyleDoc(penName) {
-  return penName === '明远' ? MINGYUAN_STYLE_SUMMARY : ZHIRUO_STYLE_SUMMARY
+function getPenStyleDoc(ruleProfile, penName) {
+  return ruleProfile.penStyleSummaries?.[penName] ?? ruleProfile.penStyleSummaries?.芷若 ?? ''
 }
 
-function buildTypeExecutionNotes(type) {
-  if (type === 'A型') {
-    return [
-      'A型执行重点：',
-      '- 开篇必须用名人名言起手，再点痛点，再引出主题。',
-      '- 正文要有 2 到 3 个循环体，每个循环体都要有小标题、古文、论述、故事、古文收尾。',
-      '- 结尾必须出现单独一行的 ▽，并使用固定结尾语。',
-      '- 总字数控制在 1800 到 2000 字。',
-    ].join('\n')
-  }
-
-  if (type === 'B型') {
-    return [
-      'B型执行重点：',
-      '- 标题必须包含明确数字，整篇必须是清单式结构。',
-      '- 开篇先用生活场景切入，再自然引出今天要聊的 3 件事、3 句话或 3 个方法。',
-      '- 正文固定写三点，每一点都要有古文或俗语、故事、可操作的道理收尾。',
-      '- 结尾必须使用固定结尾语。',
-      '- 总字数控制在 1500 到 1800 字。',
-    ].join('\n')
-  }
-
-  if (type === 'C型') {
-    return [
-      'C型执行重点：',
-      '- 开篇必须是具体热点事件，不空泛，不评论热点本身。',
-      '- 正文写三层普世道理，每层都要有古文、案例或故事支撑。',
-      '- 结尾必须是行动召唤，不使用祈愿句。',
-      '- 总字数控制在 1800 到 2000 字。',
-    ].join('\n')
-  }
-
-  return '未识别文章类型时，默认按给定标题和笔名风格写出最贴近规范的文章。'
+function buildTypeExecutionNotes(ruleProfile, type) {
+  return ruleProfile.typeExecutionNotes?.[type] ?? ruleProfile.typeFallbackNote
 }
 
-function buildPenExecutionNotes(penName) {
-  if (penName === '明远') {
-    return [
-      '明远执行重点：',
-      '- 语气直接、有力、带穿透力，但不粗鲁。',
-      '- 更适合历史人物、真实名人或冲突更强的故事。',
-      '- 结尾不能太含蓄，要把结论说透，说出行动感。',
-    ].join('\n')
-  }
-
-  return [
-    '芷若执行重点：',
-    '- 语气温柔、细腻、克制，不要用强硬喊话式表达。',
-    '- 以普通人为主角，细节要有物件感和回环。',
-    '- 道理藏在故事里，结尾点到为止，不说教。',
-  ].join('\n')
+function buildPenExecutionNotes(ruleProfile, penName) {
+  return ruleProfile.penExecutionNotes?.[penName] ?? ruleProfile.penExecutionNotes?.芷若 ?? ''
 }
 
-function buildCompactRuleChecklist(topic) {
-  const rules = [
-    '硬性规则：',
-    '- 正文必须是中文 Markdown，适合公众号阅读。',
-    '- 不要使用破折号（——）。省略号最多一次。',
-    `- 不要出现这些 AI 腔词：${FORBIDDEN_AI_PHRASES.join('、')}。`,
-    '- 古文引用必须真实，格式统一为《书名》有言："......"或《书名》有云："......"，并在引用后做白话解释。',
-    '- 故事必须有名有姓、有地点、有细节、有对话、有转折、有结果。',
-    '- 不要直接说教，不要在正文出现第一人称“我”。',
-  ]
-
-  if (topic?.type === 'A型' || topic?.type === 'B型') {
-    rules.push('- 结尾必须包含▽和固定结尾语：点亮文末"爱心"，愿[祈愿内容]。转发分享，弘扬中华传统文化！')
-  }
-
-  return rules.join('\n')
+function buildCompactRuleChecklist(ruleProfile, topic) {
+  return ruleProfile.compactRuleChecklist({ topic })
 }
 
-function buildSharedContentContextLines({ action, compact = false, deepThinkingEnabled, note = '', supplement = '', topic }) {
+function buildSharedContentContextLines({
+  action,
+  compact = false,
+  deepThinkingEnabled,
+  note = '',
+  ruleProfile,
+  supplement = '',
+  topic,
+}) {
   const taskLabel = action === 'revise' ? '根据修改意见重写当前文章' : '生成第一版文章'
   const modeLabel = deepThinkingEnabled ? '深度模式' : '标准模式'
   const ruleBlock = compact
-    ? buildCompactRuleChecklist(topic)
+    ? buildCompactRuleChecklist(ruleProfile, topic)
     : [
         '基础结构规范摘要：',
-        WRITING_RULES_SUMMARY,
+        ruleProfile.writingRulesSummary,
         '',
         `当前笔名风格摘要（${topic?.penName ?? '未指定'}）：`,
-        getPenStyleDoc(topic?.penName),
+        getPenStyleDoc(ruleProfile, topic?.penName),
       ].join('\n')
 
   return [
     `任务：${taskLabel}`,
     `推理模式：${modeLabel}`,
+    `规则版本：${ruleProfile.label}`,
     '',
     '创作要求：',
     `- 选题标题：${topic?.title ?? '未提供'}`,
@@ -155,29 +60,38 @@ function buildSharedContentContextLines({ action, compact = false, deepThinkingE
     `- 补充要求：${supplement.trim() || '无'}`,
     `- 修改意见：${note.trim() || '无'}`,
     '',
-    buildTypeExecutionNotes(topic?.type),
+    buildTypeExecutionNotes(ruleProfile, topic?.type),
     '',
-    buildPenExecutionNotes(topic?.penName),
+    buildPenExecutionNotes(ruleProfile, topic?.penName),
     '',
     ruleBlock,
   ]
 }
 
-function buildContentUserPrompt({ action, compact = false, deepThinkingEnabled, note = '', supplement = '', topic }) {
+function buildContentUserPrompt({
+  action,
+  compact = false,
+  deepThinkingEnabled,
+  note = '',
+  ruleProfile,
+  supplement = '',
+  topic,
+}) {
   return [
     ...buildSharedContentContextLines({
       action,
       compact,
       deepThinkingEnabled,
       note,
+      ruleProfile,
       supplement,
       topic,
     }),
     '',
     '输出要求：',
     '- draftMarkdown：直接可读的公众号正文 Markdown，允许使用一级标题、引用、段落、小标题、列表。',
-    '- reportMarkdown：详细校验报告 Markdown，按“结论 / 结构检查 / 风格检查 / 当前仍可优化的地方 / AI 已处理动作”输出。',
-    '- reportMarkdown 优先使用二级标题、列表和表格，不要输出大段没有层级的纯文本。',
+    ruleProfile.reportInstruction,
+    ruleProfile.reportFormattingInstruction,
     '- summary：一句适合展示在工作流里的简短总结。',
     '',
     '如果是首稿，请直接给出完整正文与完整报告。',
@@ -187,23 +101,18 @@ function buildContentUserPrompt({ action, compact = false, deepThinkingEnabled, 
   ].join('\n')
 }
 
-function buildDraftGenerationSystemPrompt() {
-  return [
-    '你是一个中文公众号写稿助手，只负责输出正文草稿。',
-    '你必须严格遵守用户提供的选题、类型、笔名口吻和硬性规则。',
-    '正文必须是自然、克制、有人味的中文 Markdown，不要夹带解释，不要输出报告。',
-    '你的最终回复必须是一个 JSON 对象，且只输出 JSON，不要使用代码块。',
-    'JSON 必须包含 draftMarkdown、summary 两个字符串字段。',
-  ].join('\n')
+function buildDraftGenerationSystemPrompt(ruleProfile) {
+  return ruleProfile.draftGenerationSystemPrompt
 }
 
-function buildDraftGenerationUserPrompt({ deepThinkingEnabled, supplement = '', topic }) {
+function buildDraftGenerationUserPrompt({ deepThinkingEnabled, ruleProfile, supplement = '', topic }) {
   return [
     ...buildSharedContentContextLines({
       action: 'initial',
       compact: false,
       deepThinkingEnabled,
       note: '',
+      ruleProfile,
       supplement,
       topic,
     }),
@@ -217,24 +126,18 @@ function buildDraftGenerationUserPrompt({ deepThinkingEnabled, supplement = '', 
   ].join('\n')
 }
 
-function buildDraftAuditSystemPrompt() {
-  return [
-    '你是一个中文公众号内容审核助手，只负责审核文章并决定是否需要自动修订。',
-    '你必须严格依据选题要求、结构规则、笔名风格和硬性写作规范来审核。',
-    '你的最终回复必须是一个 JSON 对象，且只输出 JSON，不要使用代码块。',
-    'JSON 必须包含 reportMarkdown、decision、summary 三个字段。',
-    'decision 只能是 pass、partial、rewrite 三个值之一。',
-    '当文章整体可用时返回 pass；需要局部修改时返回 partial；结构方向明显不对时返回 rewrite。',
-  ].join('\n')
+function buildDraftAuditSystemPrompt(ruleProfile) {
+  return ruleProfile.draftAuditSystemPrompt
 }
 
-function buildDraftAuditUserPrompt({ deepThinkingEnabled, draftMarkdown = '', supplement = '', topic }) {
+function buildDraftAuditUserPrompt({ deepThinkingEnabled, draftMarkdown = '', ruleProfile, supplement = '', topic }) {
   return [
     ...buildSharedContentContextLines({
       action: 'initial',
       compact: true,
       deepThinkingEnabled,
       note: '',
+      ruleProfile,
       supplement,
       topic,
     }),
@@ -243,8 +146,8 @@ function buildDraftAuditUserPrompt({ deepThinkingEnabled, draftMarkdown = '', su
     draftMarkdown.trim(),
     '',
     '输出要求：',
-    '- reportMarkdown：详细校验报告 Markdown，按“结论 / 结构检查 / 风格检查 / 当前仍可优化的地方 / AI 已处理动作”输出。',
-    '- reportMarkdown 优先使用二级标题、列表和表格，不要输出大段没有层级的纯文本。',
+    ruleProfile.reportInstruction,
+    ruleProfile.reportFormattingInstruction,
     '- decision：只能输出 pass / partial / rewrite 其中一个。',
     '- summary：一句适合展示在工作流里的简短总结。',
     '',
@@ -252,14 +155,8 @@ function buildDraftAuditUserPrompt({ deepThinkingEnabled, draftMarkdown = '', su
   ].join('\n')
 }
 
-function buildDraftRevisionSystemPrompt() {
-  return [
-    '你是一个中文公众号内容修订助手，负责根据审核结果自动修订正文并给出最终可展示的审核报告。',
-    '你必须严格遵守选题、类型、笔名口吻和硬性写作规则。',
-    '修订时优先按审核结论执行：partial 做局部修订，rewrite 做整篇重构。',
-    '你的最终回复必须是一个 JSON 对象，且只输出 JSON，不要使用代码块。',
-    'JSON 必须包含 draftMarkdown、reportMarkdown、summary 三个字符串字段。',
-  ].join('\n')
+function buildDraftRevisionSystemPrompt(ruleProfile) {
+  return ruleProfile.draftRevisionSystemPrompt
 }
 
 function buildDraftRevisionUserPrompt({
@@ -267,6 +164,7 @@ function buildDraftRevisionUserPrompt({
   deepThinkingEnabled,
   draftMarkdown = '',
   reportMarkdown = '',
+  ruleProfile,
   supplement = '',
   topic,
 }) {
@@ -278,6 +176,7 @@ function buildDraftRevisionUserPrompt({
       compact: true,
       deepThinkingEnabled,
       note: reportMarkdown.trim(),
+      ruleProfile,
       supplement,
       topic,
     }),
@@ -305,14 +204,17 @@ async function requestContentGeneration({
   deepThinkingEnabled,
   model,
   note,
+  ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
   supplement,
   topic,
 }) {
+  const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
+
   return chatWithMiniMax({
     apiKey,
     assistantName: CONTENT_ASSISTANT_NAME,
     model,
-    systemPrompt: buildContentSystemPrompt(),
+    systemPrompt: buildContentSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.35 : 0.2,
     timeoutMs: 300000,
     messages: [
@@ -323,6 +225,7 @@ async function requestContentGeneration({
           compact: false,
           deepThinkingEnabled,
           note,
+          ruleProfile,
           supplement,
           topic,
         }),
@@ -408,7 +311,58 @@ function extractJsonObject(content) {
   }
 }
 
-function buildFallbackReport({ action, note = '', supplement = '', topic }) {
+function buildFallbackReport({ action, note = '', ruleProfile, supplement = '', topic }) {
+  if (ruleProfile.id === 'B') {
+    return [
+      '# 详细校验报告',
+      '',
+      '## 结论',
+      '',
+      action === 'revise'
+        ? '局部修改'
+        : 'pass',
+      '',
+      '## 判定理由',
+      '',
+      action === 'revise'
+        ? '本轮已经根据修改意见完成修订，建议继续核对真实性和结构随机性要求。'
+        : `当前版本已经围绕《${topic?.title ?? '未命名文章'}》生成完成，可继续检查事实性与结构细节。`,
+      '',
+      '## 结构检查',
+      '',
+      '- 已生成完整正文，请重点检查开头钩子、中段转折、段落开头方式是否至少有两种变化。',
+      '',
+      '## 风格检查',
+      '',
+      `- 当前文案按 ${topic?.penName ?? '默认笔名'} 的口吻生成。`,
+      supplement.trim() ? `- 已吸收补充要求：${supplement.trim()}` : '- 当前无额外补充要求。',
+      '',
+      '## AI腔词汇检查',
+      '',
+      '- 当前 fallback 报告未发现明显 AI 腔词，建议人工复核。',
+      '',
+      '## 硬性规则检查',
+      '',
+      '- 请重点复核赛道约束、破折号、省略号和固定结尾语。',
+      '',
+      '## 古文真实性核查',
+      '',
+      '- 当前 fallback 报告无法逐条给出古文核查结果，建议人工重点复核。',
+      '',
+      '## 可优化建议',
+      '',
+      note.trim()
+        ? `- 可继续围绕“${note.trim()}”做下一轮精修。`
+        : '- 如果需要更强情绪张力或更克制表达，可以继续补充修改意见。',
+      '',
+      '## AI 已处理动作',
+      '',
+      action === 'revise'
+        ? `- 已执行一轮改稿，核心意见为：${note.trim() || '未提供具体意见'}。`
+        : '- 已完成首稿生成并输出基础校验结果。',
+    ].join('\n')
+  }
+
   return [
     '# 详细校验报告',
     '',
@@ -497,16 +451,16 @@ function sanitizeDraftMarkdown(draftMarkdown, topic) {
   }
 }
 
-function buildQualityCheckSection({ adjustments, draftMarkdown, topic }) {
+function buildQualityCheckSection({ adjustments, draftMarkdown, ruleProfile, topic }) {
   const readableLength = countReadableLength(draftMarkdown)
-  const bannedHits = FORBIDDEN_AI_PHRASES.filter((phrase) => draftMarkdown.includes(phrase))
+  const bannedHits = ruleProfile.forbiddenAiPhrases.filter((phrase) => draftMarkdown.includes(phrase))
   const hasDash = draftMarkdown.includes('——')
   const fixedEndingOk =
     topic?.type === 'A型' || topic?.type === 'B型'
       ? draftMarkdown.includes('点亮文末"爱心"')
       : true
 
-  return [
+  const lines = [
     '## 规则校验',
     '',
     `- 字数估算：约 ${readableLength} 字。`,
@@ -514,7 +468,13 @@ function buildQualityCheckSection({ adjustments, draftMarkdown, topic }) {
     `- AI 腔词检查：${bannedHits.length === 0 ? '未发现明显禁用词。' : `发现 ${bannedHits.join('、')}。`}`,
     `- 固定结尾语检查：${fixedEndingOk ? '通过。' : '未通过，建议补齐。'}`,
     adjustments.length > 0 ? `- 程序兜底修正：${adjustments.join(' ')}` : '- 程序兜底修正：本轮未触发。',
-  ].join('\n')
+  ]
+
+  if (ruleProfile.id === 'B') {
+    lines.splice(lines.length - 1, 0, '- 古文真实性核查：请以审核报告中的专项核查结果为准。')
+  }
+
+  return lines.join('\n')
 }
 
 function normalizeStageText(content) {
@@ -645,14 +605,23 @@ function clonePipelineSteps(steps) {
   }))
 }
 
-async function requestDraftGenerationStage({ apiKey, deepThinkingEnabled, model, supplement, topic }) {
+async function requestDraftGenerationStage({
+  apiKey,
+  deepThinkingEnabled,
+  model,
+  ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
+  supplement,
+  topic,
+}) {
+  const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
   const result = await requestStructuredContentStage({
     apiKey,
     model,
-    systemPrompt: buildDraftGenerationSystemPrompt(),
+    systemPrompt: buildDraftGenerationSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.35 : 0.2,
     userPrompt: buildDraftGenerationUserPrompt({
       deepThinkingEnabled,
+      ruleProfile,
       supplement,
       topic,
     }),
@@ -669,15 +638,25 @@ async function requestDraftGenerationStage({ apiKey, deepThinkingEnabled, model,
   }
 }
 
-async function requestDraftAuditStage({ apiKey, deepThinkingEnabled, draftMarkdown, model, supplement, topic }) {
+async function requestDraftAuditStage({
+  apiKey,
+  deepThinkingEnabled,
+  draftMarkdown,
+  model,
+  ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
+  supplement,
+  topic,
+}) {
+  const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
   const result = await requestStructuredContentStage({
     apiKey,
     model,
-    systemPrompt: buildDraftAuditSystemPrompt(),
+    systemPrompt: buildDraftAuditSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.2 : 0.1,
     userPrompt: buildDraftAuditUserPrompt({
       deepThinkingEnabled,
       draftMarkdown,
+      ruleProfile,
       supplement,
       topic,
     }),
@@ -689,7 +668,11 @@ async function requestDraftAuditStage({ apiKey, deepThinkingEnabled, draftMarkdo
     decision: normalizeRevisionDecision(parsed?.decision, 'pass'),
     model: result?.model ?? model,
     rawContent,
-    reportMarkdown: readStringField(parsed, 'reportMarkdown', buildFallbackReport({ action: 'initial', supplement, topic })),
+    reportMarkdown: readStringField(
+      parsed,
+      'reportMarkdown',
+      buildFallbackReport({ action: 'initial', ruleProfile, supplement, topic }),
+    ),
     summary: readStringField(parsed, 'summary', '审核完成，已生成审核结果。'),
     usage: result?.usage ?? null,
   }
@@ -702,19 +685,22 @@ async function requestDraftRevisionStage({
   draftMarkdown,
   model,
   reportMarkdown,
+  ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
   supplement,
   topic,
 }) {
+  const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
   const result = await requestStructuredContentStage({
     apiKey,
     model,
-    systemPrompt: buildDraftRevisionSystemPrompt(),
+    systemPrompt: buildDraftRevisionSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.32 : 0.18,
     userPrompt: buildDraftRevisionUserPrompt({
       decision,
       deepThinkingEnabled,
       draftMarkdown,
       reportMarkdown,
+      ruleProfile,
       supplement,
       topic,
     }),
@@ -736,10 +722,12 @@ export async function runInitialContentPipeline({
   apiKey,
   deepThinkingEnabled = true,
   model = DEFAULT_MODEL,
+  ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
   supplement = '',
   topic,
   onProgress,
 }) {
+  const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
   const startedAt = Date.now()
   const stepCount = 8
   let steps = createPipelineSteps(stepCount, startedAt)
@@ -765,6 +753,7 @@ export async function runInitialContentPipeline({
     apiKey,
     deepThinkingEnabled,
     model,
+    ruleProfileId: ruleProfile.id,
     supplement,
     topic,
   })
@@ -780,6 +769,7 @@ export async function runInitialContentPipeline({
     deepThinkingEnabled,
     draftMarkdown: initialDraft.draftMarkdown,
     model,
+    ruleProfileId: ruleProfile.id,
     supplement,
     topic,
   })
@@ -806,6 +796,7 @@ export async function runInitialContentPipeline({
       draftMarkdown: initialDraft.draftMarkdown,
       model,
       reportMarkdown: auditStage.reportMarkdown,
+      ruleProfileId: ruleProfile.id,
       supplement,
       topic,
     })
@@ -822,6 +813,7 @@ export async function runInitialContentPipeline({
   const qualitySection = buildQualityCheckSection({
     adjustments: finalDraft.adjustments,
     draftMarkdown: finalDraft.draftMarkdown,
+    ruleProfile,
     topic,
   })
   const finishedAt = Date.now()
@@ -833,7 +825,9 @@ export async function runInitialContentPipeline({
     draftMarkdown: finalDraft.draftMarkdown,
     model,
     rawContent: stagePayloads,
-    reportMarkdown: `${(finalReportMarkdown || buildFallbackReport({ action: 'initial', supplement, topic })).trim()}\n\n${qualitySection}`,
+    reportMarkdown: `${(finalReportMarkdown || buildFallbackReport({ action: 'initial', ruleProfile, supplement, topic })).trim()}\n\n${qualitySection}`,
+    ruleProfileId: ruleProfile.id,
+    ruleProfileLabel: ruleProfile.label,
     summary: (finalSummary || generationStage.summary || '首版稿件已经准备完成。').trim(),
     usage: stageUsages,
   }
@@ -845,15 +839,18 @@ export async function generateContentDraft({
   deepThinkingEnabled = true,
   model = DEFAULT_MODEL,
   note = '',
+  ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
   supplement = '',
   topic,
 }) {
+  const ruleProfile = resolveContentRuleProfile(ruleProfileId)
   const result = await requestContentGeneration({
     action,
     apiKey,
     deepThinkingEnabled,
     model,
     note,
+    ruleProfileId: ruleProfile.id,
     supplement,
     topic,
   })
@@ -867,11 +864,12 @@ export async function generateContentDraft({
   const reportMarkdown =
     typeof parsed?.reportMarkdown === 'string' && parsed.reportMarkdown.trim()
       ? parsed.reportMarkdown.trim()
-      : buildFallbackReport({ action, note, supplement, topic })
+      : buildFallbackReport({ action, note, ruleProfile, supplement, topic })
   const sanitized = sanitizeDraftMarkdown(draftMarkdown, topic)
   const qualitySection = buildQualityCheckSection({
     adjustments: sanitized.adjustments,
     draftMarkdown: sanitized.draftMarkdown,
+    ruleProfile,
     topic,
   })
   const summary =
@@ -890,6 +888,8 @@ export async function generateContentDraft({
     model: result?.model ?? model,
     rawContent,
     reportMarkdown: `${reportMarkdown}\n\n${qualitySection}`,
+    ruleProfileId: ruleProfile.id,
+    ruleProfileLabel: ruleProfile.label,
     summary,
     usage: result?.usage ?? null,
   }

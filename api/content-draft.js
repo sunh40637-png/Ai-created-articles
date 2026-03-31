@@ -18,6 +18,7 @@ export default async function handler(request, response) {
       deepThinkingEnabled: request.body?.deepThinkingEnabled ?? true,
       model: minimaxConfig.model,
       note: request.body?.note || '',
+      ruleProfileId: request.body?.ruleProfileId,
       supplement: request.body?.supplement || '',
       topic: request.body?.topic || null,
     })
