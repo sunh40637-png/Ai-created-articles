@@ -2,11 +2,16 @@
 
 ## 当前版本说明
 
-- `规则A`：当前稳定版，保留现有写作与审核口径
-- `规则B`：候选版，按《写作与审核规则优化需求 v1.0》接入，重点强化：
+- `规则A`：当前稳定版，已补齐 `v1.1` 的共享规则，重点包括：
+  - 古文真实性核查
+  - 著作真实性约束
+  - 真实历史人物使用规范
+  - 同一古籍最多引用一次
+  - 每篇至少两个不同人物或案例
+- `规则B`：候选版，在共享规则基础上继续强化：
   - 古文真实性核查
   - 真实历史人物事实性约束
-  - 段落结构随机性
+  - 段落结构与开头方式多样化
   - 更细的审核报告字段
 
 当前前端工作台默认走“混合生效版”：
@@ -24,7 +29,7 @@
 
 规则配置文件：
 
-- [server/contentRuleProfiles.js](/Users/awehome/Documents/文章内容自动化创作系统/server/contentRuleProfiles.js)
+- [server/contentRuleProfiles.js](/Users/shh/Documents/Ai-created-articles/server/contentRuleProfiles.js)
 
 其中：
 
@@ -44,7 +49,7 @@
 
 默认测试题单文件：
 
-- [content-style/ab-test-topics.json](/Users/awehome/Documents/文章内容自动化创作系统/content-style/ab-test-topics.json)
+- [content-style/ab-test-topics.json](/Users/shh/Documents/Ai-created-articles/content-style/ab-test-topics.json)
 
 当前内置了 `6` 个固定选题：
 

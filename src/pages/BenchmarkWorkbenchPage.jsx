@@ -496,6 +496,59 @@ function getActiveVersion(session) {
   )
 }
 
+function buildFallbackGeneratedTitle(topic) {
+  return typeof topic?.title === 'string' ? topic.title.trim() : ''
+}
+
+function readLooseTitle(value) {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+
+  if (!value || typeof value !== 'object') {
+    return ''
+  }
+
+  if (typeof value.title === 'string' && value.title.trim()) {
+    return value.title.trim()
+  }
+
+  if (typeof value.text === 'string' && value.text.trim()) {
+    return value.text.trim()
+  }
+
+  if (typeof value.content === 'string' && value.content.trim()) {
+    return value.content.trim()
+  }
+
+  return ''
+}
+
+function resolveVersionGeneratedTitle(version) {
+  const directTitle = readLooseTitle(version?.generatedTitle)
+
+  if (directTitle) {
+    return directTitle
+  }
+
+  const legacyCandidate = Array.isArray(version?.titleCandidates) ? version.titleCandidates[0] : null
+  return readLooseTitle(legacyCandidate)
+}
+
+function resolveVersionDisplayTitle(session, version) {
+  return resolveVersionGeneratedTitle(version) || getSelectedTopic(session)?.title || session?.title || ''
+}
+
+function getDraftBodyMarkdown(version) {
+  const draftMarkdown = version?.draftMarkdown ?? ''
+
+  if (resolveVersionGeneratedTitle(version)) {
+    return stripPreviewHeading(draftMarkdown)
+  }
+
+  return draftMarkdown
+}
+
 function hasSessionHistory(session) {
   if (!session) {
     return false
@@ -568,6 +621,7 @@ function buildDraftVersion({ note = '', supplement = '', topic, versionNumber })
     id: createId('version'),
     createdAt: new Date().toISOString(),
     draftMarkdown,
+    generatedTitle: buildFallbackGeneratedTitle(topic),
     label: `V${versionNumber}`,
     note: note.trim(),
     reportMarkdown,
@@ -587,6 +641,7 @@ function buildVersionFromGeneratedResult({ generated, note = '', supplement = ''
   return {
     ...fallbackVersion,
     draftMarkdown: generated?.draftMarkdown?.trim() || fallbackVersion.draftMarkdown,
+    generatedTitle: readLooseTitle(generated?.generatedTitle) || fallbackVersion.generatedTitle,
     reportMarkdown: generated?.reportMarkdown?.trim() || fallbackVersion.reportMarkdown,
     summary: generated?.summary?.trim() || fallbackVersion.summary,
     wordCount: countReadableLength(generated?.draftMarkdown?.trim() || fallbackVersion.draftMarkdown),
@@ -1946,12 +2001,27 @@ function MessageBubble({ copiedMessageId, message, onCopy }) {
   )
 }
 
+function GeneratedTitleSection({ title = '' }) {
+  if (!title.trim()) {
+    return null
+  }
+
+  return (
+    <section className="mb-8 sm:mb-10">
+      <div className="text-[18px] font-semibold leading-[1.75] text-foreground sm:text-[20px]">
+        {title}
+      </div>
+    </section>
+  )
+}
+
 function DraftWorkbench({ session, version }) {
   if (!version) {
     return <div className="text-[14px] text-muted-foreground">当前还没有文字稿。</div>
   }
 
   const topic = getSelectedTopic(session)
+  const generatedTitle = resolveVersionGeneratedTitle(version)
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-7">
@@ -1972,7 +2042,8 @@ function DraftWorkbench({ session, version }) {
         </div>
 
         <article className="border-t border-border/65 pt-8 sm:pt-10">
-          {renderMarkdownBlock(version.draftMarkdown, draftMarkdownComponents)}
+          <GeneratedTitleSection title={generatedTitle} />
+          {renderMarkdownBlock(getDraftBodyMarkdown(version), draftMarkdownComponents)}
         </article>
       </div>
     </div>
@@ -1998,13 +2069,14 @@ function ArticlePreview({ fontSize, session }) {
   const version = getActiveVersion(session)
   const previewMarkdown = stripPreviewHeading(version?.draftMarkdown ?? '')
   const previewComponents = useMemo(() => getPreviewMarkdownComponents(fontSize), [fontSize])
+  const displayTitle = resolveVersionDisplayTitle(session, version)
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-7">
       <div className="mx-auto max-w-[720px]">
         <header className="text-center">
           <h2 className="mx-auto max-w-[640px] text-[24px] font-semibold leading-[1.45] tracking-[-0.02em] text-black">
-            {topic?.title}
+            {displayTitle}
           </h2>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[12px] tracking-[0.08em] text-black/42">
             <span>{topic?.penName}</span>
@@ -2046,6 +2118,7 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session }) {
   const version = getActiveVersion(session)
   const previewMarkdown = stripPreviewHeading(version?.draftMarkdown ?? '')
   const wechatComponents = useMemo(() => getWechatCopyComponents(fontSize), [fontSize])
+  const displayTitle = resolveVersionDisplayTitle(session, version)
 
   async function handleCopyWechat() {
     if (!copySourceRef.current) {
@@ -2081,7 +2154,7 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session }) {
               textAlign: 'center',
             }}
           >
-            {topic?.title || ''}
+            {displayTitle || ''}
           </h2>
           <div
             style={{
@@ -2845,6 +2918,7 @@ export default function BenchmarkWorkbenchPage() {
             ),
           })),
           stageId: 'draft',
+          title: resolveVersionDisplayTitle(current, version),
         }
       },
       onError: (current, error, { messageId }) => ({
@@ -3065,6 +3139,7 @@ export default function BenchmarkWorkbenchPage() {
               '我已经按“整篇重写”的方式重新生成了一版，右侧的正文和校验报告都更新好了。',
             ),
           })),
+          title: resolveVersionDisplayTitle(current, nextVersion),
         }
       },
       onError: (current, error, { messageId }) => ({
@@ -3146,6 +3221,7 @@ export default function BenchmarkWorkbenchPage() {
                 '我已经按你的修改意见完成重写，这一版正文和校验报告都更新在右侧了。',
               ),
             })),
+            title: resolveVersionDisplayTitle(current, nextVersion),
           }
         },
         onError: (current, error, { messageId }) => ({
@@ -3537,14 +3613,24 @@ export default function BenchmarkWorkbenchPage() {
                 activeTabId={activeSession.activeWorkbenchTab}
                 onOpenTab={handleSelectWorkbenchTab}
                 onSelectVersion={(versionId) =>
-                  updateCurrentSession((current) => ({
-                    ...current,
-                    activeWorkbenchTab: 'draft',
-                    draftReview: {
-                      ...current.draftReview,
-                      activeVersionId: versionId,
-                    },
-                  }))
+                  updateCurrentSession((current) => {
+                    const nextSession = {
+                      ...current,
+                      activeWorkbenchTab: 'draft',
+                      draftReview: {
+                        ...current.draftReview,
+                        activeVersionId: versionId,
+                      },
+                    }
+                    const nextVersion =
+                      nextSession.draftReview.versions.find((version) => version.id === versionId) ??
+                      nextSession.draftReview.versions[nextSession.draftReview.versions.length - 1]
+
+                    return {
+                      ...nextSession,
+                      title: resolveVersionDisplayTitle(nextSession, nextVersion),
+                    }
+                  })
                 }
                 onSetDevice={(device) =>
                   updateCurrentSession((current) => ({

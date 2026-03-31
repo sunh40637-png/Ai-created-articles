@@ -6,6 +6,32 @@ import {
 
 const DEFAULT_MODEL = 'MiniMax-M2.7'
 const CONTENT_ASSISTANT_NAME = '内容创作助手'
+
+const TITLE_FORMULA_GUIDE = [
+  '1. 转折反常识式：用“不是……而是……”或“越……反而越……”制造反转。',
+  '2. 处境精准锚定式：精准点出某一类人的具体处境。',
+  '3. 结论前置式：直接抛出反常识结论。',
+  '4. 现象解读式：先写日常现象，再给深层解释。',
+  '5. 人生感悟式：用一句有分量的判断道出普遍真相。',
+  '6. 警示提醒式：用“别”“不要”“千万别”等提醒语触发防御本能。',
+  '7. 故事开头式：用故事细节起手，制造悬念。',
+  '8. 处境共情式：点中某个人生阶段的情绪。',
+  '9. 身份认同式：直接点出目标读者的身份标签，形成“这是写给我的”感觉。',
+].join('\n')
+
+const TITLE_GENERATION_REQUIREMENTS = [
+  '正式标题生成要求：',
+  '- 标题要基于已经写出的正文内容来反推，不要用标题去反向限制正文。',
+  '- 只输出 1 个正式标题，直接用于右侧文字稿顶部和后续排版。',
+  '- 标题尽量贴近九种标题公式中的高质量写法，但不要生硬套模板。',
+  '- 优先写出更自然、更像真人会说的话的标题，不要空泛，不要为了技巧感牺牲内容匹配。',
+  '- 标题控制在 16 到 26 字之间。',
+  '- 禁止数字开头、疑问句结尾、感叹号、夸张词（震惊/绝对/最强/第一/100%）、空洞鸡汤和 AI 腔标题。',
+  '- generatedTitle 必须是字符串，只放标题本身，不要带序号、说明或公式标签。',
+  '可用标题公式：',
+  TITLE_FORMULA_GUIDE,
+].join('\n')
+
 function buildContentSystemPrompt(ruleProfile) {
   return ruleProfile.contentSystemPrompt
 }
@@ -92,10 +118,13 @@ function buildContentUserPrompt({
     '- draftMarkdown：直接可读的公众号正文 Markdown，允许使用一级标题、引用、段落、小标题、列表。',
     ruleProfile.reportInstruction,
     ruleProfile.reportFormattingInstruction,
+    '- generatedTitle：基于最终正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
     '- summary：一句适合展示在工作流里的简短总结。',
     '',
     '如果是首稿，请直接给出完整正文与完整报告。',
     '如果是改稿，请优先做局部优化；只有在修改意见明确要求结构重写时，才做较大幅度重构。',
+    '',
+    TITLE_GENERATION_REQUIREMENTS,
     '',
     '再次提醒：只返回 JSON 对象本身，不要加 ```json 代码块。',
   ].join('\n')
@@ -148,8 +177,11 @@ function buildDraftAuditUserPrompt({ deepThinkingEnabled, draftMarkdown = '', ru
     '输出要求：',
     ruleProfile.reportInstruction,
     ruleProfile.reportFormattingInstruction,
+    '- generatedTitle：基于当前正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
     '- decision：只能输出 pass / partial / rewrite 其中一个。',
     '- summary：一句适合展示在工作流里的简短总结。',
+    '',
+    TITLE_GENERATION_REQUIREMENTS,
     '',
     '再次提醒：只返回 JSON 对象本身，不要加 ```json 代码块。',
   ].join('\n')
@@ -192,7 +224,10 @@ function buildDraftRevisionUserPrompt({
     '输出要求：',
     '- draftMarkdown：修订后的最终正文 Markdown。',
     '- reportMarkdown：基于修订后正文输出的最终校验报告 Markdown。',
+    '- generatedTitle：基于修订后正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
     '- summary：一句适合展示在工作流里的简短总结。',
+    '',
+    TITLE_GENERATION_REQUIREMENTS,
     '',
     '再次提醒：只返回 JSON 对象本身，不要加 ```json 代码块。',
   ].join('\n')
@@ -485,6 +520,51 @@ function readStringField(parsed, fieldName, fallback = '') {
   return typeof parsed?.[fieldName] === 'string' && parsed[fieldName].trim() ? parsed[fieldName].trim() : fallback
 }
 
+function buildFallbackGeneratedTitle(topic) {
+  return typeof topic?.title === 'string' ? topic.title.trim() : ''
+}
+
+function readLooseTitle(value) {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+
+  if (!value || typeof value !== 'object') {
+    return ''
+  }
+
+  if (typeof value.title === 'string' && value.title.trim()) {
+    return value.title.trim()
+  }
+
+  if (typeof value.text === 'string' && value.text.trim()) {
+    return value.text.trim()
+  }
+
+  if (typeof value.content === 'string' && value.content.trim()) {
+    return value.content.trim()
+  }
+
+  return ''
+}
+
+function readGeneratedTitle(parsed, topic) {
+  const directTitle = readLooseTitle(parsed?.generatedTitle)
+
+  if (directTitle) {
+    return directTitle
+  }
+
+  const legacyCandidate = Array.isArray(parsed?.titleCandidates) ? parsed.titleCandidates[0] : null
+  const legacyTitle = readLooseTitle(legacyCandidate)
+
+  if (legacyTitle) {
+    return legacyTitle
+  }
+
+  return buildFallbackGeneratedTitle(topic)
+}
+
 function normalizeRevisionDecision(value, fallback = 'pass') {
   if (typeof value !== 'string') {
     return fallback
@@ -674,6 +754,7 @@ async function requestDraftAuditStage({
       buildFallbackReport({ action: 'initial', ruleProfile, supplement, topic }),
     ),
     summary: readStringField(parsed, 'summary', '审核完成，已生成审核结果。'),
+    generatedTitle: readGeneratedTitle(parsed, topic),
     usage: result?.usage ?? null,
   }
 }
@@ -710,6 +791,7 @@ async function requestDraftRevisionStage({
 
   return {
     draftMarkdown: readStringField(parsed, 'draftMarkdown', draftMarkdown),
+    generatedTitle: readGeneratedTitle(parsed, topic),
     model: result?.model ?? model,
     rawContent,
     reportMarkdown: readStringField(parsed, 'reportMarkdown', reportMarkdown),
@@ -782,6 +864,7 @@ export async function runInitialContentPipeline({
   let finalDraft = initialDraft
   let finalReportMarkdown = auditStage.reportMarkdown
   let finalSummary = auditStage.summary || generationStage.summary
+  let finalGeneratedTitle = auditStage.generatedTitle
 
   advance(5)
 
@@ -804,6 +887,7 @@ export async function runInitialContentPipeline({
     stagePayloads.revision = revisionStage.rawContent
 
     finalDraft = sanitizeDraftMarkdown(revisionStage.draftMarkdown, topic)
+    finalGeneratedTitle = revisionStage.generatedTitle
     finalReportMarkdown = revisionStage.reportMarkdown || auditStage.reportMarkdown
     finalSummary = revisionStage.summary || finalSummary
 
@@ -829,6 +913,7 @@ export async function runInitialContentPipeline({
     ruleProfileId: ruleProfile.id,
     ruleProfileLabel: ruleProfile.label,
     summary: (finalSummary || generationStage.summary || '首版稿件已经准备完成。').trim(),
+    generatedTitle: finalGeneratedTitle || buildFallbackGeneratedTitle(topic),
     usage: stageUsages,
   }
 }
@@ -876,6 +961,7 @@ export async function generateContentDraft({
     typeof parsed?.summary === 'string' && parsed.summary.trim()
       ? parsed.summary.trim()
       : buildFallbackSummary({ action, note })
+  const generatedTitle = readGeneratedTitle(parsed, topic)
 
   if (!sanitized.draftMarkdown) {
     const error = new Error('MiniMax 没有返回可用的正文内容')
@@ -891,6 +977,7 @@ export async function generateContentDraft({
     ruleProfileId: ruleProfile.id,
     ruleProfileLabel: ruleProfile.label,
     summary,
+    generatedTitle,
     usage: result?.usage ?? null,
   }
 }
