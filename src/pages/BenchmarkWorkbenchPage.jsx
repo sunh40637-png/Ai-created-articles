@@ -53,7 +53,6 @@ const FLOW_STEP_MIN_MS = 420
 const FLOW_STEP_MAX_MS = 1100
 const FLOW_STEP_RATIO_MS = 160
 const CONTENT_FLOW_UI_PREVIEW = false
-const CONTENT_FLOW_RESET_KEY = 'content-creation-reset-after-preview-v1'
 const INITIAL_DRAFT_FLOW_TITLE = '正在准备首版稿件'
 const INITIAL_DRAFT_FLOW_SUMMARY = '正在完成从接收选题到首版稿件准备的处理流程。'
 const INITIAL_DRAFT_FLOW_INTRO_MESSAGE =
@@ -2496,19 +2495,6 @@ export default function BenchmarkWorkbenchPage() {
   const hasWorkbenchOutputs = availableTabs.length > 0
   const shouldRenderHero = isContentModule && currentStageId === 'topic' && !activeSession?.topicSelection?.selectedTopicId
   const showWorkbench = isContentModule && activeSession?.isWorkbenchOpen && hasWorkbenchOutputs
-
-  useEffect(() => {
-    if (CONTENT_FLOW_UI_PREVIEW || typeof window === 'undefined') {
-      return
-    }
-
-    if (window.localStorage.getItem(CONTENT_FLOW_RESET_KEY) === 'done') {
-      return
-    }
-
-    resetAllSessions()
-    window.localStorage.setItem(CONTENT_FLOW_RESET_KEY, 'done')
-  }, [resetAllSessions])
 
   useEffect(() => {
     if (!currentSessionId && orderedSessions[0]) {
