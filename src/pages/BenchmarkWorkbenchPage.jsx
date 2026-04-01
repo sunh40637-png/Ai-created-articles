@@ -9,6 +9,7 @@ import {
   Copy,
   FileText,
   History,
+  ImageIcon,
   LibraryBig,
   LayoutTemplate,
   ListFilter,
@@ -107,6 +108,7 @@ const workbenchTabs = [
 const sidebarModules = [
   { id: 'library', label: '选题库', icon: LibraryBig },
   { id: 'articles', label: '文章列表', icon: FileText },
+  { id: 'assets', label: '素材库', icon: ImageIcon },
 ]
 
 const topicLibraryItems = CONTENT_TOPIC_LIBRARY
@@ -2758,6 +2760,27 @@ function ArticlesModuleCanvas({ articles, onOpenArticle }) {
   )
 }
 
+function AssetsModuleCanvas() {
+  return (
+    <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white">
+      <div className="mx-auto flex h-full w-full max-w-[1320px] flex-col px-4 py-8 sm:px-5 lg:px-6">
+        <div className="mb-8">
+          <h1 className="text-[30px] font-semibold tracking-[-0.03em] text-foreground sm:text-[34px]">素材库</h1>
+        </div>
+
+        <div className="flex min-h-[420px] flex-1 items-center justify-center">
+          <div className="text-center">
+            <div className="text-[16px] font-medium text-foreground">暂无素材</div>
+            <p className="mt-2 text-[14px] leading-6 text-muted-foreground">
+              当前先保留素材库模块框架，后续再接入图片网格和查看层。
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function BenchmarkWorkbenchPage() {
   const activeSessionId = useBenchmarkStore((state) => state.activeSessionId)
   const createSession = useBenchmarkStore((state) => state.createSession)
@@ -3792,8 +3815,10 @@ export default function BenchmarkWorkbenchPage() {
             {!isContentModule ? (
               activeModule === 'library' ? (
                 <LibraryModuleCanvas topicStatusById={topicStatusById} />
-              ) : (
+              ) : activeModule === 'articles' ? (
                 <ArticlesModuleCanvas articles={articleEntries} onOpenArticle={handleOpenArticlePreview} />
+              ) : (
+                <AssetsModuleCanvas />
               )
             ) : shouldRenderHero ? (
               <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto">
