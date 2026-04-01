@@ -12,7 +12,25 @@ import {
   generateContentDraft,
   runInitialContentPipeline,
 } from './server/contentCreation.js'
+import {
+  deletePersistedContentSessionPayload,
+  readPersistedContentSessionPayload,
+  writePersistedContentSessionPayload,
+} from './server/contentSessionPersistence.js'
 import { parseRequestFormData } from './server/httpFormData.js'
+import {
+  deleteFixedLayoutAsset,
+  readFixedLayoutConfig,
+  updateFixedLayoutText,
+  uploadFixedLayoutAsset,
+} from './server/fixedLayoutConfig.js'
+import {
+  deleteLibraryAsset,
+  listLibraryAssets,
+  matchLibraryAssetsForArticle,
+  recordLibraryAssetUsage,
+  updateLibraryAsset,
+} from './server/libraryAssets.js'
 import { chatWithMiniMax } from './server/minimax.js'
 import { resolveMiniMaxConfig } from './server/runtimeConfig.js'
 import { generateTopicRecommendations } from './server/topicRecommendations.js'
@@ -236,6 +254,244 @@ function topicRecommendationDevApi(env) {
   }
 }
 
+function libraryAssetsDevApi() {
+  return {
+    name: 'library-assets-dev-api',
+    configureServer(server) {
+      async function readJsonBody(req) {
+        const chunks = []
+
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+
+        return chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+      }
+
+      server.middlewares.use('/api/library-assets', async (req, res, next) => {
+        const requestUrl = new URL(req.url, 'http://127.0.0.1')
+        const pathname = requestUrl.pathname || '/'
+        const assetId = pathname !== '/' ? decodeURIComponent(pathname.replace(/^\//, '')) : ''
+
+        try {
+          if (req.method === 'POST' && pathname === '/match') {
+            const body = await readJsonBody(req)
+            const result = await matchLibraryAssetsForArticle({
+              sections: Array.isArray(body?.sections) ? body.sections : [],
+              topic: body?.topic || '',
+              type: body?.type || '',
+              wordCount: body?.wordCount || 0,
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if (req.method === 'POST' && pathname === '/usage') {
+            const body = await readJsonBody(req)
+            const result = await recordLibraryAssetUsage({
+              assetIds: body?.assetIds ?? [],
+              usedAt: body?.usedAt,
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/') {
+            const items = await listLibraryAssets({
+              emotion: requestUrl.searchParams.get('emotion') || '',
+              figures: requestUrl.searchParams.get('figures') || '',
+              sort: requestUrl.searchParams.get('sort') || '',
+              topic: requestUrl.searchParams.get('topic') || '',
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ items }))
+            return
+          }
+
+          if (req.method === 'PATCH' && assetId) {
+            const body = await readJsonBody(req)
+            const result = await updateLibraryAsset(assetId, body)
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if (req.method === 'DELETE' && assetId) {
+            const result = await deleteLibraryAsset(assetId)
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          next()
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error.message || '素材库请求失败',
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
+function fixedLayoutConfigDevApi() {
+  return {
+    name: 'fixed-layout-config-dev-api',
+    configureServer(server) {
+      async function readJsonBody(req) {
+        const chunks = []
+
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+
+        return chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+      }
+
+      server.middlewares.use('/api/fixed-layout-config', async (req, res, next) => {
+        const requestUrl = new URL(req.url, 'http://127.0.0.1')
+        const pathname = requestUrl.pathname || '/'
+
+        try {
+          if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/') {
+            const result = await readFixedLayoutConfig()
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if (req.method === 'PATCH' && pathname === '/') {
+            const body = await readJsonBody(req)
+            const result = await updateFixedLayoutText({
+              endingText: body?.endingText ?? '',
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if (req.method === 'POST' && pathname === '/upload') {
+            const formData = await parseRequestFormData(req)
+            const slot = typeof formData.get('slot') === 'string' ? formData.get('slot').trim() : ''
+            const file = formData.get('file')
+            const result = await uploadFixedLayoutAsset({
+              file,
+              slot,
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if (req.method === 'DELETE' && pathname === '/asset') {
+            const body = await readJsonBody(req)
+            const result = await deleteFixedLayoutAsset(body?.slot ?? '')
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          next()
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error.message || '固定内容配置请求失败',
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
+function contentSessionsDevApi() {
+  return {
+    name: 'content-sessions-dev-api',
+    configureServer(server) {
+      async function readJsonBody(req) {
+        const chunks = []
+
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+
+        return chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+      }
+
+      server.middlewares.use('/api/content-sessions', async (req, res, next) => {
+        try {
+          if (req.method === 'GET' || req.method === 'HEAD') {
+            const payload = await readPersistedContentSessionPayload()
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(payload ?? { item: null, name: 'content-creation-sessions-v1', updatedAt: null }))
+            return
+          }
+
+          if (req.method === 'PUT') {
+            const body = await readJsonBody(req)
+            const payload = await writePersistedContentSessionPayload({
+              item: body?.item ?? null,
+              name: body?.name ?? 'content-creation-sessions-v1',
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(payload))
+            return
+          }
+
+          if (req.method === 'DELETE') {
+            const payload = await deletePersistedContentSessionPayload()
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(payload))
+            return
+          }
+
+          next()
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error.message || '本地历史记录请求失败',
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
 function benchmarkPipelineDevApi(env) {
   return {
     name: 'benchmark-pipeline-dev-api',
@@ -403,6 +659,9 @@ export default defineConfig(({ mode }) => {
       minimaxDevApi(runtimeEnv),
       contentCreationDevApi(runtimeEnv),
       topicRecommendationDevApi(runtimeEnv),
+      libraryAssetsDevApi(),
+      fixedLayoutConfigDevApi(),
+      contentSessionsDevApi(),
       benchmarkPipelineDevApi(runtimeEnv),
     ],
     resolve: {

@@ -1,0 +1,24 @@
+{
+  "endingText": {
+    "content": "",
+    "updatedAt": null
+  },
+  "footerGif": {
+    "filename": "黑红色微信公众号几何立体方块点击关注动态在看提示简约新媒体分享中文动态在看提示 (1).gif",
+    "mimeType": "image/gif",
+    "path": "/assets/fixed-content/footerGif-1775061513811.gif",
+    "uploadedAt": "2026-04-01T16:38:33.811Z"
+  },
+  "heroGif": {
+    "filename": "21c8672f51a18d7532a24a4ff1b76ef2.GIF",
+    "mimeType": "image/gif",
+    "path": "/assets/fixed-content/heroGif-1775061469479.gif",
+    "uploadedAt": "2026-04-01T16:37:49.479Z"
+  },
+  "qrImage": {
+    "filename": "公众号二维码.jpg",
+    "mimeType": "image/jpeg",
+    "path": "/assets/fixed-content/qrImage-1775061484257.jpg",
+    "uploadedAt": "2026-04-01T16:38:04.257Z"
+  }
+}

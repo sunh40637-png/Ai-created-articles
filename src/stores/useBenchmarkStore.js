@@ -529,7 +529,9 @@ function createSession(index = 1, options = {}) {
       versions: [],
     },
     imageSelection: {
+      matchedAt: null,
       referenceAssets: [],
+      sourceVersionId: null,
       slots: [],
     },
     layoutReview: {
@@ -638,8 +640,16 @@ function ensureSessionsShape(state) {
       imageSelection: {
         ...fallbackSession.imageSelection,
         ...(session?.imageSelection ?? {}),
+        matchedAt:
+          typeof session?.imageSelection?.matchedAt === 'string' && session.imageSelection.matchedAt.trim()
+            ? session.imageSelection.matchedAt.trim()
+            : null,
         referenceAssets:
           Array.isArray(session?.imageSelection?.referenceAssets) ? session.imageSelection.referenceAssets : [],
+        sourceVersionId:
+          typeof session?.imageSelection?.sourceVersionId === 'string' && session.imageSelection.sourceVersionId.trim()
+            ? session.imageSelection.sourceVersionId.trim()
+            : null,
         slots: Array.isArray(session?.imageSelection?.slots) ? session.imageSelection.slots : [],
       },
       layoutReview: {
@@ -664,6 +674,14 @@ function ensureSessionsShape(state) {
     activeSessionId,
     isSidebarCollapsed: Boolean(state?.isSidebarCollapsed),
     sessions: normalizedSessions.slice(0, MAX_ARTICLE_SESSIONS),
+  }
+}
+
+function createPersistableBenchmarkState(state) {
+  return {
+    activeSessionId: state.activeSessionId,
+    isSidebarCollapsed: state.isSidebarCollapsed,
+    sessions: state.sessions,
   }
 }
 
@@ -739,6 +757,10 @@ export const useBenchmarkStore = create(
 
           return replacementSession.id
         },
+        hydrateFromPersistedSnapshot: (snapshot) =>
+          set(() => ({
+            ...ensureSessionsShape(snapshot),
+          })),
         updateSession: (sessionId, updater) =>
           set((state) => ({
             sessions: state.sessions.map((session) => {
@@ -762,12 +784,10 @@ export const useBenchmarkStore = create(
       name: 'content-creation-sessions-v1',
       version: 4,
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        activeSessionId: state.activeSessionId,
-        isSidebarCollapsed: state.isSidebarCollapsed,
-        sessions: state.sessions,
-      }),
+      partialize: (state) => createPersistableBenchmarkState(state),
       migrate: (persistedState) => ensureSessionsShape(persistedState),
     },
   ),
 )
+
+export { createPersistableBenchmarkState }

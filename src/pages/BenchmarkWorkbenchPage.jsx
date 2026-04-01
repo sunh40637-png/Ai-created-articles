@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  ArrowDown,
   ArrowUp,
   Check,
   CheckCircle2,
@@ -10,6 +11,7 @@ import {
   FileText,
   History,
   ImageIcon,
+  ImageUp,
   LibraryBig,
   LayoutTemplate,
   ListFilter,
@@ -38,6 +40,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import {
   CONTENT_TOPIC_LIBRARY,
+  createPersistableBenchmarkState,
   createTopicRecommendations,
   getTopicById,
   getTopicStatusMap,
@@ -45,6 +48,23 @@ import {
   TOPIC_LIBRARY_TYPES,
   useBenchmarkStore,
 } from '@/stores/useBenchmarkStore.js'
+import {
+  DEFAULT_LIBRARY_ASSET_SORT,
+  LIBRARY_ASSET_EMOTIONS,
+  LIBRARY_ASSET_FIGURES,
+  LIBRARY_ASSET_SCENE_MAX_LENGTH,
+  LIBRARY_ASSET_SORT_OPTIONS,
+  LIBRARY_ASSET_TOPICS,
+} from '../../shared/libraryAssets.js'
+import {
+  createEmptyFixedLayoutConfig,
+  FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH,
+  FIXED_LAYOUT_FILE_ACCEPT,
+  FIXED_LAYOUT_IMAGE_SLOT_IDS,
+  FIXED_LAYOUT_SLOT_META,
+  FIXED_LAYOUT_SLOT_ORDER,
+  normalizeFixedLayoutTextContent,
+} from '../../shared/fixedLayoutConfig.js'
 
 const reasoningModel = 'MiniMax-M2.7 深度模式'
 const highspeedModel = 'MiniMax-M2.7 标准模式'
@@ -54,6 +74,8 @@ const FLOW_STEP_MIN_MS = 420
 const FLOW_STEP_MAX_MS = 1100
 const FLOW_STEP_RATIO_MS = 160
 const CONTENT_FLOW_UI_PREVIEW = false
+const LIBRARY_ASSET_SLOT_COUNT = 3
+const MISSING_PREVIEW_ASSET_SRC_PREFIX = 'asset-missing://'
 const INITIAL_DRAFT_FLOW_TITLE = '正在准备首版稿件'
 const INITIAL_DRAFT_FLOW_SUMMARY = '正在完成从接收选题到首版稿件准备的处理流程。'
 const INITIAL_DRAFT_FLOW_INTRO_MESSAGE =
@@ -68,6 +90,8 @@ const INITIAL_DRAFT_FLOW_STEPS = [
   { label: '自动修订内容', seconds: 6 },
   { label: '呈现首版稿件', seconds: 1 },
 ]
+const CONTENT_SESSION_STORAGE_KEY = 'content-creation-sessions-v1'
+const CONTENT_SESSION_STORAGE_VERSION = 4
 
 const quickMessageItems = [
   {
@@ -109,6 +133,7 @@ const sidebarModules = [
   { id: 'library', label: '选题库', icon: LibraryBig },
   { id: 'articles', label: '文章列表', icon: FileText },
   { id: 'assets', label: '素材库', icon: ImageIcon },
+  { id: 'fixed-layout', label: '图片配置', icon: ImageUp },
 ]
 
 const topicLibraryItems = CONTENT_TOPIC_LIBRARY
@@ -606,6 +631,17 @@ function hasSessionHistory(session) {
   return hasUserMessage || hasSelectedTopic || hasGeneratedVersions || hasAdvancedStage || hasFlow
 }
 
+function getSessionHistoryLatestTimestamp(sessions = []) {
+  return (Array.isArray(sessions) ? sessions : []).reduce((latest, session) => {
+    if (!hasSessionHistory(session)) {
+      return latest
+    }
+
+    const nextTimestamp = new Date(session?.updatedAt || session?.createdAt || 0).getTime()
+    return Number.isFinite(nextTimestamp) && nextTimestamp > latest ? nextTimestamp : latest
+  }, 0)
+}
+
 function buildDraftVersion({ note = '', supplement = '', topic, versionNumber }) {
   const noteSummary = note.trim() ? `这次重点吸收了你的修改意见：${note.trim()}。` : ''
   const draftMarkdown = [
@@ -853,6 +889,314 @@ async function requestGeneratedDraft({
   return payload
 }
 
+function formatLibraryAssetDate(value) {
+  if (!value) {
+    return '未知时间'
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return '未知时间'
+  }
+
+  return date.toLocaleDateString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+  })
+}
+
+async function readJsonResponse(response, fallbackMessage) {
+  const contentType = response.headers.get('content-type') || ''
+  const payload = await response.json().catch(() => null)
+
+  if (!contentType.includes('application/json')) {
+    throw new Error(fallbackMessage)
+  }
+
+  return payload
+}
+
+async function requestLibraryAssets({ emotion = '', figures = '', sort = DEFAULT_LIBRARY_ASSET_SORT, topic = '' } = {}) {
+  const searchParams = new URLSearchParams()
+
+  if (emotion) {
+    searchParams.set('emotion', emotion)
+  }
+
+  if (topic) {
+    searchParams.set('topic', topic)
+  }
+
+  if (figures) {
+    searchParams.set('figures', figures)
+  }
+
+  if (sort) {
+    searchParams.set('sort', sort)
+  }
+
+  const query = searchParams.toString()
+  const response = await fetch(query ? `/api/library-assets?${query}` : '/api/library-assets')
+  const payload = await readJsonResponse(response, '素材库接口返回异常，请刷新页面后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '读取素材库失败')
+  }
+
+  return Array.isArray(payload?.items) ? payload.items : []
+}
+
+async function requestLibraryAssetMatch({ sections = [], topic = '', type = '', wordCount = 0 } = {}) {
+  const response = await fetch('/api/library-assets/match', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      sections,
+      topic,
+      type,
+      wordCount,
+    }),
+  })
+  const payload = await readJsonResponse(response, '素材自动匹配接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '自动匹配素材失败')
+  }
+
+  return payload
+}
+
+async function requestLibraryAssetUsage({ assetIds = [], usedAt } = {}) {
+  const response = await fetch('/api/library-assets/usage', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      assetIds,
+      usedAt,
+    }),
+  })
+  const payload = await readJsonResponse(response, '素材使用记录接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '更新素材使用记录失败')
+  }
+
+  return payload
+}
+
+async function requestLibraryAssetUpdate(assetId, patch) {
+  const response = await fetch(`/api/library-assets/${assetId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(patch),
+  })
+  const payload = await readJsonResponse(response, '素材库更新接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '更新素材失败')
+  }
+
+  return payload
+}
+
+async function requestLibraryAssetDelete(assetId) {
+  const response = await fetch(`/api/library-assets/${assetId}`, {
+    method: 'DELETE',
+  })
+  const payload = await readJsonResponse(response, '素材库删除接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '删除素材失败')
+  }
+
+  return payload
+}
+
+async function requestFixedLayoutConfig() {
+  const response = await fetch('/api/fixed-layout-config')
+  const payload = await readJsonResponse(response, '固定内容配置接口返回异常，请刷新页面后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '读取固定内容配置失败')
+  }
+
+  return {
+    ...createEmptyFixedLayoutConfig(),
+    ...(payload ?? {}),
+  }
+}
+
+async function requestFixedLayoutTextUpdate({ endingText = '' } = {}) {
+  const response = await fetch('/api/fixed-layout-config', {
+    body: JSON.stringify({ endingText }),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    method: 'PATCH',
+  })
+  const payload = await readJsonResponse(response, '固定文案配置接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '保存固定文案失败')
+  }
+
+  return {
+    ...createEmptyFixedLayoutConfig(),
+    ...(payload ?? {}),
+  }
+}
+
+async function requestFixedLayoutAssetUpload({ file, slot }) {
+  const formData = new FormData()
+  formData.set('slot', slot)
+  formData.set('file', file)
+
+  const response = await fetch('/api/fixed-layout-config/upload', {
+    body: formData,
+    method: 'POST',
+  })
+  const payload = await readJsonResponse(response, '固定图片上传接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '上传固定图片失败')
+  }
+
+  return {
+    ...createEmptyFixedLayoutConfig(),
+    ...(payload ?? {}),
+  }
+}
+
+async function requestFixedLayoutAssetDelete(slot) {
+  const response = await fetch('/api/fixed-layout-config/asset', {
+    body: JSON.stringify({ slot }),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    method: 'DELETE',
+  })
+  const payload = await readJsonResponse(response, '固定图片删除接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '删除固定图片失败')
+  }
+
+  return {
+    ...createEmptyFixedLayoutConfig(),
+    ...(payload ?? {}),
+  }
+}
+
+async function requestPersistedContentSessions() {
+  const response = await fetch('/api/content-sessions')
+  const payload = await readJsonResponse(response, '本地历史记录接口返回异常，请刷新页面后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '读取本地历史记录失败')
+  }
+
+  return payload?.item ?? null
+}
+
+async function requestPersistedContentSessionsUpdate(item) {
+  const response = await fetch('/api/content-sessions', {
+    body: JSON.stringify({
+      item,
+      name: CONTENT_SESSION_STORAGE_KEY,
+    }),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    method: 'PUT',
+  })
+  const payload = await readJsonResponse(response, '写入本地历史记录接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '写入本地历史记录失败')
+  }
+
+  return payload
+}
+
+function buildPersistedContentSessionItem(state) {
+  return {
+    state: createPersistableBenchmarkState(state),
+    version: CONTENT_SESSION_STORAGE_VERSION,
+  }
+}
+
+function useFixedLayoutConfigState() {
+  const [config, setConfig] = useState(() => createEmptyFixedLayoutConfig())
+  const [errorMessage, setErrorMessage] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+
+  async function reloadConfig() {
+    setIsLoading(true)
+
+    try {
+      const nextConfig = await requestFixedLayoutConfig()
+      setConfig(nextConfig)
+      setErrorMessage('')
+      return nextConfig
+    } catch (error) {
+      setErrorMessage(error.message || '读取固定内容配置失败')
+      setConfig(createEmptyFixedLayoutConfig())
+      return createEmptyFixedLayoutConfig()
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadConfig() {
+      setIsLoading(true)
+
+      try {
+        const nextConfig = await requestFixedLayoutConfig()
+
+        if (!cancelled) {
+          setConfig(nextConfig)
+          setErrorMessage('')
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(error.message || '读取固定内容配置失败')
+          setConfig(createEmptyFixedLayoutConfig())
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadConfig()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return {
+    config,
+    errorMessage,
+    isLoading,
+    reloadConfig,
+    setErrorMessage,
+    setConfig,
+  }
+}
+
 function stripPreviewHeading(markdown = '') {
   const lines = markdown.split('\n')
 
@@ -861,6 +1205,444 @@ function stripPreviewHeading(markdown = '') {
   }
 
   return markdown.trim()
+}
+
+function isPreviewBodyParagraphBlock(block = '') {
+  const trimmed = block.trim()
+
+  if (!trimmed) {
+    return false
+  }
+
+  if (/^#{1,6}\s/.test(trimmed)) {
+    return false
+  }
+
+  if (/^>\s?/.test(trimmed)) {
+    return false
+  }
+
+  if (/^\|/.test(trimmed)) {
+    return false
+  }
+
+  if (/^!\[[^\]]*\]\(([^)]+)\)/.test(trimmed)) {
+    return false
+  }
+
+  if (/^(\*|-|\+)\s/.test(trimmed)) {
+    return false
+  }
+
+  if (/^\d+\.\s/.test(trimmed)) {
+    return false
+  }
+
+  if (/^([-*_]){3,}$/.test(trimmed.replace(/\s/g, ''))) {
+    return false
+  }
+
+  return true
+}
+
+function isPreviewDividerBlock(block = '') {
+  const trimmed = block.trim()
+
+  if (!trimmed) {
+    return false
+  }
+
+  return /^([-*_]){3,}$/.test(trimmed.replace(/\s/g, ''))
+}
+
+function collectPreviewMarkdownBlocks(markdown = '') {
+  const normalizedMarkdown = markdown.replace(/\r/g, '').trim()
+  const blocks = normalizedMarkdown ? normalizedMarkdown.split(/\n{2,}/) : []
+  const paragraphBlockIndices = []
+  const dividerBlockIndices = []
+  const sectionHeadingBlockIndices = []
+
+  blocks.forEach((block, index) => {
+    const trimmed = block.trim()
+
+    if (/^#{2,3}\s/.test(trimmed)) {
+      sectionHeadingBlockIndices.push(index)
+    }
+
+    if (isPreviewDividerBlock(block)) {
+      dividerBlockIndices.push(index)
+    }
+
+    if (isPreviewBodyParagraphBlock(block)) {
+      paragraphBlockIndices.push(index)
+    }
+  })
+
+  return {
+    blocks,
+    dividerBlockIndices,
+    paragraphBlockIndices,
+    sectionHeadingBlockIndices,
+  }
+}
+
+function buildPreviewSections(markdown = '') {
+  const { blocks, dividerBlockIndices, paragraphBlockIndices, sectionHeadingBlockIndices } = collectPreviewMarkdownBlocks(markdown)
+  const sections = []
+
+  if (sectionHeadingBlockIndices.length >= LIBRARY_ASSET_SLOT_COUNT) {
+    for (let index = 0; index < LIBRARY_ASSET_SLOT_COUNT; index += 1) {
+      const startBlockIndex = sectionHeadingBlockIndices[index]
+      const nextHeadingBlockIndex =
+        index < sectionHeadingBlockIndices.length - 1 ? sectionHeadingBlockIndices[index + 1] : blocks.length
+      const dividerBlockIndex = dividerBlockIndices.find(
+        (candidateIndex) => candidateIndex > startBlockIndex && candidateIndex < nextHeadingBlockIndex,
+      )
+      const sectionContentEndExclusive = Number.isFinite(dividerBlockIndex) ? dividerBlockIndex : nextHeadingBlockIndex
+      const candidateParagraphBlockIndices = paragraphBlockIndices.filter(
+        (candidateIndex) => candidateIndex > startBlockIndex && candidateIndex < sectionContentEndExclusive,
+      )
+      const endBlockIndex =
+        candidateParagraphBlockIndices.length > 0
+          ? candidateParagraphBlockIndices[candidateParagraphBlockIndices.length - 1]
+          : Math.max(startBlockIndex, sectionContentEndExclusive - 1)
+      const title = blocks[startBlockIndex]?.replace(/^#{2,3}\s*/, '').trim() || `第 ${index + 1} 段`
+      const text = blocks.slice(startBlockIndex, sectionContentEndExclusive).join('\n\n').trim()
+
+      sections.push({
+        blockIndex: endBlockIndex,
+        order: index + 1,
+        positionLabel: `第 ${index + 1} 段后`,
+        text,
+        title,
+      })
+    }
+  } else if (paragraphBlockIndices.length > 0) {
+    const groupCount = Math.min(LIBRARY_ASSET_SLOT_COUNT, paragraphBlockIndices.length)
+    const baseGroupSize = Math.floor(paragraphBlockIndices.length / groupCount)
+    const extraItems = paragraphBlockIndices.length % groupCount
+    let paragraphCursor = 0
+
+    for (let index = 0; index < groupCount; index += 1) {
+      const currentGroupSize = baseGroupSize + (index < extraItems ? 1 : 0)
+      const startParagraphPointer = paragraphCursor
+      const endParagraphPointer = paragraphCursor + currentGroupSize - 1
+      const startBlockIndex = paragraphBlockIndices[startParagraphPointer]
+      const endBlockIndex = paragraphBlockIndices[endParagraphPointer]
+      const text = blocks.slice(startBlockIndex, endBlockIndex + 1).join('\n\n').trim()
+
+      sections.push({
+        blockIndex: endBlockIndex,
+        order: index + 1,
+        positionLabel: `第 ${index + 1} 段后`,
+        text,
+        title: '',
+      })
+
+      paragraphCursor += currentGroupSize
+    }
+  }
+
+  if (sections.length === 0) {
+    const fallbackText = markdown.trim()
+
+    return Array.from({ length: LIBRARY_ASSET_SLOT_COUNT }, (_, index) => ({
+      blockIndex: 0,
+      order: index + 1,
+      positionLabel: `第 ${index + 1} 段后`,
+      text: fallbackText,
+      title: '',
+    }))
+  }
+
+  while (sections.length < LIBRARY_ASSET_SLOT_COUNT) {
+    const lastSection = sections[sections.length - 1]
+    sections.push({
+      ...lastSection,
+      order: sections.length + 1,
+      positionLabel: `第 ${sections.length + 1} 段后`,
+    })
+  }
+
+  return sections.slice(0, LIBRARY_ASSET_SLOT_COUNT)
+}
+
+function buildImageSelectionFromMatchResult({ matchResult, sections = [], versionId }) {
+  const referenceAssets = Array.isArray(matchResult?.referenceAssets)
+    ? matchResult.referenceAssets.slice(0, LIBRARY_ASSET_SLOT_COUNT)
+    : []
+  const incomingSlots = Array.isArray(matchResult?.slots) ? matchResult.slots : []
+
+  const slots = referenceAssets.map((asset, index) => {
+    const currentSlot = incomingSlots[index] ?? {}
+    const currentSection = sections[Math.min(index, Math.max(sections.length - 1, 0))] ?? null
+
+    return {
+      assetId: asset.id,
+      blockIndex: Number.isFinite(currentSection?.blockIndex) ? currentSection.blockIndex : 0,
+      order: index + 1,
+      paragraphIndex: index,
+      positionLabel: currentSection?.positionLabel || `第 ${index + 1} 段后`,
+      slotId: currentSlot.slotId || `slot_${index + 1}`,
+      status: 'matched',
+    }
+  })
+
+  return {
+    matchedAt: new Date().toISOString(),
+    referenceAssets,
+    sourceVersionId: versionId ?? null,
+    slots,
+  }
+}
+
+function getRenderableImageSelection(session, version, liveAssetMap = null) {
+  if (!version?.id) {
+    return []
+  }
+
+  const imageSelection = session?.imageSelection
+
+  if (imageSelection?.sourceVersionId !== version.id) {
+    return []
+  }
+
+  const referenceAssets = Array.isArray(imageSelection?.referenceAssets) ? imageSelection.referenceAssets : []
+  const slots = Array.isArray(imageSelection?.slots) ? imageSelection.slots : []
+
+  if (referenceAssets.length === 0 || slots.length === 0) {
+    return []
+  }
+
+  const snapshotAssetMap = new Map(referenceAssets.map((asset) => [asset.id, asset]))
+  const hasLiveAssetMap = liveAssetMap instanceof Map
+
+  return [...slots]
+    .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+    .map((slot) => {
+      const snapshotAsset = slot?.assetId ? snapshotAssetMap.get(slot.assetId) ?? null : null
+      const liveAsset = hasLiveAssetMap && slot?.assetId ? liveAssetMap.get(slot.assetId) ?? null : null
+      const missingByDeletion = hasLiveAssetMap && slot?.assetId ? !liveAssetMap.has(slot.assetId) : false
+      const asset = liveAsset ?? snapshotAsset
+
+      return {
+        ...slot,
+        asset,
+        status: slot?.status === 'missing' || missingByDeletion || !asset?.path ? 'missing' : 'matched',
+      }
+    })
+}
+
+function buildPreviewAssetMarkdownBlock(insertion) {
+  if (insertion.status === 'missing') {
+    return `![图片已移除](${MISSING_PREVIEW_ASSET_SRC_PREFIX}${insertion.slotId || insertion.order || 'slot'})`
+  }
+
+  const assetPath = insertion.asset?.path?.trim() || ''
+  const scene = insertion.asset?.scene?.trim() || `配图 ${insertion.order || ''}`.trim()
+
+  if (!assetPath) {
+    return `![图片已移除](${MISSING_PREVIEW_ASSET_SRC_PREFIX}${insertion.slotId || insertion.order || 'slot'})`
+  }
+
+  return `![${scene}](${assetPath})`
+}
+
+function buildPreviewMarkdownWithAssets(markdown = '', insertions = []) {
+  if (!Array.isArray(insertions) || insertions.length === 0) {
+    return markdown
+  }
+
+  const { blocks, paragraphBlockIndices } = collectPreviewMarkdownBlocks(markdown)
+
+  if (blocks.length === 0) {
+    return insertions.map((insertion) => buildPreviewAssetMarkdownBlock(insertion)).join('\n\n')
+  }
+
+  const fallbackBlockIndex =
+    paragraphBlockIndices.length > 0 ? paragraphBlockIndices[paragraphBlockIndices.length - 1] : blocks.length - 1
+  const insertionsByBlockIndex = new Map()
+
+  insertions.forEach((insertion) => {
+    const targetParagraphIndex = Number.isFinite(insertion?.paragraphIndex) ? insertion.paragraphIndex : 0
+    const targetBlockIndex = Number.isFinite(insertion?.blockIndex)
+      ? insertion.blockIndex
+      : paragraphBlockIndices.length > 0
+        ? paragraphBlockIndices[Math.min(Math.max(targetParagraphIndex, 0), paragraphBlockIndices.length - 1)]
+        : fallbackBlockIndex
+
+    const nextInsertions = insertionsByBlockIndex.get(targetBlockIndex) ?? []
+    nextInsertions.push(insertion)
+    insertionsByBlockIndex.set(targetBlockIndex, nextInsertions)
+  })
+
+  const nextBlocks = []
+
+  blocks.forEach((block, blockIndex) => {
+    nextBlocks.push(block)
+
+    const blockInsertions = insertionsByBlockIndex.get(blockIndex) ?? []
+
+    blockInsertions.forEach((insertion) => {
+      nextBlocks.push(buildPreviewAssetMarkdownBlock(insertion))
+    })
+  })
+
+  return nextBlocks.join('\n\n')
+}
+
+function resolveAbsoluteAssetPathForCopy(src = '') {
+  if (!src || src.startsWith(MISSING_PREVIEW_ASSET_SRC_PREFIX)) {
+    return src
+  }
+
+  if (typeof window === 'undefined') {
+    return src
+  }
+
+  try {
+    return new URL(src, window.location.origin).toString()
+  } catch {
+    return src
+  }
+}
+
+function hasFixedLayoutTailContent(config) {
+  return Boolean(config?.endingText?.content?.trim() || config?.qrImage?.path || config?.footerGif?.path)
+}
+
+function FixedLayoutPreviewImage({ asset, alt = '', className = '' }) {
+  if (!asset?.path) {
+    return null
+  }
+
+  return <img alt={alt} className={cn('block w-full rounded-[10px] object-cover', className)} loading="lazy" src={asset.path} />
+}
+
+function FixedLayoutCopyImage({ asset, alt = '', style = {} }) {
+  const src = resolveAbsoluteAssetPathForCopy(asset?.path || '')
+
+  if (!src || src.startsWith(MISSING_PREVIEW_ASSET_SRC_PREFIX)) {
+    return null
+  }
+
+  return <img alt={alt} loading="lazy" src={src} style={style} />
+}
+
+function extractUsedAssetIds(imageSelection, sourceVersionId = '') {
+  if (imageSelection?.sourceVersionId !== sourceVersionId) {
+    return []
+  }
+
+  return Array.from(
+    new Set(
+      (Array.isArray(imageSelection?.slots) ? imageSelection.slots : [])
+        .map((slot) => (typeof slot?.assetId === 'string' ? slot.assetId.trim() : ''))
+        .filter(Boolean),
+    ),
+  )
+}
+
+function PreviewMarkdownImage({ alt = '', src = '' }) {
+  const [hasError, setHasError] = useState(false)
+  const isMissing = !src || src.startsWith(MISSING_PREVIEW_ASSET_SRC_PREFIX)
+
+  if (isMissing || hasError) {
+    return (
+      <div className="mt-8 flex min-h-[220px] w-full items-center justify-center rounded-[10px] bg-black/5 px-4 text-center text-[13px] text-black/42">
+        图片已移除
+      </div>
+    )
+  }
+
+  return (
+    <img
+      alt={alt}
+      className="mt-8 block w-full rounded-[10px] object-cover"
+      loading="lazy"
+      onError={() => setHasError(true)}
+      src={src}
+    />
+  )
+}
+
+function WechatCopyMarkdownImage({ alt = '', src = '' }) {
+  const [hasError, setHasError] = useState(false)
+  const resolvedSrc = resolveAbsoluteAssetPathForCopy(src)
+  const isMissing = !resolvedSrc || resolvedSrc.startsWith(MISSING_PREVIEW_ASSET_SRC_PREFIX)
+
+  if (isMissing || hasError) {
+    return (
+      <div
+        style={{
+          alignItems: 'center',
+          backgroundColor: 'rgba(0,0,0,0.04)',
+          borderRadius: '10px',
+          color: 'rgba(0,0,0,0.42)',
+          display: 'flex',
+          fontSize: '13px',
+          justifyContent: 'center',
+          marginTop: '22px',
+          minHeight: '220px',
+          padding: '0 16px',
+          textAlign: 'center',
+          width: '100%',
+        }}
+      >
+        图片已移除
+      </div>
+    )
+  }
+
+  return (
+    <img
+      alt={alt}
+      loading="lazy"
+      onError={() => setHasError(true)}
+      src={resolvedSrc}
+      style={{ marginTop: '22px', display: 'block', width: '100%', objectFit: 'cover', borderRadius: '10px' }}
+    />
+  )
+}
+
+function useRenderablePreviewInsertions(session, version) {
+  const [liveAssetMap, setLiveAssetMap] = useState(null)
+  const imageSelection = session?.imageSelection
+  const sourceVersionId = imageSelection?.sourceVersionId ?? ''
+  const hasMatchedAssets =
+    Boolean(version?.id) &&
+    sourceVersionId === version?.id &&
+    Array.isArray(imageSelection?.referenceAssets) &&
+    imageSelection.referenceAssets.length > 0 &&
+    Array.isArray(imageSelection?.slots) &&
+    imageSelection.slots.length > 0
+
+  useEffect(() => {
+    if (!hasMatchedAssets) {
+      setLiveAssetMap(null)
+      return
+    }
+
+    let cancelled = false
+
+    requestLibraryAssets()
+      .then((items) => {
+        if (!cancelled) {
+          setLiveAssetMap(new Map(items.map((item) => [item.id, item])))
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLiveAssetMap(null)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [hasMatchedAssets, imageSelection?.matchedAt, sourceVersionId, version?.id])
+
+  return useMemo(() => getRenderableImageSelection(session, version, liveAssetMap), [liveAssetMap, session, version])
 }
 
 function getPreviewMarkdownComponents(fontSize) {
@@ -883,15 +1665,7 @@ function getPreviewMarkdownComponents(fontSize) {
     blockquote: ({ node, ...props }) => (
       <blockquote className="mt-6 border-l-2 border-black/15 pl-4 text-[13px] leading-[2] text-black/72" {...props} />
     ),
-    img: ({ node, alt = '', src = '', ...props }) => (
-      <img
-        alt={alt}
-        className="mt-8 block w-full object-cover"
-        loading="lazy"
-        src={src}
-        {...props}
-      />
-    ),
+    img: ({ node, alt = '', src = '', ...props }) => <PreviewMarkdownImage alt={alt} src={src} {...props} />,
     hr: ({ node, ...props }) => <hr className="my-10 border-0 border-t border-black/8" {...props} />,
   }
 }
@@ -954,14 +1728,7 @@ function getWechatCopyComponents(fontSize) {
         {...props}
       />
     ),
-    img: ({ node, alt = '', src = '', ...props }) => (
-      <img
-        alt={alt}
-        src={src}
-        style={{ marginTop: '22px', display: 'block', width: '100%', objectFit: 'cover' }}
-        {...props}
-      />
-    ),
+    img: ({ node, alt = '', src = '', ...props }) => <WechatCopyMarkdownImage alt={alt} src={src} {...props} />,
     hr: ({ node, ...props }) => (
       <hr style={{ margin: '28px 0', border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)' }} {...props} />
     ),
@@ -2106,12 +2873,17 @@ function ReportWorkbench({ version }) {
   )
 }
 
-function ArticlePreview({ fontSize, session }) {
+function ArticlePreview({ fixedLayoutConfig, fontSize, session }) {
   const topic = getSelectedTopic(session)
   const version = getActiveVersion(session)
-  const previewMarkdown = stripPreviewHeading(version?.draftMarkdown ?? '')
+  const previewInsertions = useRenderablePreviewInsertions(session, version)
+  const previewMarkdown = useMemo(
+    () => buildPreviewMarkdownWithAssets(stripPreviewHeading(version?.draftMarkdown ?? ''), previewInsertions),
+    [previewInsertions, version?.draftMarkdown],
+  )
   const previewComponents = useMemo(() => getPreviewMarkdownComponents(fontSize), [fontSize])
   const displayTitle = resolveVersionDisplayTitle(session, version)
+  const hasTailFixedLayout = hasFixedLayoutTailContent(fixedLayoutConfig)
 
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-7">
@@ -2127,26 +2899,51 @@ function ArticlePreview({ fontSize, session }) {
           </div>
         </header>
 
+        {fixedLayoutConfig?.heroGif?.path ? (
+          <div className="mt-8">
+            <FixedLayoutPreviewImage
+              alt={FIXED_LAYOUT_SLOT_META.heroGif.label}
+              asset={fixedLayoutConfig.heroGif}
+              className="max-h-[360px]"
+            />
+          </div>
+        ) : null}
+
         <article className="mt-8 border-t border-black/8 pt-8">
           <ReactMarkdown components={previewComponents} remarkPlugins={[remarkGfm]}>
             {previewMarkdown}
           </ReactMarkdown>
         </article>
 
-        <div className="mt-14 border-t border-black/8 pt-10 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-black/10 bg-[#f7f4ee] text-[15px] font-semibold text-black">
-            煮
+        {hasTailFixedLayout ? (
+          <div className="mt-14 border-t border-black/8 pt-10">
+            {fixedLayoutConfig?.endingText?.content?.trim() ? (
+              <div className="mx-auto max-w-[520px] whitespace-pre-wrap text-center text-[13px] leading-7 text-black/56">
+                {fixedLayoutConfig.endingText.content.trim()}
+              </div>
+            ) : null}
+
+            {fixedLayoutConfig?.qrImage?.path ? (
+              <div className={cn(fixedLayoutConfig?.endingText?.content?.trim() ? 'mt-6' : '')}>
+                <FixedLayoutPreviewImage
+                  alt={FIXED_LAYOUT_SLOT_META.qrImage.label}
+                  asset={fixedLayoutConfig.qrImage}
+                  className="mx-auto max-w-[320px]"
+                />
+              </div>
+            ) : null}
+
+            {fixedLayoutConfig?.footerGif?.path ? (
+              <div className={cn(fixedLayoutConfig?.qrImage?.path || fixedLayoutConfig?.endingText?.content?.trim() ? 'mt-6' : '')}>
+                <FixedLayoutPreviewImage
+                  alt={FIXED_LAYOUT_SLOT_META.footerGif.label}
+                  asset={fixedLayoutConfig.footerGif}
+                  className="max-h-[360px]"
+                />
+              </div>
+            ) : null}
           </div>
-          <div className="mt-4 text-[14px] font-semibold tracking-[0.12em] text-black">煮酒问人生</div>
-          <p className="mx-auto mt-3 max-w-[420px] text-[13px] leading-7 text-black/56">
-            在这里继续读人情、家事、晚年与人生。看完这一篇，也欢迎把它留给同样需要的人。
-          </p>
-          <div className="mx-auto mt-6 max-w-[320px] rounded-[22px] border border-black/10 bg-[#fbfaf7] px-5 py-4">
-            <div className="text-[12px] tracking-[0.12em] text-black/48">固定引导关注区域</div>
-            <div className="mt-2 text-[14px] font-medium text-black">关注“煮酒问人生”</div>
-            <div className="mt-1 text-[12px] leading-6 text-black/56">持续查看同风格的晚年、关系和处世文章。</div>
-          </div>
-        </div>
+        ) : null}
       </div>
     </div>
   )
@@ -2158,9 +2955,15 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session }) {
   const copySourceRef = useRef(null)
   const topic = getSelectedTopic(session)
   const version = getActiveVersion(session)
-  const previewMarkdown = stripPreviewHeading(version?.draftMarkdown ?? '')
+  const { config: fixedLayoutConfig } = useFixedLayoutConfigState()
+  const previewInsertions = useRenderablePreviewInsertions(session, version)
+  const previewMarkdown = useMemo(
+    () => buildPreviewMarkdownWithAssets(stripPreviewHeading(version?.draftMarkdown ?? ''), previewInsertions),
+    [previewInsertions, version?.draftMarkdown],
+  )
   const wechatComponents = useMemo(() => getWechatCopyComponents(fontSize), [fontSize])
   const displayTitle = resolveVersionDisplayTitle(session, version)
+  const hasTailFixedLayout = hasFixedLayoutTailContent(fixedLayoutConfig)
 
   async function handleCopyWechat() {
     if (!copySourceRef.current) {
@@ -2214,61 +3017,61 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session }) {
             <span>{topic?.type || ''}</span>
             <span>{version?.wordCount ?? 0} 字</span>
           </div>
+          {fixedLayoutConfig?.heroGif?.path ? (
+            <div style={{ marginTop: '24px' }}>
+              <FixedLayoutCopyImage
+                alt={FIXED_LAYOUT_SLOT_META.heroGif.label}
+                asset={fixedLayoutConfig.heroGif}
+                style={{ borderRadius: '10px', display: 'block', maxHeight: '360px', objectFit: 'cover', width: '100%' }}
+              />
+            </div>
+          ) : null}
           <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', marginTop: '32px', paddingTop: '32px' }}>
             <ReactMarkdown components={wechatComponents} remarkPlugins={[remarkGfm]}>
               {previewMarkdown}
             </ReactMarkdown>
           </div>
-          <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', marginTop: '56px', paddingTop: '40px', textAlign: 'center' }}>
-            <div
-              style={{
-                alignItems: 'center',
-                backgroundColor: '#f7f4ee',
-                border: '1px solid rgba(0,0,0,0.1)',
-                borderRadius: '9999px',
-                color: '#000000',
-                display: 'flex',
-                fontSize: '15px',
-                fontWeight: 600,
-                height: '56px',
-                justifyContent: 'center',
-                margin: '0 auto',
-                width: '56px',
-              }}
-            >
-              煮
+          {hasTailFixedLayout ? (
+            <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', marginTop: '56px', paddingTop: '40px' }}>
+              {fixedLayoutConfig?.endingText?.content?.trim() ? (
+                <div
+                  style={{
+                    color: 'rgba(0,0,0,0.56)',
+                    fontSize: '13px',
+                    lineHeight: 1.9,
+                    margin: '0 auto',
+                    maxWidth: '520px',
+                    textAlign: 'center',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {fixedLayoutConfig.endingText.content.trim()}
+                </div>
+              ) : null}
+              {fixedLayoutConfig?.qrImage?.path ? (
+                <div style={{ marginTop: fixedLayoutConfig?.endingText?.content?.trim() ? '24px' : '0' }}>
+                  <FixedLayoutCopyImage
+                    alt={FIXED_LAYOUT_SLOT_META.qrImage.label}
+                    asset={fixedLayoutConfig.qrImage}
+                    style={{ borderRadius: '10px', display: 'block', margin: '0 auto', maxWidth: '320px', objectFit: 'cover', width: '100%' }}
+                  />
+                </div>
+              ) : null}
+              {fixedLayoutConfig?.footerGif?.path ? (
+                <div
+                  style={{
+                    marginTop: fixedLayoutConfig?.qrImage?.path || fixedLayoutConfig?.endingText?.content?.trim() ? '24px' : '0',
+                  }}
+                >
+                  <FixedLayoutCopyImage
+                    alt={FIXED_LAYOUT_SLOT_META.footerGif.label}
+                    asset={fixedLayoutConfig.footerGif}
+                    style={{ borderRadius: '10px', display: 'block', maxHeight: '360px', objectFit: 'cover', width: '100%' }}
+                  />
+                </div>
+              ) : null}
             </div>
-            <div style={{ color: '#000000', fontSize: '14px', fontWeight: 600, letterSpacing: '0.12em', marginTop: '16px' }}>
-              煮酒问人生
-            </div>
-            <p
-              style={{
-                color: 'rgba(0,0,0,0.56)',
-                fontSize: '13px',
-                lineHeight: 1.9,
-                margin: '12px auto 0',
-                maxWidth: '420px',
-              }}
-            >
-              在这里继续读人情、家事、晚年与人生。看完这一篇，也欢迎把它留给同样需要的人。
-            </p>
-            <div
-              style={{
-                backgroundColor: '#fbfaf7',
-                border: '1px solid rgba(0,0,0,0.1)',
-                borderRadius: '22px',
-                margin: '24px auto 0',
-                maxWidth: '320px',
-                padding: '16px 20px',
-              }}
-            >
-              <div style={{ color: 'rgba(0,0,0,0.48)', fontSize: '12px', letterSpacing: '0.12em' }}>固定引导关注区域</div>
-              <div style={{ color: '#000000', fontSize: '14px', fontWeight: 500, marginTop: '8px' }}>关注“煮酒问人生”</div>
-              <div style={{ color: 'rgba(0,0,0,0.56)', fontSize: '12px', lineHeight: 1.8, marginTop: '4px' }}>
-                持续查看同风格的晚年、关系和处世文章。
-              </div>
-            </div>
-          </div>
+          ) : null}
         </div>
       </div>
 
@@ -2339,13 +3142,24 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session }) {
         </div>
 
         <div className="flex justify-center">
-          <div
-            className={cn(
-              'transition-all',
-              device === 'mobile' ? 'w-[390px]' : 'w-full max-w-[860px]',
-            )}
-          >
-            <ArticlePreview fontSize={fontSize} session={session} />
+          <div className={cn('transition-all', device === 'mobile' ? 'w-[390px]' : 'w-full max-w-[860px]')}>
+            <div
+              className={cn(
+                device === 'mobile'
+                  ? 'rounded-[34px] bg-[#f3f4f7] p-4 shadow-[0_24px_60px_rgba(15,23,42,0.08)]'
+                  : '',
+              )}
+            >
+              <div
+                className={cn(
+                  device === 'mobile'
+                    ? 'overflow-hidden rounded-[28px] border border-black/8 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.14)]'
+                    : '',
+                )}
+              >
+                <ArticlePreview fixedLayoutConfig={fixedLayoutConfig} fontSize={fontSize} session={session} />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2760,23 +3574,848 @@ function ArticlesModuleCanvas({ articles, onOpenArticle }) {
   )
 }
 
-function AssetsModuleCanvas() {
+function LibraryAssetThumbnail({ asset, onPreview }) {
+  const [hasError, setHasError] = useState(false)
+
+  useEffect(() => {
+    setHasError(false)
+  }, [asset.path])
+
+  if (hasError || !asset.path) {
+    return (
+      <div className="flex aspect-[16/10] w-full items-center justify-center bg-secondary/45 text-center text-[13px] leading-6 text-muted-foreground">
+        图片已移除
+      </div>
+    )
+  }
+
   return (
-    <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white">
-      <div className="mx-auto flex h-full w-full max-w-[1320px] flex-col px-4 py-8 sm:px-5 lg:px-6">
-        <div className="mb-8">
-          <h1 className="text-[30px] font-semibold tracking-[-0.03em] text-foreground sm:text-[34px]">素材库</h1>
+    <button className="block w-full cursor-zoom-in overflow-hidden" onClick={() => onPreview?.(asset.id)} type="button">
+      <img
+        alt={asset.scene}
+        className="aspect-[16/10] w-full object-cover transition-transform duration-200 hover:scale-[1.02]"
+        onError={() => setHasError(true)}
+        src={asset.path}
+      />
+    </button>
+  )
+}
+
+function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savingId }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState({
+    emotion: asset.emotion,
+    figures: asset.figures,
+    scene: asset.scene,
+    topic: asset.topic,
+  })
+
+  useEffect(() => {
+    setDraft({
+      emotion: asset.emotion,
+      figures: asset.figures,
+      scene: asset.scene,
+      topic: asset.topic,
+    })
+    setIsEditing(false)
+  }, [asset])
+
+  async function handleSave() {
+    await onSave(asset.id, draft)
+    setIsEditing(false)
+  }
+
+  function handleCancel() {
+    setDraft({
+      emotion: asset.emotion,
+      figures: asset.figures,
+      scene: asset.scene,
+      topic: asset.topic,
+    })
+    setIsEditing(false)
+  }
+
+  return (
+    <article className="overflow-hidden rounded-[26px] border border-border/70 bg-white shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
+      <LibraryAssetThumbnail asset={asset} onPreview={onPreview} />
+
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-[15px] font-medium text-foreground">{asset.scene}</div>
+            <div className="mt-1 truncate text-[12px] text-muted-foreground">{asset.filename}</div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            {isEditing ? null : (
+              <Button className="rounded-full" onClick={() => setIsEditing(true)} size="sm" type="button" variant="outline">
+                编辑标签
+              </Button>
+            )}
+            <Button
+              className="rounded-full"
+              disabled={deletingId === asset.id || savingId === asset.id}
+              onClick={() => onDelete(asset)}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              {deletingId === asset.id ? <LoaderCircle className="animate-spin" size={14} /> : <Trash2 size={14} />}
+            </Button>
+          </div>
         </div>
 
-        <div className="flex min-h-[420px] flex-1 items-center justify-center">
-          <div className="text-center">
-            <div className="text-[16px] font-medium text-foreground">暂无素材</div>
-            <p className="mt-2 text-[14px] leading-6 text-muted-foreground">
-              当前先保留素材库模块框架，后续再接入图片网格和查看层。
-            </p>
+        {!isEditing ? (
+          <>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[asset.emotion, asset.topic, asset.figures].map((label) => (
+                <span
+                  className="rounded-full border border-border/70 bg-secondary/55 px-2.5 py-1 text-[11px] text-muted-foreground"
+                  key={label}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
+              <span className="rounded-full border border-border/70 px-2.5 py-1">使用 {asset.usedCount} 次</span>
+              <span className="rounded-full border border-border/70 px-2.5 py-1">入库于 {formatLibraryAssetDate(asset.createdAt)}</span>
+            </div>
+          </>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1.5">
+                <div className="text-[12px] font-medium text-muted-foreground">情绪标签</div>
+                <select
+                  className="h-10 w-full rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+                  onChange={(event) => setDraft((current) => ({ ...current, emotion: event.target.value }))}
+                  value={draft.emotion}
+                >
+                  {LIBRARY_ASSET_EMOTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <div className="text-[12px] font-medium text-muted-foreground">母题标签</div>
+                <select
+                  className="h-10 w-full rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+                  onChange={(event) => setDraft((current) => ({ ...current, topic: event.target.value }))}
+                  value={draft.topic}
+                >
+                  {LIBRARY_ASSET_TOPICS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <div className="text-[12px] font-medium text-muted-foreground">人物构成</div>
+                <select
+                  className="h-10 w-full rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+                  onChange={(event) => setDraft((current) => ({ ...current, figures: event.target.value }))}
+                  value={draft.figures}
+                >
+                  {LIBRARY_ASSET_FIGURES.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <div className="text-[12px] font-medium text-muted-foreground">场景描述</div>
+                <input
+                  className="h-10 w-full rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+                  maxLength={LIBRARY_ASSET_SCENE_MAX_LENGTH}
+                  onChange={(event) => setDraft((current) => ({ ...current, scene: event.target.value }))}
+                  value={draft.scene}
+                />
+              </label>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[12px] text-muted-foreground">场景描述建议控制在 {LIBRARY_ASSET_SCENE_MAX_LENGTH} 字以内</div>
+              <div className="flex items-center gap-2">
+                <Button className="rounded-full" onClick={handleCancel} size="sm" type="button" variant="outline">
+                  取消
+                </Button>
+                <Button
+                  className="rounded-full"
+                  disabled={savingId === asset.id || deletingId === asset.id || !draft.scene.trim()}
+                  onClick={handleSave}
+                  size="sm"
+                  type="button"
+                >
+                  {savingId === asset.id ? <LoaderCircle className="animate-spin" size={14} /> : <Check size={14} />}
+                  保存
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function LibraryAssetLightbox({ activeAssetId, assets, onClose, onSelectAssetId }) {
+  const activeIndex = Array.isArray(assets) ? assets.findIndex((asset) => asset.id === activeAssetId) : -1
+  const activeAsset = activeIndex >= 0 ? assets[activeIndex] : null
+
+  useEffect(() => {
+    if (activeAssetId && !activeAsset) {
+      onClose()
+    }
+  }, [activeAsset, activeAssetId, onClose])
+
+  useEffect(() => {
+    if (!activeAsset) {
+      return
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        onClose()
+        return
+      }
+
+      if (assets.length < 2) {
+        return
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        const previousIndex = (activeIndex - 1 + assets.length) % assets.length
+        onSelectAssetId(assets[previousIndex].id)
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        const nextIndex = (activeIndex + 1) % assets.length
+        onSelectAssetId(assets[nextIndex].id)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [activeAsset, activeIndex, assets, onClose, onSelectAssetId])
+
+  if (!activeAsset || typeof document === 'undefined') {
+    return null
+  }
+
+  const canNavigate = assets.length > 1
+  const previousIndex = canNavigate ? (activeIndex - 1 + assets.length) % assets.length : activeIndex
+  const nextIndex = canNavigate ? (activeIndex + 1) % assets.length : activeIndex
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] bg-black/88" onClick={onClose} role="presentation">
+      <button
+        aria-label="关闭大图预览"
+        className="absolute right-5 top-5 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition-colors hover:bg-white/14"
+        onClick={onClose}
+        type="button"
+      >
+        <X size={18} />
+      </button>
+
+      <div className="absolute right-5 top-1/2 flex -translate-y-1/2 flex-col gap-3">
+        <button
+          aria-label="上一张"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition-colors hover:bg-white/14 disabled:cursor-not-allowed disabled:opacity-45"
+          disabled={!canNavigate}
+          onClick={(event) => {
+            event.stopPropagation()
+            onSelectAssetId(assets[previousIndex].id)
+          }}
+          type="button"
+        >
+          <ArrowUp size={18} />
+        </button>
+        <button
+          aria-label="下一张"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition-colors hover:bg-white/14 disabled:cursor-not-allowed disabled:opacity-45"
+          disabled={!canNavigate}
+          onClick={(event) => {
+            event.stopPropagation()
+            onSelectAssetId(assets[nextIndex].id)
+          }}
+          type="button"
+        >
+          <ArrowDown size={18} />
+        </button>
+      </div>
+
+      <div className="flex h-full w-full items-center justify-center px-8 py-8 sm:px-12 sm:py-10" onClick={(event) => event.stopPropagation()}>
+        {activeAsset.path ? (
+          <img
+            alt={activeAsset.scene}
+            className="max-h-full max-w-[calc(100vw-140px)] rounded-[18px] object-contain"
+            src={activeAsset.path}
+          />
+        ) : (
+          <div className="flex min-h-[320px] w-full max-w-[960px] items-center justify-center rounded-[18px] border border-white/10 bg-white/6 px-6 text-center text-[15px] text-white/68">
+            图片已移除
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+function FixedLayoutImageLightbox({ asset, onClose }) {
+  useEffect(() => {
+    if (!asset) {
+      return
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [asset, onClose])
+
+  if (!asset || typeof document === 'undefined') {
+    return null
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] bg-black/88" onClick={onClose} role="presentation">
+      <button
+        aria-label="关闭大图预览"
+        className="absolute right-5 top-5 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition-colors hover:bg-white/14"
+        onClick={onClose}
+        type="button"
+      >
+        <X size={18} />
+      </button>
+
+      <div className="flex h-full w-full items-center justify-center px-8 py-8 sm:px-12 sm:py-10" onClick={(event) => event.stopPropagation()}>
+        {asset.path ? (
+          <img
+            alt={asset.label}
+            className="max-h-full max-w-[calc(100vw-140px)] rounded-[18px] object-contain"
+            src={asset.path}
+          />
+        ) : (
+          <div className="flex min-h-[320px] w-full max-w-[960px] items-center justify-center rounded-[18px] border border-white/10 bg-white/6 px-6 text-center text-[15px] text-white/68">
+            图片已移除
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+function FixedLayoutAssetRow({ asset, deletingSlot, onDelete, onPreview, onUpload, slot, uploadingSlot }) {
+  const fileInputRef = useRef(null)
+  const slotMeta = FIXED_LAYOUT_SLOT_META[slot]
+  const isUploading = uploadingSlot === slot
+  const isDeleting = deletingSlot === slot
+
+  async function handleFileChange(event) {
+    const nextFile = event.target.files?.[0]
+
+    if (nextFile) {
+      await onUpload(slot, nextFile)
+    }
+
+    event.target.value = ''
+  }
+
+  return (
+    <div className="flex flex-col gap-4 border-t border-border/70 px-2 py-5 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex min-w-0 items-center gap-4">
+        <button
+          className="group relative inline-flex h-[88px] w-[132px] shrink-0 items-center justify-center overflow-hidden rounded-[18px] border border-border/70 bg-secondary/25"
+          disabled={!asset?.path}
+          onClick={() => asset?.path && onPreview({ label: slotMeta.label, path: asset.path })}
+          type="button"
+        >
+          {asset?.path ? (
+            <img
+              alt={slotMeta.label}
+              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+              src={asset.path}
+            />
+          ) : (
+            <div className="px-4 text-center text-[12px] leading-5 text-muted-foreground">当前未上传</div>
+          )}
+        </button>
+
+        <div className="min-w-0">
+          <div className="text-[16px] font-medium text-foreground">{slotMeta.label}</div>
+          <div className="mt-1 text-[13px] leading-6 text-muted-foreground">{slotMeta.description}</div>
+          <div className="mt-2 text-[12px] text-muted-foreground">
+            {asset?.filename ? (
+              <>
+                <span className="block truncate">{asset.filename}</span>
+                <span className="mt-1 inline-flex rounded-full border border-border/70 px-2.5 py-1">
+                  上传于 {formatLibraryAssetDate(asset.uploadedAt)}
+                </span>
+              </>
+            ) : (
+              '支持 gif、png、jpg、jpeg、webp'
+            )}
           </div>
         </div>
       </div>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <input
+          accept={FIXED_LAYOUT_FILE_ACCEPT}
+          className="hidden"
+          onChange={handleFileChange}
+          ref={fileInputRef}
+          type="file"
+        />
+        <Button
+          className="rounded-full"
+          disabled={isUploading || isDeleting}
+          onClick={() => fileInputRef.current?.click()}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {isUploading ? <LoaderCircle className="animate-spin" size={14} /> : <Paperclip size={14} />}
+          {asset?.path ? '替换图片' : '上传图片'}
+        </Button>
+        {asset?.path ? (
+          <Button
+            className="rounded-full"
+            disabled={isUploading || isDeleting}
+            onClick={() => onDelete(slot, slotMeta.label)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {isDeleting ? <LoaderCircle className="animate-spin" size={14} /> : <Trash2 size={14} />}
+            删除
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function FixedLayoutTextRow({ onSave, saving, value }) {
+  const [draft, setDraft] = useState(value?.content ?? '')
+
+  useEffect(() => {
+    setDraft(value?.content ?? '')
+  }, [value?.content])
+
+  const isDirty = normalizeFixedLayoutTextContent(draft) !== normalizeFixedLayoutTextContent(value?.content ?? '')
+
+  return (
+    <div className="border-t border-border/70 px-2 py-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 lg:max-w-[320px]">
+          <div className="text-[16px] font-medium text-foreground">{FIXED_LAYOUT_SLOT_META.endingText.label}</div>
+          <div className="mt-1 text-[13px] leading-6 text-muted-foreground">{FIXED_LAYOUT_SLOT_META.endingText.description}</div>
+          <div className="mt-2 text-[12px] text-muted-foreground">建议控制在 {FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH} 字以内。</div>
+        </div>
+
+        <div className="w-full max-w-[720px]">
+          <Textarea
+            className="min-h-[124px] resize-none rounded-[22px] border border-border/70 bg-white px-4 py-3 text-[14px] leading-7 shadow-none focus-visible:ring-0"
+            maxLength={FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="这里填写正文结束后的固定引导文案。"
+            value={draft}
+          />
+
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="text-[12px] text-muted-foreground">
+              {draft.length}/{FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
+            </div>
+            <Button className="rounded-full" disabled={saving || !isDirty} onClick={() => onSave(draft)} size="sm" type="button">
+              {saving ? <LoaderCircle className="animate-spin" size={14} /> : <Check size={14} />}
+              保存文案
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FixedLayoutConfigCanvas() {
+  const { config, errorMessage, isLoading, setConfig, setErrorMessage } = useFixedLayoutConfigState()
+  const [savingText, setSavingText] = useState(false)
+  const [uploadingSlot, setUploadingSlot] = useState('')
+  const [deletingSlot, setDeletingSlot] = useState('')
+  const [previewAsset, setPreviewAsset] = useState(null)
+  const slotCount = FIXED_LAYOUT_SLOT_ORDER.length
+
+  async function handleSaveEndingText(content) {
+    setSavingText(true)
+    setErrorMessage('')
+
+    try {
+      const nextConfig = await requestFixedLayoutTextUpdate({
+        endingText: content,
+      })
+      setConfig(nextConfig)
+    } catch (error) {
+      setErrorMessage(error.message || '保存固定文案失败')
+    } finally {
+      setSavingText(false)
+    }
+  }
+
+  async function handleUpload(slot, file) {
+    setUploadingSlot(slot)
+    setErrorMessage('')
+
+    try {
+      const nextConfig = await requestFixedLayoutAssetUpload({
+        file,
+        slot,
+      })
+      setConfig(nextConfig)
+    } catch (error) {
+      setErrorMessage(error.message || '上传固定图片失败')
+    } finally {
+      setUploadingSlot('')
+    }
+  }
+
+  async function handleDelete(slot, label) {
+    const confirmed = window.confirm(`确认清空“${label}”吗？对应图片文件也会从项目里移除。`)
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeletingSlot(slot)
+    setErrorMessage('')
+
+    try {
+      const nextConfig = await requestFixedLayoutAssetDelete(slot)
+      setConfig(nextConfig)
+    } catch (error) {
+      setErrorMessage(error.message || '删除固定图片失败')
+    } finally {
+      setDeletingSlot('')
+    }
+  }
+
+  return (
+    <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white">
+      <div className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-5 lg:px-6">
+        <div className="mb-8">
+          <h1 className="text-[30px] font-semibold tracking-[-0.03em] text-foreground sm:text-[34px]">图片配置</h1>
+          <div className="mt-4 inline-flex rounded-full bg-secondary px-3 py-1.5 text-[12px] text-muted-foreground">
+            共 {slotCount} 个固定槽位
+          </div>
+        </div>
+
+        {errorMessage ? (
+          <div className="mb-5 rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <section>
+          <div className="mb-3 text-[12px] font-medium tracking-[0.08em] text-muted-foreground">固定内容配置</div>
+
+          {isLoading ? (
+            <div className="border-t border-border/70 py-16 text-center text-[14px] text-muted-foreground">
+              <div className="inline-flex items-center gap-2">
+                <LoaderCircle className="animate-spin" size={16} />
+                正在读取固定内容配置
+              </div>
+            </div>
+          ) : (
+            <div className="border-t border-border/70">
+              {FIXED_LAYOUT_SLOT_ORDER.map((slot) =>
+                FIXED_LAYOUT_IMAGE_SLOT_IDS.includes(slot) ? (
+                  <FixedLayoutAssetRow
+                    asset={config?.[slot]}
+                    deletingSlot={deletingSlot}
+                    key={slot}
+                    onDelete={handleDelete}
+                    onPreview={setPreviewAsset}
+                    onUpload={handleUpload}
+                    slot={slot}
+                    uploadingSlot={uploadingSlot}
+                  />
+                ) : (
+                  <FixedLayoutTextRow
+                    key={slot}
+                    onSave={handleSaveEndingText}
+                    saving={savingText}
+                    value={config?.[slot]}
+                  />
+                ),
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <FixedLayoutImageLightbox asset={previewAsset} onClose={() => setPreviewAsset(null)} />
+    </div>
+  )
+}
+
+function AssetsModuleCanvas() {
+  const [emotionFilter, setEmotionFilter] = useState('')
+  const [topicFilter, setTopicFilter] = useState('')
+  const [figuresFilter, setFiguresFilter] = useState('')
+  const [sort, setSort] = useState(DEFAULT_LIBRARY_ASSET_SORT)
+  const [items, setItems] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [previewAssetId, setPreviewAssetId] = useState('')
+  const [savingId, setSavingId] = useState('')
+  const [deletingId, setDeletingId] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadAssets() {
+      setIsLoading(true)
+      setErrorMessage('')
+
+      try {
+        const nextItems = await requestLibraryAssets({
+          emotion: emotionFilter,
+          figures: figuresFilter,
+          sort,
+          topic: topicFilter,
+        })
+
+        if (!cancelled) {
+          setItems(nextItems)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(error.message || '读取素材库失败')
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadAssets()
+
+    return () => {
+      cancelled = true
+    }
+  }, [emotionFilter, figuresFilter, sort, topicFilter])
+
+  useEffect(() => {
+    if (previewAssetId && !items.some((asset) => asset.id === previewAssetId)) {
+      setPreviewAssetId('')
+    }
+  }, [items, previewAssetId])
+
+  async function handleSave(assetId, draft) {
+    setSavingId(assetId)
+    setErrorMessage('')
+
+    try {
+      await requestLibraryAssetUpdate(assetId, draft)
+      const nextItems = await requestLibraryAssets({
+        emotion: emotionFilter,
+        figures: figuresFilter,
+        sort,
+        topic: topicFilter,
+      })
+      setItems(nextItems)
+    } catch (error) {
+      setErrorMessage(error.message || '更新素材失败')
+      throw error
+    } finally {
+      setSavingId('')
+    }
+  }
+
+  async function handleDelete(asset) {
+    const confirmed = window.confirm(`确认删除素材记录“${asset.scene}”吗？这不会删除本地图片文件。`)
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeletingId(asset.id)
+    setErrorMessage('')
+
+    try {
+      await requestLibraryAssetDelete(asset.id)
+      const nextItems = await requestLibraryAssets({
+        emotion: emotionFilter,
+        figures: figuresFilter,
+        sort,
+        topic: topicFilter,
+      })
+      setItems(nextItems)
+    } catch (error) {
+      setErrorMessage(error.message || '删除素材失败')
+    } finally {
+      setDeletingId('')
+    }
+  }
+
+  function clearFilters() {
+    setEmotionFilter('')
+    setTopicFilter('')
+    setFiguresFilter('')
+    setSort(DEFAULT_LIBRARY_ASSET_SORT)
+  }
+
+  const hasActiveFilters = Boolean(emotionFilter || topicFilter || figuresFilter || sort !== DEFAULT_LIBRARY_ASSET_SORT)
+
+  return (
+    <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white">
+      <div className="mx-auto flex h-full w-full max-w-[1320px] flex-col px-4 py-8 sm:px-5 lg:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-[30px] font-semibold tracking-[-0.03em] text-foreground sm:text-[34px]">素材库</h1>
+            <p className="mt-2 text-[14px] leading-6 text-muted-foreground">
+              当前素材会统一从本地目录导入到仓库，并在这里做筛选、查看和标签编辑。
+            </p>
+          </div>
+
+          <div className="rounded-full border border-border/70 bg-secondary/45 px-4 py-2 text-[13px] text-muted-foreground">
+            当前共 {items.length} 张素材
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-[26px] border border-border/70 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:p-5">
+          <div className="flex items-center gap-2 text-[13px] font-medium text-foreground">
+            <ListFilter size={16} />
+            筛选与排序
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <select
+              className="h-11 rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+              onChange={(event) => setEmotionFilter(event.target.value)}
+              value={emotionFilter}
+            >
+              <option value="">全部情绪</option>
+              {LIBRARY_ASSET_EMOTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="h-11 rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+              onChange={(event) => setTopicFilter(event.target.value)}
+              value={topicFilter}
+            >
+              <option value="">全部母题</option>
+              {LIBRARY_ASSET_TOPICS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="h-11 rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+              onChange={(event) => setFiguresFilter(event.target.value)}
+              value={figuresFilter}
+            >
+              <option value="">全部人物构成</option>
+              {LIBRARY_ASSET_FIGURES.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="h-11 rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+              onChange={(event) => setSort(event.target.value)}
+              value={sort}
+            >
+              {LIBRARY_ASSET_SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <Button className="h-11 rounded-2xl" onClick={clearFilters} type="button" variant="outline">
+              清空筛选
+            </Button>
+          </div>
+        </div>
+
+        {errorMessage ? (
+          <div className="mt-4 rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <div className="mt-6 flex-1">
+          {isLoading ? (
+            <div className="flex min-h-[360px] items-center justify-center rounded-[28px] border border-border/70 bg-white">
+              <div className="flex items-center gap-2 text-[14px] text-muted-foreground">
+                <LoaderCircle className="animate-spin" size={16} />
+                正在读取素材库
+              </div>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="flex min-h-[360px] items-center justify-center rounded-[28px] border border-dashed border-border/80 bg-secondary/20">
+              <div className="max-w-[420px] text-center">
+                <div className="text-[16px] font-medium text-foreground">{hasActiveFilters ? '当前筛选下暂无素材' : '暂无素材'}</div>
+                <p className="mt-2 text-[14px] leading-6 text-muted-foreground">
+                  {hasActiveFilters ? '可以调整筛选条件后再看，或继续补充新的素材。' : '导入完成后，这里会显示图片、标签和场景描述。'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {items.map((asset) => (
+                <LibraryAssetCard
+                  asset={asset}
+                  deletingId={deletingId}
+                  key={asset.id}
+                  onDelete={handleDelete}
+                  onPreview={setPreviewAssetId}
+                  onSave={handleSave}
+                  savingId={savingId}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <LibraryAssetLightbox
+        activeAssetId={previewAssetId}
+        assets={items}
+        onClose={() => setPreviewAssetId('')}
+        onSelectAssetId={setPreviewAssetId}
+      />
     </div>
   )
 }
@@ -2785,6 +4424,7 @@ export default function BenchmarkWorkbenchPage() {
   const activeSessionId = useBenchmarkStore((state) => state.activeSessionId)
   const createSession = useBenchmarkStore((state) => state.createSession)
   const deleteSession = useBenchmarkStore((state) => state.deleteSession)
+  const hydrateFromPersistedSnapshot = useBenchmarkStore((state) => state.hydrateFromPersistedSnapshot)
   const isSidebarCollapsed = useBenchmarkStore((state) => state.isSidebarCollapsed)
   const resetAllSessions = useBenchmarkStore((state) => state.resetAllSessions)
   const setSidebarCollapsed = useBenchmarkStore((state) => state.setSidebarCollapsed)
@@ -2801,6 +4441,7 @@ export default function BenchmarkWorkbenchPage() {
   const [rightPaneWidth, setRightPaneWidth] = useState(620)
 
   const composerRef = useRef(null)
+  const hasInitializedContentSessionMirrorRef = useRef(false)
   const splitContainerRef = useRef(null)
 
   const orderedSessions = useMemo(
@@ -2826,6 +4467,69 @@ export default function BenchmarkWorkbenchPage() {
     articlePreviewSessionId != null ? sessions.find((session) => session.id === articlePreviewSessionId) ?? null : null
   const currentSessionId = activeSession?.id ?? null
   const currentStageId = activeSession?.stageId ?? 'topic'
+
+  useEffect(() => {
+    let cancelled = false
+    let debounceId = null
+    let unsubscribe = () => {}
+
+    async function initializeContentSessionMirror() {
+      const currentState = useBenchmarkStore.getState()
+      const currentPersistedState = createPersistableBenchmarkState(currentState)
+      const currentHasHistory = currentPersistedState.sessions.some(hasSessionHistory)
+      const currentLatestTimestamp = getSessionHistoryLatestTimestamp(currentPersistedState.sessions)
+
+      try {
+        const persistedItem = await requestPersistedContentSessions()
+
+        if (!cancelled && persistedItem?.state) {
+          const persistedState = persistedItem.state
+          const persistedHasHistory = Array.isArray(persistedState.sessions) && persistedState.sessions.some(hasSessionHistory)
+          const persistedLatestTimestamp = getSessionHistoryLatestTimestamp(persistedState.sessions)
+
+          if (persistedHasHistory && (!currentHasHistory || persistedLatestTimestamp > currentLatestTimestamp)) {
+            hydrateFromPersistedSnapshot(persistedState)
+          }
+        }
+      } catch {
+        // 本地历史镜像不可用时，继续使用当前浏览器内的持久化数据
+      }
+
+      if (cancelled) {
+        return
+      }
+
+      hasInitializedContentSessionMirrorRef.current = true
+
+      const persistSnapshot = (state) => {
+        if (!hasInitializedContentSessionMirrorRef.current) {
+          return
+        }
+
+        const nextItem = buildPersistedContentSessionItem(state)
+
+        window.clearTimeout(debounceId)
+        debounceId = window.setTimeout(() => {
+          requestPersistedContentSessionsUpdate(nextItem).catch(() => {})
+        }, 280)
+      }
+
+      unsubscribe = useBenchmarkStore.subscribe((state) => {
+        persistSnapshot(state)
+      })
+
+      persistSnapshot(useBenchmarkStore.getState())
+    }
+
+    initializeContentSessionMirror()
+
+    return () => {
+      cancelled = true
+      hasInitializedContentSessionMirrorRef.current = false
+      window.clearTimeout(debounceId)
+      unsubscribe()
+    }
+  }, [hydrateFromPersistedSnapshot])
   const selectedTopic = activeSession ? getSelectedTopic(activeSession) : null
   const activeVersion = activeSession ? getActiveVersion(activeSession) : null
   const activeFilterTypes = activeSession?.topicSelection?.filterTypes ?? []
@@ -3363,7 +5067,7 @@ export default function BenchmarkWorkbenchPage() {
   }
 
   async function handleProceedWithoutChanges() {
-    if (!currentSessionId) {
+    if (!currentSessionId || !activeSession) {
       return
     }
 
@@ -3380,12 +5084,33 @@ export default function BenchmarkWorkbenchPage() {
       ],
     }))
 
+    const currentVersion = getActiveVersion(activeSession)
+    const currentTopic = getSelectedTopic(activeSession)
+
+    if (!currentVersion || !currentTopic) {
+      return
+    }
+
+    const previewSections = buildPreviewSections(stripPreviewHeading(currentVersion.draftMarkdown ?? ''))
+
     await runFlow({
+      awaitResultStepIndex: 0,
       introMessageContent:
         '收到，这一版文字稿已确认。我现在开始整理排版预览，完成后右侧会显示可确认的排版效果。',
-      onComplete: (current, _generated, { messageId }) => {
+      onComplete: (current, matchedAssets, { messageId }) => {
+        const nextVersion = getActiveVersion(current)
+        const nextImageSelection =
+          nextVersion && matchedAssets
+            ? buildImageSelectionFromMatchResult({
+                matchResult: matchedAssets,
+                sections: previewSections,
+                versionId: nextVersion.id,
+              })
+            : current.imageSelection
+
         return {
           activeWorkbenchTab: 'preview',
+          imageSelection: nextImageSelection,
           messages: updateMessageById(current.messages, messageId, (message) => ({
             content: appendMessageParagraph(
               message.content,
@@ -3395,6 +5120,18 @@ export default function BenchmarkWorkbenchPage() {
           stageId: 'preview',
         }
       },
+      resolveResult: () =>
+        requestLibraryAssetMatch({
+          sections: previewSections.map((section) => ({
+            order: section.order,
+            positionLabel: section.positionLabel,
+            text: section.text,
+            title: section.title,
+          })),
+          topic: currentTopic.theme || '通用',
+          type: currentTopic.type || '',
+          wordCount: currentVersion.wordCount || 0,
+        }),
       sessionId: currentSessionId,
       summary: '文字稿确认完成，系统正在整理极简排版预览。',
       steps: [
@@ -3598,7 +5335,7 @@ export default function BenchmarkWorkbenchPage() {
   }
 
   async function handleConfirmPreview() {
-    if (!currentSessionId) {
+    if (!currentSessionId || !activeSession) {
       return
     }
 
@@ -3615,7 +5352,11 @@ export default function BenchmarkWorkbenchPage() {
       ],
     }))
 
+    const currentVersion = getActiveVersion(activeSession)
+    const usedAssetIds = extractUsedAssetIds(activeSession.imageSelection, currentVersion?.id ?? '')
+
     await runFlow({
+      awaitResultStepIndex: 0,
       introMessageContent:
         '收到，我正在完成这轮排版确认并收束最终结果。完成后，当前版本会进入已确认状态。',
       onComplete: (current, _generated, { messageId }) => ({
@@ -3628,6 +5369,11 @@ export default function BenchmarkWorkbenchPage() {
         })),
         stageId: 'completed',
       }),
+      resolveResult: () =>
+        requestLibraryAssetUsage({
+          assetIds: usedAssetIds,
+          usedAt: new Date().toISOString(),
+        }),
       sessionId: currentSessionId,
       summary: '排版确认完成，系统正在收束本轮内容创作结果。',
       steps: [
@@ -3817,6 +5563,8 @@ export default function BenchmarkWorkbenchPage() {
                 <LibraryModuleCanvas topicStatusById={topicStatusById} />
               ) : activeModule === 'articles' ? (
                 <ArticlesModuleCanvas articles={articleEntries} onOpenArticle={handleOpenArticlePreview} />
+              ) : activeModule === 'fixed-layout' ? (
+                <FixedLayoutConfigCanvas />
               ) : (
                 <AssetsModuleCanvas />
               )

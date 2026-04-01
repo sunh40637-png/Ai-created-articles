@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "import:library-assets": "node scripts/import-image-library.mjs",
     "test:rules-ab": "node scripts/run-rule-ab-test.mjs"
   },
   "dependencies": {
