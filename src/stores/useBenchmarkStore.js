@@ -11,7 +11,39 @@ const TOPIC_STATUS_PRIORITY = {
 
 export const TOPIC_LIBRARY_TYPES = ['A型', 'B型', 'C型']
 
-export const CONTENT_TOPIC_LIBRARY = [
+const TOPIC_REASON_BY_THEME = {
+  做人处世智慧: {
+    A型: '适合从处世分寸和人情边界切入，写出克制但有后劲的提醒。',
+    B型: '适合做清单式提醒，观点明确，读者容易代入和转发。',
+  },
+  家庭关系: {
+    A型: '适合落到家庭相处的具体处境里，写出细腻克制的情感余味。',
+    B型: '适合用清单结构拆开家庭关系难题，表达更直接也更有执行感。',
+  },
+  晚年自处: {
+    A型: '适合写晚年自处的安静、清醒和放下，文字容易沉下来。',
+    B型: '适合把晚年自处的话题讲得更明确，利于提炼可执行的提醒。',
+  },
+  孝道与父母: {
+    A型: '适合从父母与子女的细节处境切入，不说教也能打动人。',
+    B型: '适合将孝道主题拆成明确的三点提醒，便于收藏和转发。',
+  },
+  健康与生命: {
+    A型: '适合从身心状态和生命感受切入，写出有体温的提醒。',
+    B型: '适合将健康主题写成清单结构，观点更清楚，也更利于传播。',
+  },
+}
+
+function createImportedTopicReason(topic) {
+  return (
+    TOPIC_REASON_BY_THEME[topic.theme]?.[topic.type] ??
+    (topic.type === 'B型'
+      ? '适合用清单结构展开观点，表达更直接，也更利于收藏转发。'
+      : '适合从具体处境切入，写出更细腻克制的情绪和回味。')
+  )
+}
+
+const BASE_CONTENT_TOPIC_LIBRARY = [
   {
     id: 'library-topic-01',
     title: '真正有分寸的人，往往守住了这3条处世边界',
@@ -252,6 +284,87 @@ export const CONTENT_TOPIC_LIBRARY = [
     reason: '适合家庭关系和晚年处境的结合题，读者接受度高。',
     theme: '家庭关系',
   },
+]
+
+const IMPORTED_TOPIC_LIBRARY_V1 = [
+  { title: '管住嘴，是一个人最大的修养', type: 'A型', penName: '芷若', theme: '做人处世智慧' },
+  { title: '熟人面前，这3句话说了就后悔', type: 'B型', penName: '明远', theme: '做人处世智慧' },
+  { title: '人越老越要少说话，话多是祸根', type: 'A型', penName: '芷若', theme: '做人处世智慧' },
+  { title: '借钱这件事，聪明人只说这3句', type: 'B型', penName: '明远', theme: '做人处世智慧' },
+  { title: '沉默，是成年人最好的回答', type: 'A型', penName: '芷若', theme: '做人处世智慧' },
+  { title: '人到中年，学会认输才是赢', type: 'A型', penName: '芷若', theme: '做人处世智慧' },
+  { title: '格局大的人，从不计较这3件事', type: 'B型', penName: '明远', theme: '做人处世智慧' },
+  { title: '不争不抢的人，往往活得最好', type: 'A型', penName: '芷若', theme: '做人处世智慧' },
+  { title: '看一个人的层次，就看他怎么对待比自己弱的人', type: 'A型', penName: '芷若', theme: '做人处世智慧' },
+  { title: '人活到一定年纪，才明白：不解释，是最高级的回应', type: 'A型', penName: '芷若', theme: '做人处世智慧' },
+  { title: '越是计较的人，越过不好', type: 'A型', penName: '芷若', theme: '做人处世智慧' },
+  { title: '放下面子，才能捡起尊严', type: 'A型', penName: '明远', theme: '做人处世智慧' },
+  { title: '软弱换不来尊重，挺直腰杆做人', type: 'A型', penName: '明远', theme: '做人处世智慧' },
+  { title: '人性就是欺软怕硬，别让人看轻你', type: 'A型', penName: '明远', theme: '做人处世智慧' },
+  { title: '越是好说话，越容易被人欺负', type: 'A型', penName: '明远', theme: '做人处世智慧' },
+  { title: '真正有底气的人，从不证明自己', type: 'A型', penName: '明远', theme: '做人处世智慧' },
+  { title: '人这一辈子，最值得守住的是这3条底线', type: 'B型', penName: '明远', theme: '做人处世智慧' },
+  { title: '婚姻里最大的悲哀，是两个人各过各的', type: 'A型', penName: '芷若', theme: '家庭关系' },
+  { title: '男人扛起责任，才是一个家的脊梁', type: 'A型', penName: '明远', theme: '家庭关系' },
+  { title: '女人情绪稳，家就安', type: 'A型', penName: '芷若', theme: '家庭关系' },
+  { title: '夫妻吵了一辈子，才明白吵架是最蠢的事', type: 'A型', penName: '芷若', theme: '家庭关系' },
+  { title: '老伴走后，很多人才懂得那个最烦的人最爱自己', type: 'A型', penName: '芷若', theme: '家庭关系' },
+  { title: '婚姻不是爱情，是两个人合伙过日子', type: 'A型', penName: '明远', theme: '家庭关系' },
+  { title: '被宠一辈子的女人，身上都有这3个特点', type: 'B型', penName: '芷若', theme: '家庭关系' },
+  { title: '一个家过得好不好，看这3件事就知道了', type: 'B型', penName: '明远', theme: '家庭关系' },
+  { title: '夫妻之间，最怕这种沉默', type: 'A型', penName: '芷若', theme: '家庭关系' },
+  { title: '父母最大的失败，是把孩子养成了仇人', type: 'A型', penName: '明远', theme: '家庭关系' },
+  { title: '人到五六十岁，才真正理解了父母', type: 'A型', penName: '芷若', theme: '家庭关系' },
+  { title: '哪怕再孝顺，年过75的父母这几件事别做', type: 'B型', penName: '明远', theme: '家庭关系' },
+  { title: '父母的晚年，最怕这3件事', type: 'B型', penName: '明远', theme: '家庭关系' },
+  { title: '孩子长大了，父母该学会放手', type: 'A型', penName: '芷若', theme: '家庭关系' },
+  { title: '父母与子女，终究是一场渐行渐远的缘分', type: 'A型', penName: '芷若', theme: '家庭关系' },
+  { title: '有一种伤，叫父母不被子女理解', type: 'A型', penName: '芷若', theme: '家庭关系' },
+  { title: '亲家之间，走得越近越容易生嫌隙', type: 'A型', penName: '明远', theme: '家庭关系' },
+  { title: '聪明的亲家，都懂得这3条边界', type: 'B型', penName: '明远', theme: '家庭关系' },
+  { title: '亲家相处，牢记这3个不', type: 'B型', penName: '明远', theme: '家庭关系' },
+  { title: '嫁给老实人的女人，中年以后才明白这是什么感觉', type: 'A型', penName: '芷若', theme: '家庭关系' },
+  { title: '人到晚年，手机安静了，才是真正的开始', type: 'A型', penName: '芷若', theme: '晚年自处' },
+  { title: '退休后，那些把日子过好的人，都做了同一件事', type: 'A型', penName: '芷若', theme: '晚年自处' },
+  { title: '一个人独处的能力，决定晚年的质量', type: 'A型', penName: '芷若', theme: '晚年自处' },
+  { title: '人越老，越要学会享受孤独', type: 'A型', penName: '芷若', theme: '晚年自处' },
+  { title: '真正活明白的人，都在做减法', type: 'A型', penName: '明远', theme: '晚年自处' },
+  { title: '人生下半场，最重要的是做减法', type: 'A型', penName: '明远', theme: '晚年自处' },
+  { title: '那些关系断了就断了，不必强留', type: 'A型', penName: '芷若', theme: '晚年自处' },
+  { title: '老了才明白，有些人不值得你惦记', type: 'A型', penName: '芷若', theme: '晚年自处' },
+  { title: '人到晚年，圈子小了，心反而静了', type: 'A型', penName: '芷若', theme: '晚年自处' },
+  { title: '放下那些消耗你的人，才能活得轻松', type: 'A型', penName: '明远', theme: '晚年自处' },
+  { title: '老了不求人，才是最大的体面', type: 'A型', penName: '明远', theme: '晚年自处' },
+  { title: '手里有钱，腰杆才硬', type: 'A型', penName: '明远', theme: '晚年自处' },
+  { title: '老年人最大的悲哀，是把希望全寄托在子女身上', type: 'A型', penName: '明远', theme: '晚年自处' },
+  { title: '晚年过得好的人，都守住了这一点', type: 'A型', penName: '明远', theme: '晚年自处' },
+  { title: '人老了，最该为自己活', type: 'A型', penName: '芷若', theme: '晚年自处' },
+  { title: '父母在，人生尚有来处', type: 'A型', penName: '芷若', theme: '孝道与父母' },
+  { title: '子女不回家，父母最心寒的不是孤独，是这件事', type: 'A型', penName: '芷若', theme: '孝道与父母' },
+  { title: '真正的孝顺，不是给钱，是这3件事', type: 'B型', penName: '明远', theme: '孝道与父母' },
+  { title: '父母老了，最需要的不是补品，是这个', type: 'A型', penName: '芷若', theme: '孝道与父母' },
+  { title: '一个残忍的真相：很多子女对父母越来越冷漠', type: 'A型', penName: '明远', theme: '孝道与父母' },
+  { title: '父母最后的体面，需要子女来守护', type: 'A型', penName: '芷若', theme: '孝道与父母' },
+  { title: '不要等父母走了，才想起那些没说出口的话', type: 'A型', penName: '芷若', theme: '孝道与父母' },
+  { title: '有一种孝顺，叫不给父母添麻烦', type: 'A型', penName: '芷若', theme: '孝道与父母' },
+  { title: '做父母的，把这3件事想明白，晚年才踏实', type: 'B型', penName: '明远', theme: '孝道与父母' },
+  { title: '父母心里最放不下的，不是钱，是这件事', type: 'A型', penName: '芷若', theme: '孝道与父母' },
+  { title: '人活多久，看睡觉就知道了', type: 'B型', penName: '明远', theme: '健康与生命' },
+  { title: '老了才明白，伤身体最快的不是熬夜，是这个', type: 'A型', penName: '明远', theme: '健康与生命' },
+  { title: '晚年最大的财富，不是钱，是这副身体', type: 'A型', penName: '明远', theme: '健康与生命' },
+  { title: '人到六十，把这3件事放下，身体才会好', type: 'B型', penName: '明远', theme: '健康与生命' },
+  { title: '情绪是最贵的药，也是最毒的毒', type: 'A型', penName: '芷若', theme: '健康与生命' },
+  { title: '好好睡觉，是对自己最大的善待', type: 'A型', penName: '芷若', theme: '健康与生命' },
+  { title: '人这一生，最值得投资的只有健康', type: 'A型', penName: '明远', theme: '健康与生命' },
+]
+
+export const CONTENT_TOPIC_LIBRARY = [
+  ...BASE_CONTENT_TOPIC_LIBRARY,
+  ...IMPORTED_TOPIC_LIBRARY_V1.map((topic, index) => ({
+    id: `library-topic-${String(BASE_CONTENT_TOPIC_LIBRARY.length + index + 1).padStart(2, '0')}`,
+    reason: createImportedTopicReason(topic),
+    ...topic,
+  })),
 ]
 
 function createId(prefix) {

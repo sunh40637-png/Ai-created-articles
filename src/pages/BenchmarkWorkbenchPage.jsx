@@ -106,6 +106,7 @@ const workbenchTabs = [
 
 const sidebarModules = [
   { id: 'library', label: '选题库', icon: LibraryBig },
+  { id: 'articles', label: '文章列表', icon: FileText },
 ]
 
 const topicLibraryItems = CONTENT_TOPIC_LIBRARY
@@ -122,6 +123,17 @@ const TOPIC_STATUS_META = {
   pending: {
     label: '待创作',
     className: 'bg-secondary text-muted-foreground',
+  },
+}
+
+const ARTICLE_LIST_STATUS_META = {
+  preview: {
+    label: '已确认文字稿',
+    className: 'border border-amber-200/80 bg-amber-50 text-amber-700',
+  },
+  completed: {
+    label: '已排版',
+    className: 'border border-emerald-200/80 bg-emerald-50 text-emerald-700',
   },
 }
 
@@ -547,6 +559,34 @@ function getDraftBodyMarkdown(version) {
   }
 
   return draftMarkdown
+}
+
+function getArticleListStatusMeta(stageId = 'preview') {
+  return ARTICLE_LIST_STATUS_META[stageId] ?? ARTICLE_LIST_STATUS_META.preview
+}
+
+function createArticleListEntries(sessions = []) {
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    return []
+  }
+
+  return sessions
+    .filter((session) => session?.stageId === 'preview' || session?.stageId === 'completed')
+    .map((session) => {
+      const topic = getSelectedTopic(session)
+      const version = getActiveVersion(session)
+      const stageId = session.stageId === 'completed' ? 'completed' : 'preview'
+
+      return {
+        defaultTab: stageId === 'completed' ? 'preview' : 'draft',
+        id: session.id,
+        stageId,
+        theme: topic?.theme || '未设置母题',
+        title: resolveVersionDisplayTitle(session, version) || session?.title || '未命名文章',
+        updatedAt: session?.updatedAt || session?.createdAt || '',
+      }
+    })
+    .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
 }
 
 function hasSessionHistory(session) {
@@ -2140,7 +2180,7 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session }) {
   }
 
   return (
-    <div className="benchmark-scroll-hidden min-h-0 overflow-y-auto px-6 py-6">
+    <div className="benchmark-scroll-hidden h-full min-h-0 overflow-y-auto px-6 py-6">
       <div ref={copySourceRef} style={{ left: '-9999px', opacity: 0, pointerEvents: 'none', position: 'fixed', top: 0 }}>
         <div style={{ maxWidth: '680px', margin: '0 auto', padding: '20px', backgroundColor: '#ffffff' }}>
           <h2
@@ -2486,6 +2526,238 @@ function LibraryModuleCanvas({ topicStatusById }) {
   )
 }
 
+function ArticleListRow({ article, onOpen }) {
+  const statusMeta = getArticleListStatusMeta(article.stageId)
+
+  return (
+    <button
+      className="flex w-full items-center gap-4 border-b border-border/70 px-2 py-4 text-left transition-colors hover:bg-secondary/20"
+      onClick={() => onOpen(article.id)}
+      type="button"
+    >
+      <div className="min-w-0 flex-1 text-[15px] font-medium leading-7 text-foreground">
+        <span className="block truncate">{article.title}</span>
+      </div>
+      <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-[11px]', statusMeta.className)}>{statusMeta.label}</span>
+      <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{article.theme}</span>
+    </button>
+  )
+}
+
+function ArticlePreviewDrawer({ onClose, open, session }) {
+  const availableTabs = session?.stageId === 'completed' ? ['draft', 'preview'] : ['draft']
+  const [activeTab, setActiveTab] = useState(availableTabs[0] ?? 'draft')
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [previewLayout, setPreviewLayout] = useState({
+    device: session?.layoutReview?.device ?? 'mobile',
+    fontSize: session?.layoutReview?.fontSize ?? 'medium',
+  })
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        if (isFullscreen) {
+          setIsFullscreen(false)
+          return
+        }
+
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isFullscreen, onClose, open])
+
+  useEffect(() => {
+    if (!open || typeof document === 'undefined') {
+      return
+    }
+
+    const { body, documentElement } = document
+    const previousBodyOverflow = body.style.overflow
+    const previousHtmlOverflow = documentElement.style.overflow
+
+    body.style.overflow = 'hidden'
+    documentElement.style.overflow = 'hidden'
+
+    return () => {
+      body.style.overflow = previousBodyOverflow
+      documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!session) {
+      return
+    }
+
+    setActiveTab(session.stageId === 'completed' ? 'preview' : 'draft')
+    setIsFullscreen(false)
+    setPreviewLayout({
+      device: session.layoutReview?.device ?? 'mobile',
+      fontSize: session.layoutReview?.fontSize ?? 'medium',
+    })
+  }, [session])
+
+  if (!open || !session || typeof document === 'undefined') {
+    return null
+  }
+
+  const activeVersion = getActiveVersion(session)
+  const selectedTopic = getSelectedTopic(session)
+  const displayTitle = resolveVersionDisplayTitle(session, activeVersion)
+  const previewSession = {
+    ...session,
+    layoutReview: {
+      ...session.layoutReview,
+      device: previewLayout.device,
+      fontSize: previewLayout.fontSize,
+    },
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex justify-end overscroll-none bg-slate-950/18 backdrop-blur-[6px]" onClick={onClose} role="presentation">
+      <aside
+        className={cn(
+          'flex h-full w-full flex-col overflow-hidden overscroll-contain bg-white shadow-[-20px_0_60px_rgba(15,23,42,0.14)]',
+          isFullscreen ? 'sm:w-full' : 'sm:w-[80vw]',
+        )}
+        onClick={(event) => event.stopPropagation()}
+        role="presentation"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-border/70 px-6 pb-5 pt-6">
+          <div className="min-w-0">
+            <h2 className="text-[24px] font-semibold leading-[1.25] tracking-[-0.02em] text-foreground">
+              文字预览
+            </h2>
+            <div className="mt-2 truncate text-[15px] leading-7 text-foreground/78">{displayTitle}</div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={cn('rounded-full px-2.5 py-1 text-[11px]', getArticleListStatusMeta(session.stageId).className)}>
+                {getArticleListStatusMeta(session.stageId).label}
+              </span>
+              <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">
+                {selectedTopic?.theme || '未设置母题'}
+              </span>
+            </div>
+          </div>
+
+          <button
+            aria-label="关闭文章预览"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border/70 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:bg-secondary/35 hover:text-foreground"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-b border-border/70 px-6 py-3">
+          <div className="benchmark-scroll-hidden flex min-w-0 gap-2 overflow-x-auto">
+            {availableTabs.map((tabId) => {
+              const tabMeta =
+                tabId === 'preview'
+                  ? { icon: LayoutTemplate, label: '排版预览' }
+                  : { icon: FileText, label: '文字稿' }
+
+              return (
+                <button
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-[13px] transition-colors',
+                    activeTab === tabId
+                      ? 'border-border/75 bg-white text-foreground'
+                      : 'border-transparent text-muted-foreground hover:bg-secondary/40 hover:text-foreground',
+                  )}
+                  key={tabId}
+                  onClick={() => setActiveTab(tabId)}
+                  type="button"
+                >
+                  <tabMeta.icon size={14} />
+                  {tabMeta.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <button
+            aria-label={isFullscreen ? '退出全屏' : '全屏视图'}
+            className="inline-flex shrink-0 items-center justify-center rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+            onClick={() => setIsFullscreen((current) => !current)}
+            type="button"
+          >
+            {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-hidden bg-white">
+          {activeTab === 'preview' ? (
+            <div className="benchmark-scroll-hidden h-full overflow-y-auto overscroll-contain">
+              <PreviewWorkbench
+                onSetDevice={(device) =>
+                  setPreviewLayout((current) => ({
+                    ...current,
+                    device,
+                  }))
+                }
+                onSetFontSize={(fontSize) =>
+                  setPreviewLayout((current) => ({
+                    ...current,
+                    fontSize,
+                  }))
+                }
+                session={previewSession}
+              />
+            </div>
+          ) : (
+            <div className="benchmark-scroll-hidden h-full overflow-y-auto overscroll-contain">
+              <DraftWorkbench session={session} version={activeVersion} />
+            </div>
+          )}
+        </div>
+      </aside>
+    </div>,
+    document.body,
+  )
+}
+
+function ArticlesModuleCanvas({ articles, onOpenArticle }) {
+  return (
+    <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white">
+      <div className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-5 lg:px-6">
+        <div className="mb-8">
+          <h1 className="text-[30px] font-semibold tracking-[-0.03em] text-foreground sm:text-[34px]">文章列表</h1>
+          <div className="mt-4 inline-flex rounded-full bg-secondary px-3 py-1.5 text-[12px] text-muted-foreground">
+            创作中 {articles.length} 篇
+          </div>
+        </div>
+
+        <section>
+          <div className="mb-3 text-[12px] font-medium tracking-[0.08em] text-muted-foreground">创作中</div>
+
+          {articles.length === 0 ? (
+            <div className="border-t border-border/70 py-16 text-center text-[14px] text-muted-foreground">
+              暂无已确认文字稿的文章
+            </div>
+          ) : (
+            <div className="border-t border-border/70">
+              {articles.map((article) => (
+                <ArticleListRow article={article} key={article.id} onOpen={onOpenArticle} />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  )
+}
+
 export default function BenchmarkWorkbenchPage() {
   const activeSessionId = useBenchmarkStore((state) => state.activeSessionId)
   const createSession = useBenchmarkStore((state) => state.createSession)
@@ -2499,6 +2771,7 @@ export default function BenchmarkWorkbenchPage() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [activeModule, setActiveModule] = useState('content')
+  const [articlePreviewSessionId, setArticlePreviewSessionId] = useState(null)
   const [sessionPendingDelete, setSessionPendingDelete] = useState(null)
   const [copiedMessageId, setCopiedMessageId] = useState(null)
   const [isResizingSplit, setIsResizingSplit] = useState(false)
@@ -2522,9 +2795,12 @@ export default function BenchmarkWorkbenchPage() {
   )
   const historySessions = useMemo(() => orderedSessions.filter(hasSessionHistory), [orderedSessions])
   const topicStatusById = useMemo(() => getTopicStatusMap(sessions), [sessions])
+  const articleEntries = useMemo(() => createArticleListEntries(sessions), [sessions])
 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? orderedSessions[0] ?? sessions[0] ?? null
+  const activeArticleSession =
+    articlePreviewSessionId != null ? sessions.find((session) => session.id === articlePreviewSessionId) ?? null : null
   const currentSessionId = activeSession?.id ?? null
   const currentStageId = activeSession?.stageId ?? 'topic'
   const selectedTopic = activeSession ? getSelectedTopic(activeSession) : null
@@ -2574,6 +2850,22 @@ export default function BenchmarkWorkbenchPage() {
       setActiveSessionId(orderedSessions[0].id)
     }
   }, [currentSessionId, orderedSessions, setActiveSessionId])
+
+  useEffect(() => {
+    if (activeModule !== 'articles') {
+      setArticlePreviewSessionId(null)
+    }
+  }, [activeModule])
+
+  useEffect(() => {
+    if (!articlePreviewSessionId) {
+      return
+    }
+
+    if (!activeArticleSession || (activeArticleSession.stageId !== 'preview' && activeArticleSession.stageId !== 'completed')) {
+      setArticlePreviewSessionId(null)
+    }
+  }, [activeArticleSession, articlePreviewSessionId])
 
   useEffect(() => {
     if (!activeSession || availableTabs.length === 0) {
@@ -3383,8 +3675,17 @@ export default function BenchmarkWorkbenchPage() {
 
   function handleSelectSession(sessionId) {
     setActiveModule('content')
+    setArticlePreviewSessionId(null)
     setActiveSessionId(sessionId)
     setCopiedMessageId(null)
+  }
+
+  function handleOpenArticlePreview(sessionId) {
+    setArticlePreviewSessionId(sessionId)
+  }
+
+  function handleCloseArticlePreview() {
+    setArticlePreviewSessionId(null)
   }
 
   function handleQuickMessageInsert(label) {
@@ -3489,7 +3790,11 @@ export default function BenchmarkWorkbenchPage() {
             }}
           >
             {!isContentModule ? (
-              <LibraryModuleCanvas topicStatusById={topicStatusById} />
+              activeModule === 'library' ? (
+                <LibraryModuleCanvas topicStatusById={topicStatusById} />
+              ) : (
+                <ArticlesModuleCanvas articles={articleEntries} onOpenArticle={handleOpenArticlePreview} />
+              )
             ) : shouldRenderHero ? (
               <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto">
                 <div className="mx-auto flex w-full max-w-[1240px] flex-col items-center px-6 py-8 sm:px-8 lg:px-12">
@@ -3663,6 +3968,12 @@ export default function BenchmarkWorkbenchPage() {
         onConfirm={handleConfirmDeleteSession}
         open={Boolean(sessionPendingDelete)}
         sessionTitle={sessionPendingDelete?.title ?? ''}
+      />
+
+      <ArticlePreviewDrawer
+        onClose={handleCloseArticlePreview}
+        open={activeModule === 'articles' && Boolean(activeArticleSession)}
+        session={activeArticleSession}
       />
     </section>
   )
