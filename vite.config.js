@@ -14,6 +14,7 @@ import {
 } from './server/contentCreation.js'
 import {
   deletePersistedContentSessionPayload,
+  readContentSessionPersistenceMeta,
   readPersistedContentSessionPayload,
   writePersistedContentSessionPayload,
 } from './server/contentSessionPersistence.js'
@@ -451,7 +452,12 @@ function contentSessionsDevApi() {
 
             res.statusCode = 200
             res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify(payload ?? { item: null, name: 'content-creation-sessions-v1', updatedAt: null }))
+            res.end(
+              JSON.stringify({
+                ...(payload ?? { item: null, name: 'content-creation-sessions-v1', updatedAt: null }),
+                meta: readContentSessionPersistenceMeta(),
+              }),
+            )
             return
           }
 
@@ -464,7 +470,12 @@ function contentSessionsDevApi() {
 
             res.statusCode = 200
             res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify(payload))
+            res.end(
+              JSON.stringify({
+                ...payload,
+                meta: readContentSessionPersistenceMeta(),
+              }),
+            )
             return
           }
 
