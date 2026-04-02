@@ -21,6 +21,10 @@ const EMPTY_SHARED_RUNTIME_CONFIG = {
     apiKey: '',
     model: DEFAULT_MINIMAX_MODEL,
   },
+  wechatOfficialAccount: {
+    appId: '',
+    appSecret: '',
+  },
 }
 
 const EMPTY_MINIMAX_CONFIG = {
@@ -101,6 +105,10 @@ function readSharedRuntimeConfig() {
       minimax: {
         ...EMPTY_SHARED_RUNTIME_CONFIG.minimax,
         ...(parsed?.minimax ?? {}),
+      },
+      wechatOfficialAccount: {
+        ...EMPTY_SHARED_RUNTIME_CONFIG.wechatOfficialAccount,
+        ...(parsed?.wechatOfficialAccount ?? {}),
       },
     }
   } catch {
@@ -187,6 +195,20 @@ export function resolveSharedRuntimeConfig() {
         minimaxDocConfig.model ||
         DEFAULT_MINIMAX_MODEL,
     },
+    wechatOfficialAccount: {
+      appId:
+        normalizeTrimmedString(sharedConfig.wechatOfficialAccount.appId) ||
+        normalizeTrimmedString(process.env.WECHAT_OFFICIAL_ACCOUNT_APP_ID) ||
+        normalizeTrimmedString(dotEnvConfig.WECHAT_OFFICIAL_ACCOUNT_APP_ID) ||
+        normalizeTrimmedString(process.env.WECHAT_APP_ID) ||
+        normalizeTrimmedString(dotEnvConfig.WECHAT_APP_ID),
+      appSecret:
+        normalizeTrimmedString(sharedConfig.wechatOfficialAccount.appSecret) ||
+        normalizeTrimmedString(process.env.WECHAT_OFFICIAL_ACCOUNT_APP_SECRET) ||
+        normalizeTrimmedString(dotEnvConfig.WECHAT_OFFICIAL_ACCOUNT_APP_SECRET) ||
+        normalizeTrimmedString(process.env.WECHAT_APP_SECRET) ||
+        normalizeTrimmedString(dotEnvConfig.WECHAT_APP_SECRET),
+    },
   }
 }
 
@@ -232,5 +254,18 @@ export function resolveDoubaoAsrConfig(overrides = {}) {
     appId,
     configured: Boolean(appId && accessKey),
     resourceId,
+  }
+}
+
+export function resolveWeChatOfficialAccountConfig(overrides = {}) {
+  const sharedRuntimeConfig = resolveSharedRuntimeConfig()
+  const appId = normalizeTrimmedString(overrides.appId) || sharedRuntimeConfig.wechatOfficialAccount.appId
+  const appSecret =
+    normalizeTrimmedString(overrides.appSecret) || sharedRuntimeConfig.wechatOfficialAccount.appSecret
+
+  return {
+    appId,
+    appSecret,
+    configured: Boolean(appId && appSecret),
   }
 }

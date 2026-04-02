@@ -541,6 +541,9 @@ function createSession(index = 1, options = {}) {
     draftSync: {
       attemptCount: 0,
       error: '',
+      lastSyncedAt: null,
+      mediaId: '',
+      provider: '',
       status: 'idle',
       summary: null,
     },

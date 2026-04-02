@@ -118,15 +118,15 @@ export function createDefaultArticleTemplateConfig() {
     },
     fontProfiles: {
       large: {
-        bodyLineHeight: 1.8,
+        bodyLineHeight: 2.2,
         bodySize: 17,
       },
       medium: {
-        bodyLineHeight: 1.8,
+        bodyLineHeight: 2.2,
         bodySize: 16,
       },
       small: {
-        bodyLineHeight: 1.8,
+        bodyLineHeight: 2.2,
         bodySize: 15,
       },
     },

@@ -44,6 +44,7 @@ import {
   extractUsedAssetIds,
   getRenderablePreviewSlots,
   renderArticlePreviewDocument,
+  renderWechatDraftHtml,
   stripPreviewHeading,
 } from '@/lib/articlePreviewHtml.jsx'
 import { cn } from '@/lib/utils'
@@ -1421,6 +1422,44 @@ async function requestPersistedContentSessionsUpdate(item) {
   }
 
   return payload
+}
+
+async function requestWechatDraftStatus(sessionId) {
+  const searchParams = new URLSearchParams()
+
+  if (sessionId) {
+    searchParams.set('sessionId', sessionId)
+  }
+
+  const query = searchParams.toString()
+  const response = await fetch(query ? `/api/wechat/draft/status?${query}` : '/api/wechat/draft/status')
+  const payload = await readJsonResponse(response, '微信草稿状态接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '读取微信草稿状态失败')
+  }
+
+  return payload ?? {}
+}
+
+async function requestWechatDraftSync({ article, sessionId }) {
+  const response = await fetch('/api/wechat/draft/sync', {
+    body: JSON.stringify({
+      article,
+      sessionId,
+    }),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  })
+  const payload = await readJsonResponse(response, '微信草稿同步接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '同步微信草稿失败')
+  }
+
+  return payload ?? {}
 }
 
 function buildPersistedContentSessionItem(state) {
@@ -2872,9 +2911,16 @@ function ReportWorkbench({ version }) {
   )
 }
 
-function PreviewWorkbench({ onSetDevice, onSetFontSize, session, templateConfig }) {
+function PreviewWorkbench({ onSetDevice, onSetFontSize, onUpdateDraftSync, session, templateConfig }) {
   const { device, fontSize } = session.layoutReview
   const [copyStatus, setCopyStatus] = useState('idle')
+  const [isWechatSyncing, setIsWechatSyncing] = useState(false)
+  const [wechatStatus, setWechatStatus] = useState({
+    appId: '',
+    configured: false,
+    error: '',
+    isLoading: true,
+  })
   const topic = getSelectedTopic(session)
   const version = getActiveVersion(session)
   const { config: fixedLayoutConfig } = useFixedLayoutConfigState()
@@ -2898,6 +2944,76 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session, templateConfig 
       }),
     [bodyMarkdown, device, displayTitle, fixedLayoutConfig, fontSize, previewSlots, templateConfig, topic?.penName, topic?.type, version?.wordCount],
   )
+  const wechatRenderResult = useMemo(
+    () =>
+      renderWechatDraftHtml({
+        articleType: topic?.type || '',
+        bodyMarkdown,
+        fixedLayoutConfig,
+        fontSize,
+        imageSlots: previewSlots,
+        origin: '',
+        penName: topic?.penName || '',
+        templateConfig,
+        wordCount: version?.wordCount ?? 0,
+      }),
+    [bodyMarkdown, fixedLayoutConfig, fontSize, previewSlots, templateConfig, topic?.penName, topic?.type, version?.wordCount],
+  )
+  const wechatCoverImageSrc =
+    fixedLayoutConfig?.heroGif?.path || previewSlots.map((slot) => slot?.asset?.path || '').find(Boolean) || ''
+  const wechatDraftSync = session?.draftSync?.provider === 'wechat' ? session.draftSync : session?.draftSync ?? null
+
+  useEffect(() => {
+    if (!session?.id) {
+      setWechatStatus({
+        appId: '',
+        configured: false,
+        error: '',
+        isLoading: false,
+      })
+      return
+    }
+
+    let cancelled = false
+
+    setWechatStatus((current) => ({
+      ...current,
+      error: '',
+      isLoading: true,
+    }))
+
+    requestWechatDraftStatus(session.id)
+      .then((payload) => {
+        if (cancelled) {
+          return
+        }
+
+        setWechatStatus({
+          appId: payload?.appId || '',
+          configured: Boolean(payload?.configured),
+          error: '',
+          isLoading: false,
+        })
+
+        if (payload?.draftSync && onUpdateDraftSync) {
+          onUpdateDraftSync(payload.draftSync)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setWechatStatus({
+            appId: '',
+            configured: false,
+            error: error.message || '读取微信草稿状态失败',
+            isLoading: false,
+          })
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [session?.id])
 
   async function handleCopyWechat() {
     if (!previewRenderResult.bodyHtml) {
@@ -2917,6 +3033,79 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session, templateConfig 
       }, 2000)
     }
   }
+
+  async function handleSyncWechatDraft() {
+    if (!session?.id || !wechatRenderResult.bodyHtml || isWechatSyncing) {
+      return
+    }
+
+    const nextDraftSync = {
+      ...(session?.draftSync ?? {}),
+      attemptCount: Math.max(1, Number(session?.draftSync?.attemptCount || 0) + 1),
+      error: '',
+      lastSyncedAt: session?.draftSync?.lastSyncedAt ?? null,
+      mediaId: session?.draftSync?.mediaId ?? '',
+      provider: 'wechat',
+      status: 'syncing',
+      summary: null,
+    }
+
+    setIsWechatSyncing(true)
+    onUpdateDraftSync?.(nextDraftSync)
+
+    try {
+      const payload = await requestWechatDraftSync({
+        article: {
+          author: topic?.penName || '',
+          bodyHtml: wechatRenderResult.bodyHtml,
+          contentSourceUrl: '',
+          coverImageSrc: wechatCoverImageSrc,
+          mediaId: session?.draftSync?.mediaId || '',
+          plainText: wechatRenderResult.plainText,
+          title: displayTitle || '未命名文章',
+        },
+        sessionId: session.id,
+      })
+
+      if (payload?.draftSync) {
+        onUpdateDraftSync?.(payload.draftSync)
+      }
+
+      setWechatStatus((current) => ({
+        ...current,
+        error: '',
+      }))
+    } catch (error) {
+      onUpdateDraftSync?.({
+        ...nextDraftSync,
+        error: error.message || '同步微信草稿失败',
+        status: 'error',
+      })
+      setWechatStatus((current) => ({
+        ...current,
+        error: error.message || '同步微信草稿失败',
+      }))
+    } finally {
+      setIsWechatSyncing(false)
+    }
+  }
+
+  const syncActionLabel = isWechatSyncing
+    ? '同步中...'
+    : wechatDraftSync?.mediaId
+      ? '更新微信草稿'
+      : '保存到微信草稿'
+  const syncStatusMessage = isWechatSyncing
+    ? '正在同步到微信草稿箱，正文图片会自动上传到微信素材。'
+    : wechatDraftSync?.status === 'success' && wechatDraftSync?.lastSyncedAt
+      ? `已同步到微信草稿箱 · ${formatMessageTime(wechatDraftSync.lastSyncedAt)}`
+      : wechatDraftSync?.status === 'error' && wechatDraftSync?.error
+        ? `同步失败：${wechatDraftSync.error}`
+        : wechatStatus?.error
+          ? `状态异常：${wechatStatus.error}`
+          : !wechatStatus.configured
+            ? '当前未配置微信公众号凭证，暂时不能保存草稿。'
+            : '同步后会写入公众号草稿箱，不会自动发布。'
 
   return (
     <div className="benchmark-scroll-hidden h-full min-h-0 overflow-y-auto px-6 py-6">
@@ -2965,6 +3154,16 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session, templateConfig 
           </div>
 
           <div className="flex items-center gap-3">
+            <Button
+              className="rounded-full"
+              disabled={!wechatStatus.configured || !wechatCoverImageSrc || !version?.id || isWechatSyncing}
+              onClick={handleSyncWechatDraft}
+              size="sm"
+              type="button"
+            >
+              {isWechatSyncing ? <LoaderCircle className="mr-1.5 animate-spin" size={13} /> : null}
+              {syncActionLabel}
+            </Button>
             <Button className="rounded-full" onClick={handleCopyWechat} size="sm" type="button" variant="outline">
               {copyStatus === 'copied' ? (
                 <>
@@ -2986,6 +3185,14 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session, templateConfig 
           </div>
         </div>
 
+        <div className="rounded-[18px] border border-border/70 bg-secondary/25 px-4 py-3 text-[12px] leading-6 text-muted-foreground">
+          <div>{syncStatusMessage}</div>
+          {wechatStatus.appId ? <div className="mt-1">公众号 AppID：{wechatStatus.appId}</div> : null}
+          {!wechatCoverImageSrc && wechatStatus.configured ? (
+            <div className="mt-1 text-[#b42318]">当前没有可用封面图，微信草稿同步会被拦截。</div>
+          ) : null}
+        </div>
+
         <div className="rounded-[22px] border border-border/70 bg-white px-5 py-4 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
           <div className="text-[11px] tracking-[0.08em] text-muted-foreground">文章标题</div>
           <div className="mt-2 text-[18px] font-semibold leading-[1.55] text-foreground">{displayTitle || '未命名标题'}</div>
@@ -2995,7 +3202,7 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, session, templateConfig 
         </div>
 
         <div className="flex justify-center">
-          <div className={cn('transition-all', device === 'mobile' ? 'w-[430px] max-w-full' : 'w-full max-w-[860px]')}>
+          <div className={cn('transition-all', device === 'mobile' ? 'w-[375px] max-w-full' : 'w-full max-w-[860px]')}>
             <div
               className={cn(
                 device === 'mobile'
@@ -3059,6 +3266,7 @@ function RightWorkbenchShell({
   activeTabId,
   onOpenTab,
   onSelectVersion,
+  onUpdateDraftSync,
   onSetDevice,
   onSetFontSize,
   session,
@@ -3093,7 +3301,15 @@ function RightWorkbenchShell({
       case 'report':
         return <ReportWorkbench version={activeVersion} />
       case 'preview':
-        return <PreviewWorkbench onSetDevice={onSetDevice} onSetFontSize={onSetFontSize} session={session} templateConfig={templateConfig} />
+        return (
+          <PreviewWorkbench
+            onSetDevice={onSetDevice}
+            onSetFontSize={onSetFontSize}
+            onUpdateDraftSync={onUpdateDraftSync}
+            session={session}
+            templateConfig={templateConfig}
+          />
+        )
       case 'versions':
         return (
           <VersionsWorkbench
@@ -4651,7 +4867,7 @@ function ArticleTemplateModuleCanvas({ previewSample, templateConfigState }) {
                   <ArticlePreviewFrame documentHtml={previewRenderResult.documentHtml} title="排版模板预览-PC" />
                 </div>
               ) : (
-                <div className="w-[430px] max-w-full border border-[#ececf2] bg-white shadow-[0_8px_24px_rgba(18,20,38,0.08)]">
+                <div className="w-[375px] max-w-full border border-[#ececf2] bg-white shadow-[0_8px_24px_rgba(18,20,38,0.08)]">
                   <ArticlePreviewFrame documentHtml={previewRenderResult.documentHtml} title="排版模板预览-移动端" />
                 </div>
               )}
@@ -6284,6 +6500,15 @@ export default function BenchmarkWorkbenchPage() {
                       title: resolveVersionDisplayTitle(nextSession, nextVersion),
                     }
                   })
+                }
+                onUpdateDraftSync={(draftSync) =>
+                  updateCurrentSession((current) => ({
+                    ...current,
+                    draftSync: {
+                      ...current.draftSync,
+                      ...(draftSync ?? {}),
+                    },
+                  }))
                 }
                 onSetDevice={(device) =>
                   updateCurrentSession((current) => ({

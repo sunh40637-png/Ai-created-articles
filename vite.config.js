@@ -36,6 +36,7 @@ import {
 import { chatWithMiniMax } from './server/minimax.js'
 import { resolveDoubaoAsrConfig, resolveMiniMaxConfig } from './server/runtimeConfig.js'
 import { generateTopicRecommendations } from './server/topicRecommendations.js'
+import { readWechatDraftStatus, syncSessionToWechatDraft } from './server/wechatDraft.js'
 
 function parseRangeHeader(rangeHeader, size) {
   if (!rangeHeader || !rangeHeader.startsWith('bytes=')) {
@@ -557,6 +558,65 @@ function contentSessionsDevApi() {
   }
 }
 
+function wechatDraftDevApi() {
+  return {
+    name: 'wechat-draft-dev-api',
+    configureServer(server) {
+      async function readJsonBody(req) {
+        const chunks = []
+
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+
+        return chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+      }
+
+      server.middlewares.use('/api/wechat/draft', async (req, res, next) => {
+        const requestUrl = new URL(req.url, 'http://127.0.0.1')
+        const pathname = requestUrl.pathname || '/'
+
+        try {
+          if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/status') {
+            const result = await readWechatDraftStatus({
+              sessionId: requestUrl.searchParams.get('sessionId') || '',
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if (req.method === 'POST' && pathname === '/sync') {
+            const body = await readJsonBody(req)
+            const result = await syncSessionToWechatDraft({
+              article: body?.article ?? {},
+              sessionId: body?.sessionId ?? '',
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          next()
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              details: error.payload ?? null,
+              error: error.message || '微信草稿同步失败',
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
 function benchmarkPipelineDevApi(env) {
   return {
     name: 'benchmark-pipeline-dev-api',
@@ -736,6 +796,7 @@ export default defineConfig(({ mode }) => {
       fixedLayoutConfigDevApi(),
       articleTemplateConfigDevApi(),
       contentSessionsDevApi(),
+      wechatDraftDevApi(),
       benchmarkPipelineDevApi(runtimeEnv),
     ],
     resolve: {

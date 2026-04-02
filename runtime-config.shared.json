@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-04-02T00:00:00.000Z",
+  "updatedAt": "2026-04-03T00:00:00.000Z",
   "minimax": {
     "apiKey": "sk-api-DzCfRxuEg6iyaUiTghLhsyXc3h-WqX3WJMU0AqS3V95ScClTzSMbYPiu27AYDBKtTPTBD9PtgBiTeuV43n8u4E_Z8CNPXYghupySMDAGH_4KGPP6Kr6auSY",
     "model": "MiniMax-M2.7"
@@ -16,5 +16,9 @@
     "appId": "",
     "accessKey": "",
     "resourceId": "volc.bigasr.auc_turbo"
+  },
+  "wechatOfficialAccount": {
+    "appId": "wx792650284a76ccfa",
+    "appSecret": "99d03607b5b05cd15609df2f5d6b7646"
   }
 }

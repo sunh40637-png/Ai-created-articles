@@ -1166,6 +1166,38 @@ export function renderArticlePreviewDocument({
   }
 }
 
+export function renderWechatDraftHtml({
+  articleType = '',
+  bodyMarkdown = '',
+  fixedLayoutConfig = null,
+  fontSize = 'medium',
+  imageSlots = [],
+  origin = '',
+  penName = '',
+  templateConfig = null,
+  wordCount = 0,
+} = {}) {
+  const result = renderArticlePreviewDocument({
+    articleType,
+    bodyMarkdown,
+    device: 'mobile',
+    displayTitle: '',
+    fixedLayoutConfig,
+    fontSize,
+    imageSlots,
+    origin,
+    penName,
+    previewMode: 'production',
+    templateConfig,
+    wordCount,
+  })
+
+  return {
+    bodyHtml: result.bodyHtml,
+    plainText: result.plainText,
+  }
+}
+
 export function createTemplatePreviewPlaceholderSlots(templateConfig = null) {
   const templateSlots = getTemplateBodyImageSlots(templateConfig)
 
