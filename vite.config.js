@@ -19,6 +19,7 @@ import {
   writePersistedContentSessionPayload,
 } from './server/contentSessionPersistence.js'
 import { parseRequestFormData } from './server/httpFormData.js'
+import { readArticleTemplateConfig, writeArticleTemplateConfig } from './server/articleTemplateConfig.js'
 import {
   deleteFixedLayoutAsset,
   readFixedLayoutConfig,
@@ -431,6 +432,59 @@ function fixedLayoutConfigDevApi() {
   }
 }
 
+function articleTemplateConfigDevApi() {
+  return {
+    name: 'article-template-config-dev-api',
+    configureServer(server) {
+      async function readJsonBody(req) {
+        const chunks = []
+
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+
+        return chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+      }
+
+      server.middlewares.use('/api/article-template-config', async (req, res, next) => {
+        const requestUrl = new URL(req.url, 'http://127.0.0.1')
+        const pathname = requestUrl.pathname || '/'
+
+        try {
+          if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/') {
+            const result = await readArticleTemplateConfig()
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if (req.method === 'PUT' && pathname === '/') {
+            const body = await readJsonBody(req)
+            const result = await writeArticleTemplateConfig(body ?? {})
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          next()
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error.message || '排版模板配置请求失败',
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
 function contentSessionsDevApi() {
   return {
     name: 'content-sessions-dev-api',
@@ -680,6 +734,7 @@ export default defineConfig(({ mode }) => {
       topicRecommendationDevApi(runtimeEnv),
       libraryAssetsDevApi(),
       fixedLayoutConfigDevApi(),
+      articleTemplateConfigDevApi(),
       contentSessionsDevApi(),
       benchmarkPipelineDevApi(runtimeEnv),
     ],

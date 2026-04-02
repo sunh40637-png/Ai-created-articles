@@ -556,6 +556,7 @@ export async function matchLibraryAssetsForArticle({ topic = '', type = '', word
       order: index + 1,
       paragraphIndex: index,
       positionLabel: `第 ${index + 1} 段后`,
+      sectionOrder: index + 1,
       slotId: `slot_${index + 1}`,
       status: 'matched',
     })),
