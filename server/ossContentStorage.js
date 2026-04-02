@@ -1,11 +1,31 @@
 import crypto from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import {
+  CONTENT_TOPIC_LIBRARY,
+  MAX_ARTICLE_SESSIONS,
+  TOPIC_PAGE_SIZE,
+  getTopicStatusMap,
+} from '../src/stores/useBenchmarkStore.js'
+import {
+  CONTENT_RULE_PROFILES,
+  DEFAULT_CONTENT_RULE_PROFILE_ID,
+  resolveLiveContentRuleProfileId,
+} from './contentRuleProfiles.js'
 
 const OSS_ROOT_PREFIX = 'content-system'
 const SESSION_INDEX_KEY = `${OSS_ROOT_PREFIX}/index/sessions.json`
 const ARTICLE_INDEX_KEY = `${OSS_ROOT_PREFIX}/index/articles.json`
 const TOPIC_INDEX_KEY = `${OSS_ROOT_PREFIX}/index/topics.json`
 const CONFIG_INDEX_KEY = `${OSS_ROOT_PREFIX}/index/configs.json`
+const TOPIC_LIBRARY_KEY = `${OSS_ROOT_PREFIX}/topic-library/topic-library.json`
+const WRITING_CONFIG_KEY = `${OSS_ROOT_PREFIX}/configs/writing-config.json`
+const SYSTEM_CONFIG_KEY = `${OSS_ROOT_PREFIX}/configs/system-config.json`
+const TOPIC_STATUS_PRIORITY = {
+  pending: 0,
+  'in-progress': 1,
+  completed: 2,
+}
+const STATIC_RESOURCE_CREATED_AT = '2026-04-02T00:00:00.000Z'
 let cachedDotEnvConfig = null
 
 function normalizeTrimmedString(value) {
@@ -465,6 +485,175 @@ function buildArticleIndexPayload(state) {
   }
 }
 
+function buildTopicLinkMap(state) {
+  const sessions = Array.isArray(state?.sessions) ? state.sessions : []
+
+  return sessions.reduce((topicLinkMap, session) => {
+    const topicId =
+      typeof session?.topicSelection?.selectedTopicId === 'string'
+        ? session.topicSelection.selectedTopicId
+        : typeof session?.topicSelection?.selectedTopic?.id === 'string'
+          ? session.topicSelection.selectedTopic.id
+          : ''
+
+    if (!topicId) {
+      return topicLinkMap
+    }
+
+    const ids = buildSessionStorageIds(session)
+    const nextStatus = session?.stageId === 'completed' ? 'completed' : 'in-progress'
+    const nextUpdatedAt =
+      normalizeIsoTimestamp(session?.updatedAt) || normalizeIsoTimestamp(session?.createdAt) || new Date().toISOString()
+    const current = topicLinkMap[topicId]
+    const shouldReplace =
+      !current ||
+      TOPIC_STATUS_PRIORITY[nextStatus] > TOPIC_STATUS_PRIORITY[current.status] ||
+      (TOPIC_STATUS_PRIORITY[nextStatus] === TOPIC_STATUS_PRIORITY[current.status] &&
+        new Date(nextUpdatedAt).getTime() > new Date(current.updatedAt).getTime())
+
+    if (shouldReplace) {
+      topicLinkMap[topicId] = {
+        articleId: session?.stageId === 'preview' || session?.stageId === 'completed' ? ids.articleId : null,
+        sessionId: session?.id ?? '',
+        status: nextStatus,
+        updatedAt: nextUpdatedAt,
+      }
+    }
+
+    return topicLinkMap
+  }, {})
+}
+
+function buildTopicLibraryPayload(state) {
+  const topicStatusMap = getTopicStatusMap(Array.isArray(state?.sessions) ? state.sessions : [])
+  const topicLinkMap = buildTopicLinkMap(state)
+  const updatedAt = new Date().toISOString()
+
+  return {
+    items: CONTENT_TOPIC_LIBRARY.map((topic) => {
+      const status = topicStatusMap[topic.id] ?? 'pending'
+      const linkMeta = topicLinkMap[topic.id] ?? null
+
+      return {
+        createdAt: STATIC_RESOURCE_CREATED_AT,
+        id: topic.id,
+        linkedArticleId: linkMeta?.articleId ?? null,
+        penName: topic.penName,
+        reason: topic.reason,
+        status,
+        theme: topic.theme,
+        title: topic.title,
+        type: topic.type,
+        updatedAt: linkMeta?.updatedAt ?? updatedAt,
+      }
+    }),
+    schemaVersion: 1,
+    updatedAt,
+  }
+}
+
+function buildTopicIndexPayload(state) {
+  const topicLibraryPayload = buildTopicLibraryPayload(state)
+
+  return {
+    items: topicLibraryPayload.items
+      .map((topic) => ({
+        linkedArticleId: topic.linkedArticleId,
+        status: topic.status,
+        theme: topic.theme,
+        title: topic.title,
+        topicId: topic.id,
+        type: topic.type,
+        updatedAt: topic.updatedAt,
+      }))
+      .sort((left, right) => {
+        const statusGap = TOPIC_STATUS_PRIORITY[right.status] - TOPIC_STATUS_PRIORITY[left.status]
+
+        if (statusGap !== 0) {
+          return statusGap
+        }
+
+        return left.title.localeCompare(right.title, 'zh-CN')
+      }),
+    schemaVersion: 1,
+    updatedAt: topicLibraryPayload.updatedAt,
+  }
+}
+
+function resolveProfileMode(profileId) {
+  return profileId === 'B' ? 'candidate' : 'stable'
+}
+
+function buildWritingConfigPayload() {
+  const updatedAt = new Date().toISOString()
+  const liveRuleProfileIdMap = {
+    A型: resolveLiveContentRuleProfileId({ type: 'A型' }),
+    B型: resolveLiveContentRuleProfileId({ type: 'B型' }),
+    C型: resolveLiveContentRuleProfileId({ type: 'C型' }),
+  }
+
+  return {
+    activeRuleProfile: {
+      A型: resolveProfileMode(liveRuleProfileIdMap.A型),
+      B型: resolveProfileMode(liveRuleProfileIdMap.B型),
+      C型: resolveProfileMode(liveRuleProfileIdMap.C型),
+    },
+    availableProfiles: Object.values(CONTENT_RULE_PROFILES).map((profile) => ({
+      description: profile.description,
+      key: resolveProfileMode(profile.id),
+      label: profile.label,
+      profileId: profile.id,
+    })),
+    configId: 'writing-config',
+    createdAt: STATIC_RESOURCE_CREATED_AT,
+    defaultRuleProfileId: DEFAULT_CONTENT_RULE_PROFILE_ID,
+    liveRuleProfileIdMap,
+    penNames: ['明远', '芷若'],
+    schemaVersion: 1,
+    updatedAt,
+  }
+}
+
+function buildSystemConfigPayload() {
+  return {
+    configId: 'system-config',
+    contentSessionStorageKey: 'content-creation-sessions-v1',
+    createdAt: STATIC_RESOURCE_CREATED_AT,
+    maxArticleSessions: MAX_ARTICLE_SESSIONS,
+    persistenceTargets: ['local', 'aliyun-oss'],
+    schemaVersion: 1,
+    topicLibraryTotal: CONTENT_TOPIC_LIBRARY.length,
+    topicPageSize: TOPIC_PAGE_SIZE,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+function buildConfigIndexPayload() {
+  const writingConfig = buildWritingConfigPayload()
+  const systemConfig = buildSystemConfigPayload()
+
+  return {
+    items: [
+      {
+        configId: writingConfig.configId,
+        name: '文案创作配置',
+        path: WRITING_CONFIG_KEY,
+        updatedAt: writingConfig.updatedAt,
+        version: writingConfig.schemaVersion,
+      },
+      {
+        configId: systemConfig.configId,
+        name: '系统配置',
+        path: SYSTEM_CONFIG_KEY,
+        updatedAt: systemConfig.updatedAt,
+        version: systemConfig.schemaVersion,
+      },
+    ],
+    schemaVersion: 1,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 async function writeDerivedObjectsToOss(state) {
   const sessions = Array.isArray(state?.sessions) ? state.sessions : []
 
@@ -484,6 +673,11 @@ async function writeDerivedObjectsToOss(state) {
   await Promise.all([
     putJsonObject(SESSION_INDEX_KEY, buildSessionIndexPayload(state)),
     putJsonObject(ARTICLE_INDEX_KEY, buildArticleIndexPayload(state)),
+    putJsonObject(TOPIC_LIBRARY_KEY, buildTopicLibraryPayload(state)),
+    putJsonObject(TOPIC_INDEX_KEY, buildTopicIndexPayload(state)),
+    putJsonObject(WRITING_CONFIG_KEY, buildWritingConfigPayload()),
+    putJsonObject(SYSTEM_CONFIG_KEY, buildSystemConfigPayload()),
+    putJsonObject(CONFIG_INDEX_KEY, buildConfigIndexPayload()),
   ])
 }
 
@@ -594,6 +788,9 @@ export async function deleteContentSessionPayloadFromOss() {
     deleteObject(ARTICLE_INDEX_KEY),
     deleteObject(TOPIC_INDEX_KEY),
     deleteObject(CONFIG_INDEX_KEY),
+    deleteObject(TOPIC_LIBRARY_KEY),
+    deleteObject(WRITING_CONFIG_KEY),
+    deleteObject(SYSTEM_CONFIG_KEY),
   ])
 
   return { deleted: true }

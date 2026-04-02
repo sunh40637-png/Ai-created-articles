@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-const MAX_ARTICLE_SESSIONS = 16
-const TOPIC_PAGE_SIZE = 6
+export const MAX_ARTICLE_SESSIONS = 16
+export const TOPIC_PAGE_SIZE = 6
 const TOPIC_STATUS_PRIORITY = {
   pending: 0,
   'in-progress': 1,
