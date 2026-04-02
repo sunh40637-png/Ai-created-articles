@@ -1,5 +1,4 @@
 import crypto from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import {
   CONTENT_TOPIC_LIBRARY,
   MAX_ARTICLE_SESSIONS,
@@ -11,6 +10,7 @@ import {
   DEFAULT_CONTENT_RULE_PROFILE_ID,
   resolveLiveContentRuleProfileId,
 } from './contentRuleProfiles.js'
+import { resolveAliyunOssConfig } from './runtimeConfig.js'
 
 const OSS_ROOT_PREFIX = 'content-system'
 const SESSION_INDEX_KEY = `${OSS_ROOT_PREFIX}/index/sessions.json`
@@ -26,55 +26,6 @@ const TOPIC_STATUS_PRIORITY = {
   completed: 2,
 }
 const STATIC_RESOURCE_CREATED_AT = '2026-04-02T00:00:00.000Z'
-let cachedDotEnvConfig = null
-
-function normalizeTrimmedString(value) {
-  return typeof value === 'string' && value.trim() ? value.trim() : ''
-}
-
-function stripProtocol(value = '') {
-  return String(value).replace(/^https?:\/\//i, '').replace(/\/+$/, '')
-}
-
-function readDotEnvConfig() {
-  if (cachedDotEnvConfig) {
-    return cachedDotEnvConfig
-  }
-
-  try {
-    const content = readFileSync(new URL('../.env', import.meta.url), 'utf8')
-    const parsed = {}
-
-    for (const rawLine of content.split(/\r?\n/)) {
-      const line = rawLine.trim()
-
-      if (!line || line.startsWith('#')) {
-        continue
-      }
-
-      const separatorIndex = line.indexOf('=')
-
-      if (separatorIndex === -1) {
-        continue
-      }
-
-      const key = line.slice(0, separatorIndex).trim()
-      const value = line.slice(separatorIndex + 1).trim()
-
-      if (!key) {
-        continue
-      }
-
-      parsed[key] = value
-    }
-
-    cachedDotEnvConfig = parsed
-  } catch {
-    cachedDotEnvConfig = {}
-  }
-
-  return cachedDotEnvConfig
-}
 
 function normalizeIsoTimestamp(value) {
   if (!value || typeof value !== 'string') {
@@ -112,26 +63,6 @@ function encodeObjectKey(objectKey = '') {
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/')
-}
-
-function resolveAliyunOssConfig() {
-  const dotEnvConfig = readDotEnvConfig()
-  const bucket = normalizeTrimmedString(process.env.ALIYUN_OSS_BUCKET || dotEnvConfig.ALIYUN_OSS_BUCKET)
-  const region = normalizeTrimmedString(process.env.ALIYUN_OSS_REGION || dotEnvConfig.ALIYUN_OSS_REGION)
-  const endpoint = stripProtocol(process.env.ALIYUN_OSS_ENDPOINT || dotEnvConfig.ALIYUN_OSS_ENDPOINT)
-  const accessKeyId = normalizeTrimmedString(process.env.ALIYUN_OSS_ACCESS_KEY_ID || dotEnvConfig.ALIYUN_OSS_ACCESS_KEY_ID)
-  const accessKeySecret = normalizeTrimmedString(
-    process.env.ALIYUN_OSS_ACCESS_KEY_SECRET || dotEnvConfig.ALIYUN_OSS_ACCESS_KEY_SECRET,
-  )
-
-  return {
-    accessKeyId,
-    accessKeySecret,
-    bucket,
-    enabled: Boolean(bucket && endpoint && accessKeyId && accessKeySecret),
-    endpoint,
-    region,
-  }
 }
 
 function createOssError(message, status = 500, payload = null) {

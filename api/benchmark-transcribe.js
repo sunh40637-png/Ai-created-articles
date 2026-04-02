@@ -1,5 +1,6 @@
 import { runBenchmarkTranscription } from '../server/benchmarkPipeline.js'
 import { parseRequestFormData } from '../server/httpFormData.js'
+import { resolveDoubaoAsrConfig } from '../server/runtimeConfig.js'
 
 export const config = {
   api: {
@@ -14,6 +15,7 @@ export default async function handler(request, response) {
   }
 
   try {
+    const doubaoConfig = resolveDoubaoAsrConfig()
     const formData = await parseRequestFormData(request)
     const files = formData
       .getAll('files')
@@ -21,9 +23,9 @@ export default async function handler(request, response) {
 
     const result = await runBenchmarkTranscription({
       attachments: files,
-      doubaoAccessKey: process.env.DOUBAO_ASR_ACCESS_KEY,
-      doubaoAppId: process.env.DOUBAO_ASR_APP_ID,
-      doubaoResourceId: process.env.DOUBAO_ASR_RESOURCE_ID,
+      doubaoAccessKey: doubaoConfig.accessKey,
+      doubaoAppId: doubaoConfig.appId,
+      doubaoResourceId: doubaoConfig.resourceId,
     })
 
     response.status(200).json(result)

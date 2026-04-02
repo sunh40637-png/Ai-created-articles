@@ -12,8 +12,16 @@
   - 代表内容创作入口
   - 进入后使用当前内容创作工作流
 - `选题库`
-  - 当前仅保留框架入口
-  - 暂时为空白模块，不填充内容
+  - 当前已有选题列表展示
+  - 选题状态会根据创作进度映射为 `未创作 / 创作中 / 已创作`
+- `文章列表`
+  - 聚合展示已进入 `文字稿确认` 之后的文章
+  - 支持右侧抽屉预览 `文字稿 / 排版预览`
+- `素材库`
+  - 当前保留模块入口和页面框架
+  - 后续再补图片导入与查看能力
+- `图片配置`
+  - 当前用于固定图片与排版资源配置
 - `AI 对话历史`
   - 只展示真正发生过交互的会话
   - 新建但未开始的空白会话，不应出现在历史记录中
@@ -82,6 +90,29 @@
 - 不要擅自改动用户未要求的核心逻辑
 - 如果已有逻辑和用户新要求冲突，以用户最新要求为准
 
+### 4.6 云端持久化规则
+
+- 当前已经接入阿里云 `OSS`
+- 当前项目运行配置默认通过根目录 `runtime-config.shared.json` 跟踪
+  - 里面统一保存项目级 `MiniMax / OSS / Doubao` 配置
+  - 当前私人仓库场景下，允许把项目级密钥放进这份共享配置文件
+  - `.env` 只作为本机临时覆盖，不再是双机切换的必填项
+- 当前云端目录统一写入到：
+  - `content-system/sessions/*.json`
+  - `content-system/articles/*.json`
+  - `content-system/topic-library/topic-library.json`
+  - `content-system/configs/writing-config.json`
+  - `content-system/configs/system-config.json`
+  - `content-system/index/*.json`
+- 当前真实恢复链路只针对“会话历史”生效：
+  - 页面通过 `/api/content-sessions` 读取数据
+  - 读取时会比较本地镜像与 OSS 云端，优先使用更新的一份
+- `选题库` 和 `配置` 当前已同步到 OSS，但页面暂时仍以项目内代码常量为运行时来源
+- 不要擅自改 OSS 目录结构、文件命名规则、索引命名规则
+- 不要把密钥再分散写进其他 Git 跟踪文件
+  - 当前只允许集中放在 `runtime-config.shared.json`
+  - 不要再把同一套密钥重复写进零散脚本、临时文档或测试文件
+
 ## 5. 开发日志要求
 
 每次有实质性修改，都要同步更新根目录的 `开发日志.md`。
@@ -106,6 +137,20 @@
 - 提交信息应简洁明确，准确描述本轮改动范围
 - 每次准备推送前，都要先检查根目录 `开发日志.md` 是否已经同步更新
 - 如果本轮改动涉及历史记录持久化、固定配置、本地素材库这类用户数据或本地文件能力，推送前必须再次确认没有引入自动清空、自动覆盖、或错误重置逻辑
+- 如果本轮改动涉及 OSS 云端同步，推送前还必须补查：
+  - `/api/content-sessions` 是否仍可正常读写
+  - OSS 目录结构、索引路径、文件命名规则是否被误改
+  - 当前真实数据不会因为新逻辑被空状态覆盖
+- Git 只负责同步代码，不负责同步用户创作数据
+- 不允许把下面这些内容推到 Git：
+  - `.env`
+  - `.local-data/`
+  - 从 OSS 导出的用户真实 JSON 数据
+- 当前私人仓库例外：
+  - `runtime-config.shared.json` 允许进入 Git
+  - 这份文件就是双机协作用的项目级共享配置
+- 除了 `runtime-config.shared.json` 之外，不要再把 `AccessKey ID / AccessKey Secret` 写进其他 Git 跟踪文件
+- 如果只是为了调试 OSS 临时写了测试脚本、测试文件、临时日志，推送前必须清掉
 
 ### 6.2 拉取代码要求
 
@@ -116,6 +161,19 @@
   - 固定图片配置
 - 如果拉取后发现界面正常但数据丢失，不能先假设是“用户没数据”，要先排查持久化恢复逻辑
 - 如果本轮改动涉及持久化 key、schema、初始化逻辑、mock 开关、或 store 迁移，拉取后必须重点验证历史记录是否还能恢复
+- `git pull` 后如果本地历史为空，不能直接生成空会话覆盖，必须先检查：
+  - `.local-data/content-creation-sessions.json` 是否还在
+  - `/api/content-sessions` 是否能返回数据
+  - OSS 云端是否仍可读
+  - 本地与云端谁更新、当前恢复逻辑用了哪一份
+- 如果本轮改动涉及 OSS 云端同步，拉取后必须额外验证：
+  - `content-system/index/sessions.json`
+  - `content-system/index/articles.json`
+  - `content-system/index/topics.json`
+  - `content-system/index/configs.json`
+  这些索引路径没有被误改
+- Git 不是创作数据同步工具，拉取代码后能不能恢复历史，当前应以 OSS 恢复链路为准，不要再把数据恢复归因给 Git 本身
+- `git pull` 后项目默认应可直接启动，不应再要求每台电脑单独补 `.env`
 
 ### 6.3 文章创作历史记录保存要求
 
@@ -123,8 +181,10 @@
 - 当前统一方案是：
   - 浏览器端继续使用 `zustand persist + localStorage`
   - 同时保留本地文件镜像：`.local-data/content-creation-sessions.json`
+  - 同时保留 OSS 云端镜像：`content-system/sessions/*.json` + `content-system/index/sessions.json`
 - `.local-data/` 必须保持在 `.gitignore` 中，不能进入 Git 仓库
 - 同一台电脑上，拉取代码后历史记录应该仍能恢复
+- 不同电脑如果接入同一个 OSS Bucket，也应该可以从云端恢复历史
 - 不能在下面这些场景中清空或覆盖历史记录：
   - 页面初始化
   - mock 开关切换
@@ -136,7 +196,13 @@
 - 不能随意修改持久化 key
   - 当前 key：`content-creation-sessions-v1`
 - 如果后续一定要调整持久化结构，必须走保留旧数据的迁移
+- 不允许让更旧的本地缓存反向覆盖更新后的 OSS 数据
 - 涉及这块的具体口径，统一以根目录 `历史记录持久化统一处理逻辑.md` 为准
+- 如果要改下面这些内容，必须先做迁移方案，不能直接硬改：
+  - `content-creation-sessions-v1`
+  - `content-system/` 下的目录结构
+  - `index/*.json` 文件名
+  - `sessions/articles/topic-library/configs` 的 JSON 字段结构
 
 ## 7. 当前执行结论
 

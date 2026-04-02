@@ -33,7 +33,7 @@ import {
   updateLibraryAsset,
 } from './server/libraryAssets.js'
 import { chatWithMiniMax } from './server/minimax.js'
-import { resolveMiniMaxConfig } from './server/runtimeConfig.js'
+import { resolveDoubaoAsrConfig, resolveMiniMaxConfig } from './server/runtimeConfig.js'
 import { generateTopicRecommendations } from './server/topicRecommendations.js'
 
 function parseRangeHeader(rangeHeader, size) {
@@ -657,8 +657,16 @@ export default defineConfig(({ mode }) => {
     apiKey: env.MINIMAX_API_KEY,
     model: env.MINIMAX_MODEL,
   })
+  const doubaoConfig = resolveDoubaoAsrConfig({
+    accessKey: env.DOUBAO_ASR_ACCESS_KEY,
+    appId: env.DOUBAO_ASR_APP_ID,
+    resourceId: env.DOUBAO_ASR_RESOURCE_ID,
+  })
   const runtimeEnv = {
     ...env,
+    DOUBAO_ASR_ACCESS_KEY: doubaoConfig.accessKey,
+    DOUBAO_ASR_APP_ID: doubaoConfig.appId,
+    DOUBAO_ASR_RESOURCE_ID: doubaoConfig.resourceId,
     MINIMAX_API_KEY: minimaxConfig.apiKey,
     MINIMAX_MODEL: minimaxConfig.model,
   }

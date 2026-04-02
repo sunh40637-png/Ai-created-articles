@@ -13,6 +13,34 @@
 - 图片文件存 OSS
 - 结构化数据也先存 OSS，但按“多文件拆分”方式存储
 
+## 1.1 当前实现状态
+
+这份文档最初是设计文档，现在已经部分落地。
+
+当前已经完成：
+
+- 会话云端同步
+  - `content-system/sessions/*.json`
+  - `content-system/index/sessions.json`
+- 文章云端同步
+  - `content-system/articles/*.json`
+  - `content-system/index/articles.json`
+- 选题库云端同步
+  - `content-system/topic-library/topic-library.json`
+  - `content-system/index/topics.json`
+- 配置云端同步
+  - `content-system/configs/writing-config.json`
+  - `content-system/configs/system-config.json`
+  - `content-system/index/configs.json`
+
+当前还要特别说明两点：
+
+1. 页面启动恢复历史时，已经会比较本机镜像和 OSS 云端，优先恢复更新的一份
+2. `选题库` 和 `配置` 目前虽然已经同步到 OSS，但页面运行时仍主要使用代码内常量，不是直接从 OSS 读取
+3. 项目级运行配置当前通过根目录 `runtime-config.shared.json` 跟踪
+   - 两台电脑切换时，默认通过 Git 同步这份配置
+   - `.env` 现在只作为本机临时覆盖
+
 ## 2. 设计原则
 
 必须遵守：
@@ -460,16 +488,16 @@ sessions/session-20260402-a1b2c3.json
 - `localStorage`
 - `.local-data/content-creation-sessions.json`
 
-后续接 OSS 时，建议角色调整为：
+当前实现里，这三层的角色已经基本确定为：
 
-- OSS：主数据源
+- OSS：云端镜像与跨设备恢复源
 - localStorage：页面缓存
 - `.local-data/`：本机兜底备份
 
 也就是说：
 
-1. 真正可信的数据以后以 OSS 为准
-2. 本地缓存只负责提升加载速度和离线兜底
+1. 当前会优先比较本地与 OSS 的更新时间，再决定恢复哪一份
+2. 本地缓存只负责提升加载速度和本机兜底
 3. 不能让本地临时状态反向覆盖更新后的云端数据
 
 ## 14. 环境变量约定
@@ -486,9 +514,9 @@ ALIYUN_OSS_ACCESS_KEY_SECRET=
 
 这几个值不进入 Git，不写进仓库文档。
 
-## 15. 实施顺序建议
+## 15. 实施顺序回顾
 
-建议按下面顺序接入，风险最低：
+当前已经按下面顺序完成：
 
 1. 先接 `sessions/`
 2. 再接 `articles/`
@@ -496,7 +524,7 @@ ALIYUN_OSS_ACCESS_KEY_SECRET=
 4. 再接 `topic-library/topic-library.json`
 5. 最后接 `configs/`
 
-原因：
+这个顺序保留不变，原因也没有变化：
 
 - 会话和文章最直接影响“数据不丢”
 - 索引接入后，页面切换和列表加载才会变快
@@ -513,12 +541,10 @@ ALIYUN_OSS_ACCESS_KEY_SECRET=
 - 能先解决跨电脑与本地丢失问题
 - 后面如果要迁移数据库，也比较容易
 
-下一步进入代码实现前，需要再补一份：
+当前它已经不是纯规划文档，而是“设计 + 已落地现状”的统一说明文档。
 
-- `OSS 接入实施清单 v1`
+后续如果继续往下走，真正还没完成的重点只剩：
 
-那份文档只写：
-
-- 哪几个接口先改
-- 哪几个页面先接 OSS
-- 本地缓存和云端谁优先
+1. 让 `选题库` 和 `配置` 页面在运行时直接读 OSS，而不是只读代码常量
+2. 视情况把素材库也纳入同一套云端结构
+3. 如果后面进入多人或高频使用阶段，再考虑数据库方案

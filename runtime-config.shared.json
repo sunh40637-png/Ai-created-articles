@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-04-02T00:00:00.000Z",
+  "minimax": {
+    "apiKey": "sk-api-DzCfRxuEg6iyaUiTghLhsyXc3h-WqX3WJMU0AqS3V95ScClTzSMbYPiu27AYDBKtTPTBD9PtgBiTeuV43n8u4E_Z8CNPXYghupySMDAGH_4KGPP6Kr6auSY",
+    "model": "MiniMax-M2.7"
+  },
+  "aliyunOss": {
+    "bucket": "oss-pai-qfd8yupx3vjynqdutb-cn-shanghai",
+    "region": "cn-shanghai",
+    "endpoint": "oss-cn-shanghai.aliyuncs.com",
+    "accessKeyId": "LTAI5tH9HsYZMZ7FMz5CnhoS",
+    "accessKeySecret": "z2gnpuSWtIZMzpOpcZB8u63v7xMGTM"
+  },
+  "doubaoAsr": {
+    "appId": "",
+    "accessKey": "",
+    "resourceId": "volc.bigasr.auc_turbo"
+  }
+}

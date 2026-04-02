@@ -9,7 +9,7 @@ export default async function handler(request, response) {
 
   try {
     const minimaxConfig = resolveMiniMaxConfig({
-      model: request.body?.model || process.env.MINIMAX_MODEL,
+      model: request.body?.model,
     })
 
     const result = await runBenchmarkAnalysis({
