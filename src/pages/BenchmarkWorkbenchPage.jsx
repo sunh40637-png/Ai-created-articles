@@ -19,7 +19,6 @@ import {
   Maximize2,
   MessageSquareText,
   Minimize2,
-  Monitor,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -28,7 +27,6 @@ import {
   Plus,
   ScrollText,
   Search,
-  Smartphone,
   Trash2,
   X,
 } from 'lucide-react'
@@ -40,7 +38,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   buildImageSelectionFromMatchResult,
   buildPreviewSections,
-  createTemplatePreviewPlaceholderSlots,
   extractUsedAssetIds,
   getRenderablePreviewSlots,
   renderArticlePreviewDocument,
@@ -66,11 +63,6 @@ import {
   LIBRARY_ASSET_SORT_OPTIONS,
   LIBRARY_ASSET_TOPICS,
 } from '../../shared/libraryAssets.js'
-import {
-  createArticleTemplateConfigSignature,
-  createDefaultArticleTemplateConfig,
-  normalizeArticleTemplateConfig,
-} from '../../shared/articleTemplateConfig.js'
 import {
   createEmptyFixedLayoutConfig,
   FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH,
@@ -147,7 +139,6 @@ const sidebarModules = [
   { id: 'articles', label: '文章列表', icon: FileText },
   { id: 'assets', label: '素材库', icon: ImageIcon },
   { id: 'fixed-layout', label: '图片配置', icon: ImageUp },
-  { id: 'layout-template', label: '排版模板', icon: LayoutTemplate },
 ]
 
 const topicLibraryItems = CONTENT_TOPIC_LIBRARY
@@ -177,233 +168,6 @@ const ARTICLE_LIST_STATUS_META = {
     className: 'border border-emerald-200/80 bg-emerald-50 text-emerald-700',
   },
 }
-
-const ARTICLE_TEMPLATE_PREVIEW_SAMPLE = {
-  articleType: '家庭关系',
-  bodyMarkdown: `## 第一段小标题
-人到一定年纪，最珍贵的并不是热闹，而是有人在你累的时候，愿意静静坐下来陪你说几句话。很多真正有分量的感情，都不是靠声势撑起来的，而是在日常里一点点沉淀出来的。
-
-- 一句及时的回应
-- 一次耐心的等待
-- 一个愿意停下来的眼神
-
-> 真正让人安稳的，从来不是宏大的承诺，而是细碎却长期的在场。
-
-## 第二段小标题
-等你真正经历过人生的起伏之后，就会明白，人与人之间最舒服的关系，不是时时刻刻都黏在一起，而是在该伸手的时候有人伸手，在该沉默的时候彼此都懂得留白。
-
-| 场景 | 感受 |
-| --- | --- |
-| 深夜灯下 | 安心 |
-| 清晨厨房 | 踏实 |
-
-## 第三段小标题
-所以一篇成熟的文章，不只是把道理说清楚，更要把节奏、停顿、画面和余味排好。你在这里调的，其实不是某一篇文章，而是所有文章最终落地时给人的气质和分寸。`,
-  displayTitle: '人到晚年才懂，最好的关系，是彼此都不费力',
-  penName: '洞见心语',
-  wordCount: 1326,
-}
-
-const ARTICLE_TEMPLATE_FIELD_GROUPS = [
-  {
-    description: '先调画布边距和正文最大宽度，确定整体版心。',
-    fields: [
-      { label: '移动端上边距', path: ['page', 'mobilePaddingTop'], step: 1, type: 'number' },
-      { label: '移动端左右边距', path: ['page', 'mobilePaddingX'], step: 1, type: 'number' },
-      { label: '移动端下边距', path: ['page', 'mobilePaddingBottom'], step: 1, type: 'number' },
-      { label: 'PC 正文最大宽度', path: ['page', 'desktopContentMaxWidth'], step: 1, type: 'number' },
-      { label: 'PC 左右边距', path: ['page', 'desktopPaddingX'], step: 1, type: 'number' },
-      { label: 'PC 上边距', path: ['page', 'desktopPaddingTop'], step: 1, type: 'number' },
-      { label: 'PC 下边距', path: ['page', 'desktopPaddingBottom'], step: 1, type: 'number' },
-    ],
-    title: '页面布局',
-  },
-  {
-    description: '文章标题和作者/类型/字数这一行单独在这里调。',
-    fields: [
-      { label: '标题字号', path: ['title', 'fontSize'], step: 1, type: 'number' },
-      { label: '标题行高', path: ['title', 'lineHeight'], step: 0.05, type: 'number' },
-      { label: '标题最大宽度', path: ['title', 'maxWidth'], step: 1, type: 'number' },
-      { label: '元信息字号', path: ['meta', 'fontSize'], step: 1, type: 'number' },
-      { label: '元信息上边距', path: ['meta', 'marginTop'], step: 1, type: 'number' },
-      { label: '元信息间距', path: ['meta', 'gap'], step: 1, type: 'number' },
-      { label: '元信息字间距', path: ['meta', 'letterSpacing'], step: 0.01, type: 'number' },
-    ],
-    title: '标题与元信息',
-  },
-  {
-    description: '正文基础阅读节奏，包括大小字号、小标题和列表。',
-    fields: [
-      { label: '小号正文字号', path: ['fontProfiles', 'small', 'bodySize'], step: 1, type: 'number' },
-      { label: '小号正文行高', path: ['fontProfiles', 'small', 'bodyLineHeight'], step: 0.05, type: 'number' },
-      { label: '推荐正文字号', path: ['fontProfiles', 'medium', 'bodySize'], step: 1, type: 'number' },
-      { label: '推荐正文行高', path: ['fontProfiles', 'medium', 'bodyLineHeight'], step: 0.05, type: 'number' },
-      { label: '大号正文字号', path: ['fontProfiles', 'large', 'bodySize'], step: 1, type: 'number' },
-      { label: '大号正文行高', path: ['fontProfiles', 'large', 'bodyLineHeight'], step: 0.05, type: 'number' },
-      { label: '正文段落上边距', path: ['body', 'paragraphMarginTop'], step: 1, type: 'number' },
-      { label: 'H2 字号', path: ['body', 'heading2FontSize'], step: 1, type: 'number' },
-      { label: 'H2 行高', path: ['body', 'heading2LineHeight'], step: 0.05, type: 'number' },
-      { label: 'H2 上边距', path: ['body', 'heading2MarginTop'], step: 1, type: 'number' },
-      { label: 'H3 字号', path: ['body', 'heading3FontSize'], step: 1, type: 'number' },
-      { label: 'H3 行高', path: ['body', 'heading3LineHeight'], step: 0.05, type: 'number' },
-      { label: 'H3 上边距', path: ['body', 'heading3MarginTop'], step: 1, type: 'number' },
-      { label: '列表上边距', path: ['body', 'listMarginTop'], step: 1, type: 'number' },
-      { label: '列表缩进', path: ['body', 'listPaddingLeft'], step: 1, type: 'number' },
-      { label: '列表项底部间距', path: ['body', 'listItemMarginBottom'], step: 1, type: 'number' },
-      { label: '列表项内边距', path: ['body', 'listItemPaddingLeft'], step: 1, type: 'number' },
-    ],
-    title: '正文文字',
-  },
-  {
-    description: '正文内短分割线、正文主体分隔线和文末分隔线，都在这里单独调。',
-    fields: [
-      { label: '分割线颜色', path: ['colors', 'border'], type: 'color' },
-      { label: '正文短分割线粗细', path: ['body', 'hrThickness'], step: 1, type: 'number' },
-      { label: '正文短分割线上下边距', path: ['body', 'hrMarginY'], step: 1, type: 'number' },
-      { label: '正文主体分割线粗细', path: ['body', 'sectionDividerThickness'], step: 1, type: 'number' },
-      { label: '正文主体分割线上边距', path: ['body', 'sectionDividerMarginTop'], step: 1, type: 'number' },
-      { label: '正文主体分割线下内边距', path: ['body', 'sectionDividerPaddingTop'], step: 1, type: 'number' },
-      { label: '文末分割线粗细', path: ['tail', 'dividerThickness'], step: 1, type: 'number' },
-      { label: '文末分割线上边距', path: ['tail', 'dividerMarginTop'], step: 1, type: 'number' },
-      { label: '文末分割线下内边距', path: ['tail', 'dividerPaddingTop'], step: 1, type: 'number' },
-      { label: '正文图默认分割线位置', options: [
-        { label: '在分割线上方', value: 'before' },
-        { label: '在分割线下方', value: 'after' },
-      ], path: ['bodyImage', 'dividerPlacement'], type: 'select' },
-    ],
-    title: '分割线',
-  },
-  {
-    description: '正文内配图本身的宽度、圆角和上下留白。',
-    fields: [
-      { label: '正文图宽度 (%)', path: ['bodyImage', 'widthPercent'], step: 1, type: 'number' },
-      { label: '正文图对齐', options: [
-        { label: '左对齐', value: 'left' },
-        { label: '居中', value: 'center' },
-        { label: '右对齐', value: 'right' },
-      ], path: ['bodyImage', 'align'], type: 'select' },
-      { label: '正文图圆角', path: ['bodyImage', 'borderRadius'], step: 1, type: 'number' },
-      { label: '正文图上边距', path: ['bodyImage', 'marginTop'], step: 1, type: 'number' },
-      { label: '正文图下边距', path: ['bodyImage', 'marginBottom'], step: 1, type: 'number' },
-      { label: '正文图占位高度', path: ['bodyImage', 'minHeight'], step: 1, type: 'number' },
-    ],
-    title: '正文图片',
-  },
-  {
-    description: '头图、二维码和底图这三个固定素材位的尺寸与留白。',
-    fields: [
-      { label: '开头图上边距', path: ['heroImage', 'marginTop'], step: 1, type: 'number' },
-      { label: '开头图圆角', path: ['heroImage', 'borderRadius'], step: 1, type: 'number' },
-      { label: '开头图最大高度', path: ['heroImage', 'maxHeight'], step: 1, type: 'number' },
-      { label: '二维码宽度', path: ['qrImage', 'width'], step: 1, type: 'number' },
-      { label: '二维码上边距', path: ['qrImage', 'marginTop'], step: 1, type: 'number' },
-      { label: '二维码圆角', path: ['qrImage', 'borderRadius'], step: 1, type: 'number' },
-      { label: '底图上边距', path: ['footerImage', 'marginTop'], step: 1, type: 'number' },
-      { label: '底图圆角', path: ['footerImage', 'borderRadius'], step: 1, type: 'number' },
-      { label: '底图最大高度', path: ['footerImage', 'maxHeight'], step: 1, type: 'number' },
-    ],
-    title: '固定图片区',
-  },
-  {
-    description: '引用块的边线、字号和左侧缩进。',
-    fields: [
-      { label: '引用上边距', path: ['body', 'blockquoteMarginTop'], step: 1, type: 'number' },
-      { label: '引用边线宽度', path: ['body', 'blockquoteBorderWidth'], step: 1, type: 'number' },
-      { label: '引用左内边距', path: ['body', 'blockquotePaddingLeft'], step: 1, type: 'number' },
-      { label: '引用字号', path: ['body', 'blockquoteFontSize'], step: 1, type: 'number' },
-      { label: '引用行高', path: ['body', 'blockquoteLineHeight'], step: 0.05, type: 'number' },
-      { label: '引用文字颜色', path: ['colors', 'blockquoteText'], type: 'color' },
-      { label: '引用边线颜色', path: ['colors', 'blockquoteBorder'], type: 'color' },
-    ],
-    title: '引用样式',
-  },
-  {
-    description: '表格圆角、表头字号和单元格密度都在这里调。',
-    fields: [
-      { label: '表格上边距', path: ['body', 'tableMarginTop'], step: 1, type: 'number' },
-      { label: '表格圆角', path: ['body', 'tableBorderRadius'], step: 1, type: 'number' },
-      { label: '表头字号', path: ['body', 'tableHeaderFontSize'], step: 1, type: 'number' },
-      { label: '表头行高', path: ['body', 'tableHeaderLineHeight'], step: 0.05, type: 'number' },
-      { label: '表体字号', path: ['body', 'tableBodyFontSize'], step: 1, type: 'number' },
-      { label: '表体行高', path: ['body', 'tableBodyLineHeight'], step: 0.05, type: 'number' },
-      { label: '表格水平内边距', path: ['body', 'tableCellPaddingX'], step: 1, type: 'number' },
-      { label: '表格垂直内边距', path: ['body', 'tableCellPaddingY'], step: 1, type: 'number' },
-      { label: '表头背景色', path: ['colors', 'tableHeaderBackground'], type: 'color' },
-    ],
-    title: '表格样式',
-  },
-  {
-    description: '文末引导文案单独调，不和分割线、二维码混在一起。',
-    fields: [
-      { label: '文末文案字号', path: ['tail', 'endingTextFontSize'], step: 1, type: 'number' },
-      { label: '文末文案行高', path: ['tail', 'endingTextLineHeight'], step: 0.05, type: 'number' },
-      { label: '文末文案最大宽度', path: ['tail', 'endingTextMaxWidth'], step: 1, type: 'number' },
-      { label: '文末文案颜色', path: ['colors', 'endingText'], type: 'color' },
-    ],
-    title: '文末文案',
-  },
-  {
-    description: '最后再统一调基础色，避免一开始颜色把结构判断搞乱。',
-    fields: [
-      { label: '页面背景', path: ['colors', 'pageBackground'], type: 'color' },
-      { label: '正文主色', path: ['colors', 'textPrimary'], type: 'color' },
-      { label: '辅助文字', path: ['colors', 'textMuted'], type: 'color' },
-    ],
-    title: '颜色系统',
-  },
-]
-
-const TEMPLATE_IMAGE_ALIGN_OPTIONS = [
-  { label: '左对齐', value: 'left' },
-  { label: '居中', value: 'center' },
-  { label: '右对齐', value: 'right' },
-]
-
-const ARTICLE_TEMPLATE_BODY_IMAGE_STYLE_FIELDS = [
-  { control: 'slider', label: '统一圆角', path: ['bodyImage', 'borderRadius'], step: 1, type: 'number' },
-  { control: 'slider', label: '统一大小 (%)', path: ['bodyImage', 'widthPercent'], step: 1, type: 'number' },
-  { control: 'slider', label: '图片上边距', path: ['bodyImage', 'marginTop'], step: 1, type: 'number' },
-  { control: 'slider', label: '图片下边距', path: ['bodyImage', 'marginBottom'], step: 1, type: 'number' },
-  { control: 'segmented', label: '统一位置', options: TEMPLATE_IMAGE_ALIGN_OPTIONS, path: ['bodyImage', 'align'], type: 'select' },
-]
-
-const ARTICLE_TEMPLATE_FIXED_IMAGE_GROUPS = [
-  {
-    description: FIXED_LAYOUT_SLOT_META.heroGif.description,
-    fields: [
-      { control: 'slider', label: '圆角', path: ['heroImage', 'borderRadius'], step: 1, type: 'number' },
-      { control: 'slider', label: '大小 (%)', path: ['heroImage', 'widthPercent'], step: 1, type: 'number' },
-      { control: 'slider', label: '上边距', path: ['heroImage', 'marginTop'], step: 1, type: 'number' },
-      { control: 'segmented', label: '位置', options: TEMPLATE_IMAGE_ALIGN_OPTIONS, path: ['heroImage', 'align'], type: 'select' },
-      { control: 'stepper', label: '最大高度', path: ['heroImage', 'maxHeight'], step: 1, type: 'number' },
-    ],
-    id: 'heroGif',
-    title: FIXED_LAYOUT_SLOT_META.heroGif.label,
-  },
-  {
-    description: FIXED_LAYOUT_SLOT_META.qrImage.description,
-    fields: [
-      { control: 'slider', label: '圆角', path: ['qrImage', 'borderRadius'], step: 1, type: 'number' },
-      { control: 'stepper', label: '大小', path: ['qrImage', 'width'], step: 1, type: 'number' },
-      { control: 'slider', label: '上边距', path: ['qrImage', 'marginTop'], step: 1, type: 'number' },
-      { control: 'segmented', label: '位置', options: TEMPLATE_IMAGE_ALIGN_OPTIONS, path: ['qrImage', 'align'], type: 'select' },
-    ],
-    id: 'qrImage',
-    title: FIXED_LAYOUT_SLOT_META.qrImage.label,
-  },
-  {
-    description: FIXED_LAYOUT_SLOT_META.footerGif.description,
-    fields: [
-      { control: 'slider', label: '圆角', path: ['footerImage', 'borderRadius'], step: 1, type: 'number' },
-      { control: 'slider', label: '大小 (%)', path: ['footerImage', 'widthPercent'], step: 1, type: 'number' },
-      { control: 'slider', label: '上边距', path: ['footerImage', 'marginTop'], step: 1, type: 'number' },
-      { control: 'segmented', label: '位置', options: TEMPLATE_IMAGE_ALIGN_OPTIONS, path: ['footerImage', 'align'], type: 'select' },
-      { control: 'stepper', label: '最大高度', path: ['footerImage', 'maxHeight'], step: 1, type: 'number' },
-    ],
-    id: 'footerGif',
-    title: FIXED_LAYOUT_SLOT_META.footerGif.label,
-  },
-]
 
 const markdownComponents = {
   h1: ({ node, ...props }) => <h1 className="mb-4 text-[22px] font-semibold leading-[1.45]" {...props} />,
@@ -857,35 +621,6 @@ function createArticleListEntries(sessions = []) {
     .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
 }
 
-function resolveTemplatePreviewSample(sessions = []) {
-  const latestSession = [...(Array.isArray(sessions) ? sessions : [])]
-    .filter((session) => {
-      const version = getActiveVersion(session)
-      return Boolean((version?.draftMarkdown ?? '').trim())
-    })
-    .sort((left, right) => {
-      const leftTimestamp = new Date(left?.updatedAt || left?.createdAt || 0).getTime()
-      const rightTimestamp = new Date(right?.updatedAt || right?.createdAt || 0).getTime()
-      return rightTimestamp - leftTimestamp
-    })[0]
-
-  if (!latestSession) {
-    return ARTICLE_TEMPLATE_PREVIEW_SAMPLE
-  }
-
-  const topic = getSelectedTopic(latestSession)
-  const version = getActiveVersion(latestSession)
-
-  return {
-    articleType: topic?.type || ARTICLE_TEMPLATE_PREVIEW_SAMPLE.articleType,
-    bodyMarkdown: stripPreviewHeading(version?.draftMarkdown ?? '') || ARTICLE_TEMPLATE_PREVIEW_SAMPLE.bodyMarkdown,
-    displayTitle:
-      resolveVersionDisplayTitle(latestSession, version) || ARTICLE_TEMPLATE_PREVIEW_SAMPLE.displayTitle,
-    penName: topic?.penName || ARTICLE_TEMPLATE_PREVIEW_SAMPLE.penName,
-    wordCount: version?.wordCount ?? countReadableLength(version?.draftMarkdown ?? '') ?? ARTICLE_TEMPLATE_PREVIEW_SAMPLE.wordCount,
-  }
-}
-
 function hasSessionHistory(session) {
   if (!session) {
     return false
@@ -917,21 +652,49 @@ function buildDraftVersion({ note = '', supplement = '', topic, versionNumber })
   const draftMarkdown = [
     `# ${topic.title}`,
     '',
-    '> 很多关系的崩塌，不是因为一瞬间出了什么大事，而是一个人把失望忍得太久，久到连解释都懒得再说。',
+    '很多关系走到后半程，真正让人寒心的，从来不是一件惊天动地的大事，而是那些被一次次轻轻放过去的小失望。',
     '',
-    '有人总以为，真正让人离开的，是某一次争吵，是某一句狠话。可真正把心推远的，往往不是声量最大的那一下，而是无数次被忽视、被敷衍、被要求懂事的日常。',
+    '人到了中年，最怕的不是忙，也不是累，而是你心里已经委屈得发紧，嘴上却越来越不想说。很多女人不是输在不会经营婚姻，而是太习惯把自己往后放，放着放着，就把体面和底气都放没了。',
     '',
-    `这篇内容延续 ${topic.penName} 的叙述口吻，从一个具体人物进入，让读者先看见“那个人是怎么一步步寒下心来的”，再慢慢读懂：有些沉默不是不在乎，而是早就伤透了。`,
+    `这一版继续沿着 ${topic.penName} 的叙述口吻来写，不急着讲大道理，而是先把现实处境写透，再慢慢把人带到真正该守住的地方。`,
     '',
-    '故事最好从一件很小的事开场。比如她深夜发来一句话，只是想确认一句“你到家了吗”，对方隔了很久才回复，语气平平，像完成任务一样。这样的细节不轰烈，却最能让读者代入，因为真实生活里的失望就是这么一点点堆起来的。',
+    '婚姻走到后半程，女人真正要守的，往往不是面子，不是一时输赢，而是那几样决定余生稳不稳、值不值得的根本东西。',
     '',
-    '接下来要把转折写清楚。不是突然决绝，而是在一次次自我劝说后，终于不想再替对方找理由。她会回想过去那些自己替别人圆回去的场面，也会意识到，原来被忽视久了，人最先失去的不是脾气，而是期待。',
+    '## 一、先守住自己的底气',
     '',
-    '文章中段可以加入一段更具体的动作感。比如他照例说“你别想太多”，她没有争，没有哭，只是把已经打好的长消息一个字一个字删掉。这个细节比任何指责都更有力，因为它让读者看到，一个人真正心冷时，反而会显得异常平静。',
+    '一个女人过得稳不稳，很多时候不是看她嘴上多硬，而是看她手里有没有属于自己的底气。这个底气，可以是钱，可以是本事，也可以是任何一份不依附别人的把握。',
     '',
-    `在结尾部分，要把情绪从“委屈”收束到“清醒”。不是控诉谁坏，而是让读者明白：被反复忽略的人，最终离开的那一步，看起来很轻，背后却是很重的累积。${noteSummary}`.trim(),
+    '真正聪明的女人，心里都明白一件事：别人对你好，是福气；自己站得住，才是底牌。到了中年，更不能把全部安全感都押在别人一句“我会一直在”上。',
     '',
-    '所以这篇稿子的真正落点，不是教人立刻离开，而是提醒读者，任何关系里最危险的信号，从来不是争执，而是你已经越来越不想说话。',
+    `${noteSummary}这份底气，不是为了和谁较劲，而是为了在风大雨急的时候，你心里还能稳得住。`.trim(),
+    '',
+    '[IMAGE_1]',
+    '',
+    '## 二、再守住自己的分寸',
+    '',
+    '很多婚姻后半程的问题，说到底，不是感情没了，而是边界乱了。什么都替别人扛，什么都往自己身上揽，看起来是懂事，时间久了，反而会把关系拖得越来越失衡。',
+    '',
+    '分寸这件事，听起来轻，实际上最见修养。该帮的时候帮，该退的时候退，该沉默的时候沉默，该说清的时候说清。一个有分寸的人，不会把自己的情绪随便砸给别人，也不会把别人的需求统统背到自己身上。',
+    '',
+    '守住分寸，不是冷淡，而是让关系里每个人都待在该待的位置上。边界清楚了，很多无谓的内耗自然就少了。',
+    '',
+    '[IMAGE_2]',
+    '',
+    '## 三、最后守住自己的心气',
+    '',
+    '人到了这个年纪，最怕的不是生活里多一点辛苦，而是心一点点灰下去。心气没了，再好的日子也会过得发沉；心气还在，再平常的日子也能慢慢过出亮色。',
+    '',
+    '所谓守住心气，不是逞强，不是嘴硬，而是始终记得自己是谁，始终不肯把全部希望都交给别人。你可以疲惫，可以委屈，但不能把自己彻底放弃。',
+    '',
+    '说到底，婚姻不是女人后半生的全部，日子也从来不是只靠谁来拯救。真正能把一个人托起来的，还是她心里那口不肯熄的气。',
+    '',
+    '[IMAGE_3]',
+    '',
+    '[ENDING]',
+    '',
+    '一个女人到了中年，还能把底气、分寸和心气都守住，后面的路就不会走得太慌。',
+    '',
+    '愿你往后的日子，手里有底，心里有光，走到哪里都不必把自己活得太委屈。',
   ].join('\n')
 
   const reportMarkdown = [
@@ -939,13 +702,13 @@ function buildDraftVersion({ note = '', supplement = '', topic, versionNumber })
     '',
     '## 结论',
     '',
-    `当前版本可直接进入下一节点，整体更贴近 ${topic.type} 的结构节奏，适合继续做配图与排版。`,
+    `当前版本已按固定模板正文结构生成，整体可进入文字稿确认与后续固定模板排版预览。`,
     '',
     '## 结构检查',
     '',
-    '- 开篇：已用一句情绪钩子起势，有代入感。',
-    '- 中段：有人物细节和动作转折，不是纯观点堆叠。',
-    '- 结尾：回收到关系认知，情绪收束较稳。',
+    '- 开篇：已完成情绪切入和主题铺垫。',
+    '- 主体：三段主体内容后已预留 [IMAGE_1]、[IMAGE_2]、[IMAGE_3]。',
+    '- 结尾：已使用 [ENDING] 标记切出收束段落，适合固定模板渲染。',
     '',
     '## 风格检查',
     '',
@@ -1365,34 +1128,6 @@ async function requestFixedLayoutAssetDelete(slot) {
   }
 }
 
-async function requestArticleTemplateConfig() {
-  const response = await fetch('/api/article-template-config')
-  const payload = await readJsonResponse(response, '排版模板配置接口返回异常，请刷新页面后重试。')
-
-  if (!response.ok) {
-    throw new Error(payload?.error || '读取排版模板配置失败')
-  }
-
-  return normalizeArticleTemplateConfig(payload ?? createDefaultArticleTemplateConfig())
-}
-
-async function requestArticleTemplateConfigUpdate(config) {
-  const response = await fetch('/api/article-template-config', {
-    body: JSON.stringify(normalizeArticleTemplateConfig(config)),
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    method: 'PUT',
-  })
-  const payload = await readJsonResponse(response, '排版模板配置写入接口返回异常，请稍后重试。')
-
-  if (!response.ok) {
-    throw new Error(payload?.error || '保存排版模板配置失败')
-  }
-
-  return normalizeArticleTemplateConfig(payload ?? createDefaultArticleTemplateConfig())
-}
-
 async function requestPersistedContentSessions() {
   const response = await fetch('/api/content-sessions')
   const payload = await readJsonResponse(response, '本地历史记录接口返回异常，请刷新页面后重试。')
@@ -1533,80 +1268,6 @@ function useFixedLayoutConfigState() {
   }
 }
 
-function useArticleTemplateConfigState() {
-  const [config, setConfig] = useState(() => createDefaultArticleTemplateConfig())
-  const [errorMessage, setErrorMessage] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
-
-  async function reloadConfig() {
-    setIsLoading(true)
-
-    try {
-      const nextConfig = await requestArticleTemplateConfig()
-      setConfig(nextConfig)
-      setErrorMessage('')
-      return nextConfig
-    } catch (error) {
-      setErrorMessage(error.message || '读取排版模板配置失败')
-      setConfig(createDefaultArticleTemplateConfig())
-      return createDefaultArticleTemplateConfig()
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  async function saveConfig(nextConfig) {
-    const normalizedConfig = normalizeArticleTemplateConfig(nextConfig)
-    const savedConfig = await requestArticleTemplateConfigUpdate(normalizedConfig)
-
-    setConfig(savedConfig)
-    setErrorMessage('')
-    return savedConfig
-  }
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadConfig() {
-      setIsLoading(true)
-
-      try {
-        const nextConfig = await requestArticleTemplateConfig()
-
-        if (!cancelled) {
-          setConfig(nextConfig)
-          setErrorMessage('')
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setErrorMessage(error.message || '读取排版模板配置失败')
-          setConfig(createDefaultArticleTemplateConfig())
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    loadConfig()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  return {
-    config,
-    errorMessage,
-    isLoading,
-    reloadConfig,
-    saveConfig,
-    setConfig,
-    setErrorMessage,
-  }
-}
-
 function ArticlePreviewFrame({ className = '', documentHtml, title = '排版预览' }) {
   const iframeRef = useRef(null)
   const [frameHeight, setFrameHeight] = useState(0)
@@ -1705,7 +1366,7 @@ function ArticlePreviewFrame({ className = '', documentHtml, title = '排版预�
   )
 }
 
-function useRenderablePreviewSlots(session, version, templateConfig) {
+function useRenderablePreviewSlots(session, version) {
   const [liveAssetMap, setLiveAssetMap] = useState(null)
   const imageSelection = session?.imageSelection
   const sourceVersionId = imageSelection?.sourceVersionId ?? ''
@@ -1747,28 +1408,26 @@ function useRenderablePreviewSlots(session, version, templateConfig) {
       getRenderablePreviewSlots({
         imageSelection,
         liveAssetMap,
-        templateConfig,
         versionId: version?.id ?? '',
       }),
-    [imageSelection, liveAssetMap, templateConfig, version?.id],
+    [imageSelection, liveAssetMap, version?.id],
   )
 }
 
-function buildTemplateMatchSections(previewSections, templateConfig) {
-  const normalizedTemplateConfig = normalizeArticleTemplateConfig(templateConfig)
+function buildTemplateMatchSections(previewSections) {
+  const fallbackSections = buildPreviewSections('', { fillTrailingSections: true })
 
-  return normalizedTemplateConfig.bodyImageSlots.map((slot, index) => {
+  return Array.from({ length: 3 }, (_, index) => {
     const matchedSection =
-      previewSections.find((section) => section.order === slot.sectionOrder) ??
-      previewSections[Math.min(index, Math.max(previewSections.length - 1, 0))] ??
-      previewSections[previewSections.length - 1] ??
-      buildPreviewSections('', { fillTrailingSections: true })[index]
+      previewSections.find((section) => section.order === index + 1) ??
+      previewSections[index] ??
+      fallbackSections[index]
 
     return {
       ...matchedSection,
       order: index + 1,
-      positionLabel: `第 ${slot.sectionOrder} 段后`,
-      sectionOrder: slot.sectionOrder,
+      positionLabel: `第 ${index + 1} 段后`,
+      sectionOrder: index + 1,
     }
   })
 }
@@ -2911,8 +2570,7 @@ function ReportWorkbench({ version }) {
   )
 }
 
-function PreviewWorkbench({ onSetDevice, onSetFontSize, onUpdateDraftSync, session, templateConfig }) {
-  const { device, fontSize } = session.layoutReview
+function PreviewWorkbench({ onUpdateDraftSync, session }) {
   const [copyStatus, setCopyStatus] = useState('idle')
   const [isWechatSyncing, setIsWechatSyncing] = useState(false)
   const [wechatStatus, setWechatStatus] = useState({
@@ -2924,7 +2582,7 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, onUpdateDraftSync, sessi
   const topic = getSelectedTopic(session)
   const version = getActiveVersion(session)
   const { config: fixedLayoutConfig } = useFixedLayoutConfigState()
-  const previewSlots = useRenderablePreviewSlots(session, version, templateConfig)
+  const previewSlots = useRenderablePreviewSlots(session, version)
   const bodyMarkdown = stripPreviewHeading(version?.draftMarkdown ?? '')
   const displayTitle = resolveVersionDisplayTitle(session, version)
   const previewRenderResult = useMemo(
@@ -2932,17 +2590,14 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, onUpdateDraftSync, sessi
       renderArticlePreviewDocument({
         articleType: topic?.type || '',
         bodyMarkdown,
-        device,
         displayTitle,
         fixedLayoutConfig,
-        fontSize,
         imageSlots: previewSlots,
         origin: typeof window === 'undefined' ? '' : window.location.origin,
         penName: topic?.penName || '',
-        templateConfig,
         wordCount: version?.wordCount ?? 0,
       }),
-    [bodyMarkdown, device, displayTitle, fixedLayoutConfig, fontSize, previewSlots, templateConfig, topic?.penName, topic?.type, version?.wordCount],
+    [bodyMarkdown, displayTitle, fixedLayoutConfig, previewSlots, topic?.penName, topic?.type, version?.wordCount],
   )
   const wechatRenderResult = useMemo(
     () =>
@@ -2950,14 +2605,12 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, onUpdateDraftSync, sessi
         articleType: topic?.type || '',
         bodyMarkdown,
         fixedLayoutConfig,
-        fontSize,
         imageSlots: previewSlots,
         origin: '',
         penName: topic?.penName || '',
-        templateConfig,
         wordCount: version?.wordCount ?? 0,
       }),
-    [bodyMarkdown, fixedLayoutConfig, fontSize, previewSlots, templateConfig, topic?.penName, topic?.type, version?.wordCount],
+    [bodyMarkdown, fixedLayoutConfig, previewSlots, topic?.penName, topic?.type, version?.wordCount],
   )
   const wechatCoverImageSrc =
     fixedLayoutConfig?.heroGif?.path || previewSlots.map((slot) => slot?.asset?.path || '').find(Boolean) || ''
@@ -3111,47 +2764,7 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, onUpdateDraftSync, sessi
     <div className="benchmark-scroll-hidden h-full min-h-0 overflow-y-auto px-6 py-6">
       <div className="mx-auto flex w-full max-w-[980px] flex-col gap-5">
         <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
-          <div className="flex flex-wrap gap-2">
-            <div className="inline-flex rounded-full bg-secondary/70 p-1">
-              {[
-                { id: 'mobile', label: '移动端', icon: Smartphone },
-                { id: 'desktop', label: 'PC端', icon: Monitor },
-              ].map((item) => (
-                <button
-                  className={cn(
-                    'inline-flex items-center gap-2 rounded-full px-3 py-2 text-[12px] transition-colors',
-                    device === item.id ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground',
-                  )}
-                  key={item.id}
-                  onClick={() => onSetDevice(item.id)}
-                  type="button"
-                >
-                  <item.icon size={13} />
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="inline-flex rounded-full bg-secondary/70 p-1">
-              {[
-                { id: 'small', label: '小' },
-                { id: 'medium', label: '推荐' },
-                { id: 'large', label: '大' },
-              ].map((item) => (
-                <button
-                  className={cn(
-                    'rounded-full px-3 py-2 text-[12px] transition-colors',
-                    fontSize === item.id ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground',
-                  )}
-                  key={item.id}
-                  onClick={() => onSetFontSize(item.id)}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <div className="text-[12px] text-muted-foreground">固定模板预览</div>
 
           <div className="flex items-center gap-3">
             <Button
@@ -3202,14 +2815,8 @@ function PreviewWorkbench({ onSetDevice, onSetFontSize, onUpdateDraftSync, sessi
         </div>
 
         <div className="flex justify-center">
-          <div className={cn('transition-all', device === 'mobile' ? 'w-[375px] max-w-full' : 'w-full max-w-[860px]')}>
-            <div
-              className={cn(
-                device === 'mobile'
-                  ? 'border border-[#ececf2] bg-white shadow-[0_8px_24px_rgba(18,20,38,0.08)]'
-                  : '',
-              )}
-            >
+          <div className="w-full max-w-[760px]">
+            <div className="overflow-hidden rounded-[18px] border border-border/70 bg-white shadow-[0_8px_24px_rgba(18,20,38,0.06)]">
               <ArticlePreviewFrame documentHtml={previewRenderResult.documentHtml} />
             </div>
           </div>
@@ -3267,10 +2874,7 @@ function RightWorkbenchShell({
   onOpenTab,
   onSelectVersion,
   onUpdateDraftSync,
-  onSetDevice,
-  onSetFontSize,
   session,
-  templateConfig,
   tabs,
 }) {
   const activeVersion = getActiveVersion(session)
@@ -3301,15 +2905,7 @@ function RightWorkbenchShell({
       case 'report':
         return <ReportWorkbench version={activeVersion} />
       case 'preview':
-        return (
-          <PreviewWorkbench
-            onSetDevice={onSetDevice}
-            onSetFontSize={onSetFontSize}
-            onUpdateDraftSync={onUpdateDraftSync}
-            session={session}
-            templateConfig={templateConfig}
-          />
-        )
+        return <PreviewWorkbench onUpdateDraftSync={onUpdateDraftSync} session={session} />
       case 'versions':
         return (
           <VersionsWorkbench
@@ -3422,14 +3018,10 @@ function ArticleListRow({ article, onOpen }) {
   )
 }
 
-function ArticlePreviewDrawer({ onClose, open, session, templateConfig }) {
+function ArticlePreviewDrawer({ onClose, open, session }) {
   const availableTabs = session?.stageId === 'completed' ? ['draft', 'preview'] : ['draft']
   const [activeTab, setActiveTab] = useState(availableTabs[0] ?? 'draft')
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [previewLayout, setPreviewLayout] = useState({
-    device: session?.layoutReview?.device ?? 'mobile',
-    fontSize: session?.layoutReview?.fontSize ?? 'medium',
-  })
 
   useEffect(() => {
     if (!open) {
@@ -3479,10 +3071,6 @@ function ArticlePreviewDrawer({ onClose, open, session, templateConfig }) {
 
     setActiveTab(session.stageId === 'completed' ? 'preview' : 'draft')
     setIsFullscreen(false)
-    setPreviewLayout({
-      device: session.layoutReview?.device ?? 'mobile',
-      fontSize: session.layoutReview?.fontSize ?? 'medium',
-    })
   }, [session])
 
   if (!open || !session || typeof document === 'undefined') {
@@ -3492,14 +3080,6 @@ function ArticlePreviewDrawer({ onClose, open, session, templateConfig }) {
   const activeVersion = getActiveVersion(session)
   const selectedTopic = getSelectedTopic(session)
   const displayTitle = resolveVersionDisplayTitle(session, activeVersion)
-  const previewSession = {
-    ...session,
-    layoutReview: {
-      ...session.layoutReview,
-      device: previewLayout.device,
-      fontSize: previewLayout.fontSize,
-    },
-  }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end overscroll-none bg-slate-950/18 backdrop-blur-[6px]" onClick={onClose} role="presentation">
@@ -3577,22 +3157,7 @@ function ArticlePreviewDrawer({ onClose, open, session, templateConfig }) {
         <div className="min-h-0 flex-1 overflow-hidden bg-white">
           {activeTab === 'preview' ? (
             <div className="benchmark-scroll-hidden h-full overflow-y-auto overscroll-contain">
-              <PreviewWorkbench
-                onSetDevice={(device) =>
-                  setPreviewLayout((current) => ({
-                    ...current,
-                    device,
-                  }))
-                }
-                onSetFontSize={(fontSize) =>
-                  setPreviewLayout((current) => ({
-                    ...current,
-                    fontSize,
-                  }))
-                }
-                session={previewSession}
-                templateConfig={templateConfig}
-              />
+              <PreviewWorkbench session={session} />
             </div>
           ) : (
             <div className="benchmark-scroll-hidden h-full overflow-y-auto overscroll-contain">
@@ -3994,6 +3559,8 @@ function FixedLayoutAssetRow({ asset, deletingSlot, onDelete, onPreview, onUploa
   const slotMeta = FIXED_LAYOUT_SLOT_META[slot]
   const isUploading = uploadingSlot === slot
   const isDeleting = deletingSlot === slot
+  const hasAsset = Boolean(asset?.path)
+  const uploadedAtLabel = asset?.uploadedAt ? formatLibraryAssetDate(asset.uploadedAt) : ''
 
   async function handleFileChange(event) {
     const nextFile = event.target.files?.[0]
@@ -4006,44 +3573,39 @@ function FixedLayoutAssetRow({ asset, deletingSlot, onDelete, onPreview, onUploa
   }
 
   return (
-    <div className="flex flex-col gap-4 border-t border-border/70 px-2 py-5 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex min-w-0 items-center gap-4">
+    <div className="grid gap-4 border-b border-border/70 px-5 py-5 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6 lg:px-6">
+      <div className="flex min-w-0 items-start gap-4">
         <button
-          className="group relative inline-flex h-[88px] w-[132px] shrink-0 items-center justify-center overflow-hidden rounded-[18px] border border-border/70 bg-secondary/25"
-          disabled={!asset?.path}
-          onClick={() => asset?.path && onPreview({ label: slotMeta.label, path: asset.path })}
+          className="group relative inline-flex h-[76px] w-[112px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] border border-border/70 bg-secondary/20"
+          disabled={!hasAsset}
+          onClick={() => hasAsset && onPreview({ label: slotMeta.label, path: asset.path })}
           type="button"
         >
-          {asset?.path ? (
+          {hasAsset ? (
             <img
               alt={slotMeta.label}
               className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
               src={asset.path}
             />
           ) : (
-            <div className="px-4 text-center text-[12px] leading-5 text-muted-foreground">当前未上传</div>
+            <div className="px-3 text-center text-[12px] leading-5 text-muted-foreground">未上传</div>
           )}
         </button>
 
-        <div className="min-w-0">
-          <div className="text-[16px] font-medium text-foreground">{slotMeta.label}</div>
+        <div className="min-w-0 pt-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="truncate text-[15px] font-medium text-foreground">{slotMeta.label}</div>
+            <span className="inline-flex rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">图片</span>
+          </div>
           <div className="mt-1 text-[13px] leading-6 text-muted-foreground">{slotMeta.description}</div>
-          <div className="mt-2 text-[12px] text-muted-foreground">
-            {asset?.filename ? (
-              <>
-                <span className="block truncate">{asset.filename}</span>
-                <span className="mt-1 inline-flex rounded-full border border-border/70 px-2.5 py-1">
-                  上传于 {formatLibraryAssetDate(asset.uploadedAt)}
-                </span>
-              </>
-            ) : (
-              '支持 gif、png、jpg、jpeg、webp'
-            )}
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+            <span className="truncate">{asset?.filename || '支持 gif、png、jpg、jpeg、webp'}</span>
+            {uploadedAtLabel ? <span>更新于 {uploadedAtLabel}</span> : null}
           </div>
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
         <input
           accept={FIXED_LAYOUT_FILE_ACCEPT}
           className="hidden"
@@ -4060,9 +3622,9 @@ function FixedLayoutAssetRow({ asset, deletingSlot, onDelete, onPreview, onUploa
           variant="outline"
         >
           {isUploading ? <LoaderCircle className="animate-spin" size={14} /> : <Paperclip size={14} />}
-          {asset?.path ? '替换图片' : '上传图片'}
+          {hasAsset ? '替换' : '上传'}
         </Button>
-        {asset?.path ? (
+        {hasAsset ? (
           <Button
             className="rounded-full"
             disabled={isUploading || isDeleting}
@@ -4090,32 +3652,35 @@ function FixedLayoutTextRow({ onSave, saving, value }) {
   const isDirty = normalizeFixedLayoutTextContent(draft) !== normalizeFixedLayoutTextContent(value?.content ?? '')
 
   return (
-    <div className="border-t border-border/70 px-2 py-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 lg:max-w-[320px]">
-          <div className="text-[16px] font-medium text-foreground">{FIXED_LAYOUT_SLOT_META.endingText.label}</div>
-          <div className="mt-1 text-[13px] leading-6 text-muted-foreground">{FIXED_LAYOUT_SLOT_META.endingText.description}</div>
-          <div className="mt-2 text-[12px] text-muted-foreground">建议控制在 {FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH} 字以内。</div>
+    <div className="grid gap-4 border-b border-border/70 px-5 py-5 last:border-b-0 md:grid-cols-[280px_minmax(0,1fr)] md:gap-6 lg:px-6">
+      <div className="min-w-0 pt-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="text-[15px] font-medium text-foreground">{FIXED_LAYOUT_SLOT_META.endingText.label}</div>
+          <span className="inline-flex rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">文案</span>
         </div>
+        <div className="mt-1 text-[13px] leading-6 text-muted-foreground">{FIXED_LAYOUT_SLOT_META.endingText.description}</div>
+        <div className="mt-2 text-[12px] text-muted-foreground">最多 {FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH} 字</div>
+      </div>
 
-        <div className="w-full max-w-[720px]">
+      <div className="w-full">
+        <div className="rounded-[18px] border border-border/70 bg-secondary/10 p-3">
           <Textarea
-            className="min-h-[124px] resize-none rounded-[22px] border border-border/70 bg-white px-4 py-3 text-[14px] leading-7 shadow-none focus-visible:ring-0"
+            className="min-h-[124px] resize-none rounded-[14px] border border-border/70 bg-white px-4 py-3 text-[14px] leading-7 shadow-none focus-visible:ring-0"
             maxLength={FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="这里填写正文结束后的固定引导文案。"
             value={draft}
           />
+        </div>
 
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="text-[12px] text-muted-foreground">
-              {draft.length}/{FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
-            </div>
-            <Button className="rounded-full" disabled={saving || !isDirty} onClick={() => onSave(draft)} size="sm" type="button">
-              {saving ? <LoaderCircle className="animate-spin" size={14} /> : <Check size={14} />}
-              保存文案
-            </Button>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="text-[12px] text-muted-foreground">
+            {draft.length}/{FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
           </div>
+          <Button className="rounded-full" disabled={saving || !isDirty} onClick={() => onSave(draft)} size="sm" type="button">
+            {saving ? <LoaderCircle className="animate-spin" size={14} /> : <Check size={14} />}
+            保存
+          </Button>
         </div>
       </div>
     </div>
@@ -4185,780 +3750,67 @@ function FixedLayoutConfigCanvas() {
 
   return (
     <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white">
-      <div className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-5 lg:px-6">
-        <div className="mb-8">
-          <h1 className="text-[30px] font-semibold tracking-[-0.03em] text-foreground sm:text-[34px]">图片配置</h1>
-          <div className="mt-4 inline-flex rounded-full bg-secondary px-3 py-1.5 text-[12px] text-muted-foreground">
-            共 {slotCount} 个固定槽位
-          </div>
+      <div className="mx-auto w-full max-w-[1180px] px-4 py-8 sm:px-5 lg:px-6">
+        <div className="mb-6">
+          <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-foreground sm:text-[32px]">图片配置</h1>
+          <p className="mt-2 text-[14px] leading-7 text-muted-foreground">
+            统一维护文章固定图片和文末文案。当前共 {slotCount} 个配置项。
+          </p>
         </div>
 
         {errorMessage ? (
-          <div className="mb-5 rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+          <div className="mb-5 rounded-[16px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
             {errorMessage}
           </div>
         ) : null}
 
         <section>
-          <div className="mb-3 text-[12px] font-medium tracking-[0.08em] text-muted-foreground">固定内容配置</div>
-
-          {isLoading ? (
-            <div className="border-t border-border/70 py-16 text-center text-[14px] text-muted-foreground">
-              <div className="inline-flex items-center gap-2">
-                <LoaderCircle className="animate-spin" size={16} />
-                正在读取固定内容配置
+          <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white">
+            <div className="flex items-center justify-between border-b border-border/70 px-5 py-4 lg:px-6">
+              <div>
+                <div className="text-[15px] font-medium text-foreground">固定内容配置</div>
+                <div className="mt-1 text-[12px] text-muted-foreground">开头动图、二维码、底部动图和文末固定文案。</div>
               </div>
+              <div className="text-[12px] text-muted-foreground">{slotCount} 项</div>
             </div>
-          ) : (
-            <div className="border-t border-border/70">
-              {FIXED_LAYOUT_SLOT_ORDER.map((slot) =>
-                FIXED_LAYOUT_IMAGE_SLOT_IDS.includes(slot) ? (
-                  <FixedLayoutAssetRow
-                    asset={config?.[slot]}
-                    deletingSlot={deletingSlot}
-                    key={slot}
-                    onDelete={handleDelete}
-                    onPreview={setPreviewAsset}
-                    onUpload={handleUpload}
-                    slot={slot}
-                    uploadingSlot={uploadingSlot}
-                  />
-                ) : (
-                  <FixedLayoutTextRow
-                    key={slot}
-                    onSave={handleSaveEndingText}
-                    saving={savingText}
-                    value={config?.[slot]}
-                  />
-                ),
-              )}
-            </div>
-          )}
+
+            {isLoading ? (
+              <div className="py-16 text-center text-[14px] text-muted-foreground">
+                <div className="inline-flex items-center gap-2">
+                  <LoaderCircle className="animate-spin" size={16} />
+                  正在读取固定内容配置
+                </div>
+              </div>
+            ) : (
+              <div>
+                {FIXED_LAYOUT_SLOT_ORDER.map((slot) =>
+                  FIXED_LAYOUT_IMAGE_SLOT_IDS.includes(slot) ? (
+                    <FixedLayoutAssetRow
+                      asset={config?.[slot]}
+                      deletingSlot={deletingSlot}
+                      key={slot}
+                      onDelete={handleDelete}
+                      onPreview={setPreviewAsset}
+                      onUpload={handleUpload}
+                      slot={slot}
+                      uploadingSlot={uploadingSlot}
+                    />
+                  ) : (
+                    <FixedLayoutTextRow
+                      key={slot}
+                      onSave={handleSaveEndingText}
+                      saving={savingText}
+                      value={config?.[slot]}
+                    />
+                  ),
+                )}
+              </div>
+            )}
+          </div>
         </section>
       </div>
 
       <FixedLayoutImageLightbox asset={previewAsset} onClose={() => setPreviewAsset(null)} />
-    </div>
-  )
-}
-
-function getValueAtPath(source, path) {
-  return path.reduce((current, key) => (current == null ? undefined : current[key]), source)
-}
-
-function setValueAtPath(source, path, nextValue) {
-  if (path.length === 0) {
-    return nextValue
-  }
-
-  const [currentKey, ...restPath] = path
-
-  if (Array.isArray(source)) {
-    const nextArray = source.slice()
-    nextArray[currentKey] = setValueAtPath(source[currentKey], restPath, nextValue)
-    return nextArray
-  }
-
-  return {
-    ...(source && typeof source === 'object' ? source : {}),
-    [currentKey]: restPath.length > 0 ? setValueAtPath(source?.[currentKey], restPath, nextValue) : nextValue,
-  }
-}
-
-function normalizeImageFocusedTemplateConfig(config) {
-  const normalizedConfig = normalizeArticleTemplateConfig(config)
-
-  return normalizeArticleTemplateConfig({
-    ...normalizedConfig,
-    body: {
-      ...normalizedConfig.body,
-      hrThickness: 0,
-      sectionDividerThickness: 0,
-    },
-    bodyImageSlots: normalizedConfig.bodyImageSlots.map((slot) => ({
-      ...slot,
-      dividerMode: 'none',
-    })),
-    tail: {
-      ...normalizedConfig.tail,
-      dividerThickness: 0,
-    },
-  })
-}
-
-function formatTemplateFieldValue(value, step = 1) {
-  const numericValue = Number(value)
-
-  if (!Number.isFinite(numericValue)) {
-    return '--'
-  }
-
-  const decimals = step < 1 ? String(step).split('.')[1]?.length ?? 2 : 0
-  return numericValue.toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
-}
-
-function getTemplateNumberFieldRange(field, value) {
-  const pathKey = Array.isArray(field.path) ? field.path.join('.') : ''
-  const normalizedKey = pathKey.toLowerCase()
-  const step = field.step ?? 1
-  const numericValue = Number(value)
-
-  if (typeof field.min === 'number' || typeof field.max === 'number') {
-    return {
-      max: typeof field.max === 'number' ? field.max : Math.max(Number.isFinite(numericValue) ? numericValue : 0, 100),
-      min: typeof field.min === 'number' ? field.min : 0,
-      step,
-    }
-  }
-
-  if (normalizedKey.includes('lineheight')) {
-    return { min: 1, max: 3.2, step }
-  }
-
-  if (normalizedKey.includes('letterspacing')) {
-    return { min: 0, max: 0.4, step }
-  }
-
-  if (normalizedKey.includes('widthpercent')) {
-    return { min: 20, max: 100, step }
-  }
-
-  if (normalizedKey.includes('thickness') || normalizedKey.includes('borderwidth')) {
-    return { min: 0, max: 12, step }
-  }
-
-  if (normalizedKey.includes('fontsize') || normalizedKey.endsWith('bodysize')) {
-    return { min: 10, max: 48, step }
-  }
-
-  if (normalizedKey.includes('radius')) {
-    return { min: 0, max: 48, step }
-  }
-
-  if (normalizedKey.includes('desktopcontentmaxwidth') || normalizedKey.includes('endingtextmaxwidth') || normalizedKey.endsWith('title.maxwidth')) {
-    return { min: 120, max: 1200, step }
-  }
-
-  if (normalizedKey === 'qrimage.width') {
-    return { min: 80, max: 640, step }
-  }
-
-  if (normalizedKey.includes('maxheight')) {
-    return { min: 80, max: 800, step }
-  }
-
-  if (normalizedKey.includes('padding') || normalizedKey.includes('margin')) {
-    return { min: 0, max: 240, step }
-  }
-
-  if (normalizedKey.includes('listpaddingleft') || normalizedKey.includes('listitempaddingleft') || normalizedKey.includes('blockquotepaddingleft')) {
-    return { min: 0, max: 120, step }
-  }
-
-  if (normalizedKey.includes('tablecellpadding')) {
-    return { min: 0, max: 48, step }
-  }
-
-  if (normalizedKey.includes('minheight')) {
-    return { min: 80, max: 560, step }
-  }
-
-  return {
-    min: 0,
-    max: step < 1 ? 4 : Math.max(Number.isFinite(numericValue) ? Math.ceil(numericValue / step) * step : 0, 160),
-    step,
-  }
-}
-
-function getTemplateFieldControl(field) {
-  if (field.control) {
-    return field.control
-  }
-
-  if (field.type === 'color') {
-    return 'color'
-  }
-
-  if (field.type === 'select') {
-    return Array.isArray(field.options) && field.options.length <= 3 ? 'segmented' : 'select'
-  }
-
-  if (field.type !== 'number') {
-    return 'input'
-  }
-
-  const pathKey = Array.isArray(field.path) ? field.path.join('.').toLowerCase() : ''
-
-  if (
-    pathKey.includes('thickness') ||
-    pathKey.includes('borderwidth') ||
-    pathKey.includes('maxwidth') ||
-    pathKey.includes('maxheight') ||
-    pathKey.includes('minheight') ||
-    pathKey === 'qrimage.width'
-  ) {
-    return 'stepper'
-  }
-
-  if (
-    pathKey.includes('fontsize') ||
-    pathKey.endsWith('bodysize') ||
-    pathKey.includes('lineheight') ||
-    pathKey.includes('margin') ||
-    pathKey.includes('padding') ||
-    pathKey.includes('gap') ||
-    pathKey.includes('radius') ||
-    pathKey.includes('widthpercent') ||
-    pathKey.includes('letterspacing')
-  ) {
-    return 'slider'
-  }
-
-  return 'stepper'
-}
-
-function clampTemplateFieldNumber(field, rawValue, fallbackValue = 0) {
-  const { min, max, step } = getTemplateNumberFieldRange(field, rawValue)
-  const parsedValue = Number(rawValue)
-
-  if (!Number.isFinite(parsedValue)) {
-    return fallbackValue
-  }
-
-  const normalizedValue = Math.min(Math.max(parsedValue, min), max)
-
-  if (!Number.isFinite(step) || step <= 0) {
-    return normalizedValue
-  }
-
-  const decimals = step < 1 ? String(step).split('.')[1]?.length ?? 2 : 0
-  const alignedValue = min + Math.round((normalizedValue - min) / step) * step
-
-  return Number(alignedValue.toFixed(decimals))
-}
-
-function TemplateFieldInput({ field, value, onChange }) {
-  const baseClassName =
-    'h-10 w-full border border-[#d8d9e2] bg-white px-3 text-[12px] text-[#1a1b24] outline-none transition-colors focus:border-[#4285f4] font-mono'
-  const control = getTemplateFieldControl(field)
-  const numberFieldRange = field.type === 'number' ? getTemplateNumberFieldRange(field, value) : null
-  const displayValue =
-    field.type === 'number'
-      ? formatTemplateFieldValue(value, numberFieldRange?.step ?? field.step ?? 1)
-      : value
-
-  return (
-    <label className="block border border-[#d8d9e2] bg-white p-3">
-      <div className="flex items-center justify-between gap-3 text-[12px]">
-        <span className="text-[#5a5d6d]">{field.label}</span>
-        {field.type === 'number' ? (
-          <span className="shrink-0 rounded-full bg-[#eef3ff] px-2 py-0.5 font-mono text-[11px] text-[#2c5fd5]">
-            {displayValue}
-          </span>
-        ) : null}
-      </div>
-      <div className="mt-2">
-        {field.type === 'select' && control === 'segmented' ? (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {field.options.map((option) => {
-              const isActive = value === option.value
-
-              return (
-                <button
-                  className={cn(
-                    'h-10 border px-3 text-[12px] transition-colors',
-                    isActive
-                      ? 'border-[#4285f4] bg-[#4285f4] text-white'
-                      : 'border-[#d8d9e2] bg-white text-[#1a1b24] hover:border-[#4285f4]/45',
-                  )}
-                  key={option.value}
-                  onClick={() => onChange(option.value)}
-                  type="button"
-                >
-                  {option.label}
-                </button>
-              )
-            })}
-          </div>
-        ) : field.type === 'select' ? (
-          <select className={baseClassName} onChange={(event) => onChange(event.target.value)} value={value}>
-            {field.options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        ) : field.type === 'color' ? (
-          <div className="grid grid-cols-[64px_1fr] items-center gap-2">
-            <input className="h-10 w-full border border-[#d8d9e2] bg-white p-1.5" onChange={(event) => onChange(event.target.value)} type="color" value={value} />
-            <div className="h-10 border border-[#d8d9e2] bg-white px-3 font-mono text-[12px] leading-[38px] text-[#1a1b24]">
-              {String(value).toUpperCase()}
-            </div>
-          </div>
-        ) : control === 'slider' ? (
-          <div className="space-y-2">
-            <input
-              className="h-2 w-full cursor-pointer accent-[#4285f4]"
-              max={numberFieldRange?.max}
-              min={numberFieldRange?.min}
-              onChange={(event) => {
-                onChange(clampTemplateFieldNumber(field, event.target.value, numberFieldRange?.min ?? 0))
-              }}
-              step={numberFieldRange?.step ?? field.step ?? 1}
-              type="range"
-              value={Number.isFinite(Number(value)) ? Number(value) : numberFieldRange?.min ?? 0}
-            />
-            <div className="flex items-center justify-between text-[10px] text-[#8b8ea1]">
-              <span>{formatTemplateFieldValue(numberFieldRange?.min, numberFieldRange?.step ?? field.step ?? 1)}</span>
-              <span>{formatTemplateFieldValue(numberFieldRange?.max, numberFieldRange?.step ?? field.step ?? 1)}</span>
-            </div>
-          </div>
-        ) : control === 'stepper' ? (
-          <div className="grid grid-cols-[40px_1fr_40px] items-center gap-2">
-            <button
-              className="h-10 border border-[#d8d9e2] bg-white text-[16px] text-[#1a1b24] transition-colors hover:border-[#4285f4]/45"
-              onClick={() =>
-                onChange(
-                  clampTemplateFieldNumber(
-                    field,
-                    Number(value) - (numberFieldRange?.step ?? field.step ?? 1),
-                    numberFieldRange?.min ?? 0,
-                  ),
-                )
-              }
-              type="button"
-            >
-              -
-            </button>
-            <input
-              className={baseClassName}
-              max={numberFieldRange?.max}
-              min={numberFieldRange?.min}
-              onChange={(event) => {
-                const nextValue = Number.parseFloat(event.target.value)
-                onChange(Number.isFinite(nextValue) ? clampTemplateFieldNumber(field, nextValue, 0) : 0)
-              }}
-              step={numberFieldRange?.step ?? field.step ?? 1}
-              type="number"
-              value={value}
-            />
-            <button
-              className="h-10 border border-[#d8d9e2] bg-white text-[16px] text-[#1a1b24] transition-colors hover:border-[#4285f4]/45"
-              onClick={() =>
-                onChange(
-                  clampTemplateFieldNumber(
-                    field,
-                    Number(value) + (numberFieldRange?.step ?? field.step ?? 1),
-                    numberFieldRange?.min ?? 0,
-                  ),
-                )
-              }
-              type="button"
-            >
-              +
-            </button>
-          </div>
-        ) : (
-          <input
-            className={baseClassName}
-            onChange={(event) => {
-              const nextValue = Number.parseFloat(event.target.value)
-              onChange(Number.isFinite(nextValue) ? nextValue : 0)
-            }}
-            step={field.step ?? 1}
-            type="number"
-            value={value}
-          />
-        )}
-      </div>
-    </label>
-  )
-}
-
-function TemplateBodyImageOrderEditor({ onMoveDown, onMoveUp, slots }) {
-  return (
-    <section>
-      <div className="text-[12px] text-[#5a5d6d]">
-        这里不是调样式，而是调 3 张正文图的出场顺序。上下箭头只负责换顺序。
-      </div>
-      <div className="mt-3 grid gap-3">
-        {slots.map((slot, index) => (
-          <div className="grid grid-cols-[1fr_auto] gap-3 border border-[#d8d9e2] bg-white p-3" key={slot.slotId || `template-body-slot-${index + 1}`}>
-            <div>
-              <div className="text-[12px] font-medium text-[#1a1b24]">正文第 {index + 1} 张图</div>
-              <div className="mt-1 text-[11px] leading-[1.55] text-[#5a5d6d]">
-                预览里写着“这里是正文第 {index + 1} 张图”的占位块，对应的就是它。
-              </div>
-              <div className="mt-2 inline-flex border border-[#d8d9e2] bg-[#f8f9fb] px-2 py-1 text-[11px] text-[#1a1b24]">
-                当前排在第 {slot.sectionOrder} 个正文位置
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <button
-                className="flex h-10 w-10 items-center justify-center border border-[#d8d9e2] bg-white text-[#1a1b24] transition-colors hover:border-[#4285f4]/45 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={index === 0}
-                onClick={() => onMoveUp(index)}
-                type="button"
-              >
-                <ArrowUp size={16} />
-              </button>
-              <button
-                className="flex h-10 w-10 items-center justify-center border border-[#d8d9e2] bg-white text-[#1a1b24] transition-colors hover:border-[#4285f4]/45 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={index === slots.length - 1}
-                onClick={() => onMoveDown(index)}
-                type="button"
-              >
-                <ArrowDown size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function ArticleTemplateModuleCanvas({ previewSample, templateConfigState }) {
-  const { config: savedConfig, errorMessage, isLoading, saveConfig, setErrorMessage } = templateConfigState
-  const { config: fixedLayoutConfig } = useFixedLayoutConfigState()
-  const [draftConfig, setDraftConfig] = useState(() => normalizeImageFocusedTemplateConfig(savedConfig))
-  const [feedbackMessage, setFeedbackMessage] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
-  const [isRestoring, setIsRestoring] = useState(false)
-  const [previewDevice, setPreviewDevice] = useState('mobile')
-  const [previewFontSize, setPreviewFontSize] = useState('medium')
-
-  useEffect(() => {
-    setDraftConfig(normalizeImageFocusedTemplateConfig(savedConfig))
-  }, [savedConfig])
-
-  useEffect(() => {
-    if (!feedbackMessage) {
-      return undefined
-    }
-
-    const timerId = window.setTimeout(() => {
-      setFeedbackMessage('')
-    }, 2200)
-
-    return () => {
-      window.clearTimeout(timerId)
-    }
-  }, [feedbackMessage])
-
-  const normalizedDraftConfig = useMemo(() => normalizeImageFocusedTemplateConfig(draftConfig), [draftConfig])
-  const hasUnsavedChanges =
-    createArticleTemplateConfigSignature(normalizedDraftConfig) !== createArticleTemplateConfigSignature(savedConfig)
-  const previewRenderResult = useMemo(
-    () =>
-      renderArticlePreviewDocument({
-        articleType: previewSample.articleType,
-        bodyMarkdown: previewSample.bodyMarkdown,
-        device: previewDevice === 'mobile' ? 'mobile' : 'desktop',
-        displayTitle: previewSample.displayTitle,
-        fixedLayoutConfig,
-        fontSize: previewFontSize,
-        imageSlots: createTemplatePreviewPlaceholderSlots(normalizedDraftConfig),
-        origin: typeof window === 'undefined' ? '' : window.location.origin,
-        penName: previewSample.penName,
-        previewMode: 'template-editor',
-        templateConfig: normalizedDraftConfig,
-        wordCount: previewSample.wordCount,
-      }),
-    [fixedLayoutConfig, normalizedDraftConfig, previewDevice, previewFontSize, previewSample],
-  )
-
-  const statusMeta = useMemo(() => {
-    if (errorMessage) {
-      return {
-        boxClassName: 'border-[#f0c4c4] text-[#8f2f2f]',
-        dotClassName: 'bg-[#d14a4a]',
-        text: errorMessage,
-      }
-    }
-
-    if (hasUnsavedChanges) {
-      return {
-        boxClassName: 'border-[#f2d7bd] text-[#8f5c1f]',
-        dotClassName: 'bg-[#f0883e]',
-        text: '当前有未保存改动，正式排版还没有同步',
-      }
-    }
-
-    if (feedbackMessage) {
-      return {
-        boxClassName: 'border-[#bde3d8] text-[#0f6d56]',
-        dotClassName: 'bg-[#10a37f]',
-        text: feedbackMessage,
-      }
-    }
-
-    return {
-      boxClassName: 'border-[#cfe5dc] text-[#0f6d56]',
-      dotClassName: 'bg-[#10a37f]',
-      text: '模板已同步，当前规则已用于正式排版与微信复制',
-    }
-  }, [errorMessage, feedbackMessage, hasUnsavedChanges])
-
-  function handleFieldChange(path, nextValue) {
-    setDraftConfig((current) => normalizeImageFocusedTemplateConfig(setValueAtPath(current, path, nextValue)))
-  }
-
-  function handleSectionOrderChange(slotIndex, nextSectionOrder) {
-    setDraftConfig((current) => {
-      const normalizedCurrent = normalizeImageFocusedTemplateConfig(current)
-      const nextSlots = normalizedCurrent.bodyImageSlots.map((slot) => ({ ...slot }))
-      const currentOrder = nextSlots[slotIndex]?.sectionOrder ?? slotIndex + 1
-      const swapIndex = nextSlots.findIndex((slot, index) => index !== slotIndex && slot.sectionOrder === nextSectionOrder)
-
-      if (swapIndex !== -1) {
-        nextSlots[swapIndex] = {
-          ...nextSlots[swapIndex],
-          sectionOrder: currentOrder,
-        }
-      }
-
-      nextSlots[slotIndex] = {
-        ...nextSlots[slotIndex],
-        sectionOrder: nextSectionOrder,
-      }
-
-      return normalizeImageFocusedTemplateConfig({
-        ...normalizedCurrent,
-        bodyImageSlots: nextSlots,
-      })
-    })
-  }
-
-  function handleMoveBodyImageUp(slotIndex) {
-    const currentOrder = normalizedDraftConfig.bodyImageSlots[slotIndex]?.sectionOrder ?? slotIndex + 1
-    if (currentOrder <= 1) {
-      return
-    }
-    handleSectionOrderChange(slotIndex, currentOrder - 1)
-  }
-
-  function handleMoveBodyImageDown(slotIndex) {
-    const currentOrder = normalizedDraftConfig.bodyImageSlots[slotIndex]?.sectionOrder ?? slotIndex + 1
-    if (currentOrder >= 3) {
-      return
-    }
-    handleSectionOrderChange(slotIndex, currentOrder + 1)
-  }
-
-  async function handleSaveTemplate() {
-    setIsSaving(true)
-    setErrorMessage('')
-
-    try {
-      const nextConfig = await saveConfig(normalizedDraftConfig)
-      setDraftConfig(nextConfig)
-      setFeedbackMessage('模板已保存，正式排版会直接使用这套规则。')
-    } catch (saveError) {
-      setErrorMessage(saveError.message || '保存排版模板失败')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  async function handleRestoreDefaults() {
-    const confirmed = window.confirm('确认恢复排版模板默认值吗？恢复后会立即覆盖当前正式模板。')
-
-    if (!confirmed) {
-      return
-    }
-
-    setIsRestoring(true)
-    setErrorMessage('')
-
-    try {
-      const nextConfig = await saveConfig(normalizeImageFocusedTemplateConfig(createDefaultArticleTemplateConfig()))
-      setDraftConfig(nextConfig)
-      setFeedbackMessage('已恢复默认模板。')
-    } catch (restoreError) {
-      setErrorMessage(restoreError.message || '恢复默认模板失败')
-    } finally {
-      setIsRestoring(false)
-    }
-  }
-
-  return (
-    <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-[#f4f5f7] text-[#1a1b24]">
-      <div className="mx-auto w-full max-w-[1280px] px-5 py-6">
-        <div className="mb-4 flex flex-col gap-3 border-b border-[#d8d9e2] pb-4 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <h1 className="m-0 text-[22px] tracking-[0.04em] text-[#1a1b24]">排版模板工作台</h1>
-            <div className="mt-1 text-[12px] text-[#5a5d6d]">
-              直接复用 Doocs 转换台的工作台结构来调模板。这里调的是整套模板，不是单篇文章。
-            </div>
-          </div>
-
-          <div className={cn('flex items-center gap-2 border bg-white px-3 py-2 text-[12px]', statusMeta.boxClassName)}>
-            <span className={cn('h-2 w-2 shrink-0', statusMeta.dotClassName)} />
-            <span>{statusMeta.text}</span>
-          </div>
-        </div>
-
-        <div className="grid gap-[14px] xl:grid-cols-[minmax(0,1.08fr)_380px]">
-          <section className="border border-[#d8d9e2] bg-white p-[14px]">
-            <div className="mb-[10px] flex flex-wrap items-center justify-between gap-[10px]">
-              <div>
-                <div className="text-[12px] tracking-[0.04em] text-[#5a5d6d]">预览</div>
-                <div className="mt-1 text-[11px] leading-[1.5] text-[#5a5d6d]">
-                  当前优先使用最近一篇真实生成稿来预览；正文 3 个图片占位会明确写对应的第 1 / 2 / 3 张图。
-                </div>
-                <div className="mt-3 rounded-[14px] border border-[#d8d9e2] bg-[#fafbfc] px-3 py-2">
-                  <div className="text-[10px] tracking-[0.08em] text-[#5a5d6d]">当前预览标题</div>
-                  <div className="mt-1 text-[14px] font-medium leading-[1.7] text-[#1a1b24]">
-                    {previewSample.displayTitle || '未命名标题'}
-                  </div>
-                  <div className="mt-1 text-[11px] leading-[1.5] text-[#5a5d6d]">
-                    标题只在这里单独看，不会进入右侧文章画布。
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex border border-[#d8d9e2] bg-white">
-                  {[
-                    { id: 'mobile', label: '移动端' },
-                    { id: 'pc', label: 'PC' },
-                  ].map((item) => (
-                    <button
-                      className={cn(
-                        'border-r border-[#d8d9e2] px-[10px] py-[7px] text-[12px]',
-                        item.id === previewDevice ? 'bg-[#4285f4] text-white' : 'bg-white text-[#5a5d6d]',
-                        item.id === 'pc' && 'border-r-0',
-                      )}
-                      key={item.id}
-                      onClick={() => setPreviewDevice(item.id)}
-                      type="button"
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="inline-flex border border-[#d8d9e2] bg-white">
-                  {[
-                    { id: 'small', label: '小' },
-                    { id: 'medium', label: '推荐' },
-                    { id: 'large', label: '大' },
-                  ].map((item) => (
-                    <button
-                      className={cn(
-                        'border-r border-[#d8d9e2] px-[10px] py-[7px] text-[12px]',
-                        previewFontSize === item.id ? 'bg-[#4285f4] text-white' : 'bg-white text-[#5a5d6d]',
-                        item.id === 'large' && 'border-r-0',
-                      )}
-                      key={item.id}
-                      onClick={() => setPreviewFontSize(item.id)}
-                      type="button"
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="relative flex items-start justify-center border border-[#d8d9e2] bg-white p-[14px]">
-              {previewDevice === 'pc' ? (
-                <div className="w-full max-w-[820px] bg-white">
-                  <ArticlePreviewFrame documentHtml={previewRenderResult.documentHtml} title="排版模板预览-PC" />
-                </div>
-              ) : (
-                <div className="w-[375px] max-w-full border border-[#ececf2] bg-white shadow-[0_8px_24px_rgba(18,20,38,0.08)]">
-                  <ArticlePreviewFrame documentHtml={previewRenderResult.documentHtml} title="排版模板预览-移动端" />
-                </div>
-              )}
-            </div>
-          </section>
-
-          <aside className="space-y-3">
-            <section className="border border-[#d8d9e2] bg-white p-3">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[12px] font-medium text-[#1a1b24]">配置</div>
-                  <div className="mt-1 text-[11px] leading-[1.5] text-[#5a5d6d]">
-                    这里只保留图片相关配置。名称和 `图片配置` 模块保持一一对应。
-                  </div>
-                </div>
-                <div className="text-[11px] text-[#5a5d6d]">配置存储：`.local-data/article-template-config.json`</div>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button className="h-10 rounded-none bg-[#4285f4] text-white hover:bg-[#3777dd]" disabled={isLoading || isSaving || !hasUnsavedChanges} onClick={handleSaveTemplate} type="button">
-                  {isSaving ? <LoaderCircle className="animate-spin" size={14} /> : <Check size={14} />}
-                  保存模板
-                </Button>
-                <Button className="h-10 rounded-none border-[#d8d9e2] bg-white text-[#1a1b24] hover:bg-[#f8f9fb]" disabled={isRestoring || isSaving} onClick={handleRestoreDefaults} type="button" variant="outline">
-                  {isRestoring ? <LoaderCircle className="animate-spin" size={14} /> : null}
-                  恢复默认
-                </Button>
-              </div>
-            </section>
-
-            <section className="border border-[#d8d9e2] bg-white p-3">
-              <div className="mb-3">
-                <div className="text-[12px] font-medium text-[#1a1b24]">正文配图顺序</div>
-                <div className="mt-1 text-[11px] leading-[1.5] text-[#5a5d6d]">
-                  默认没有分割线。这里只用上下箭头调 3 张正文图的顺序，不再放别的冗余选项。
-                </div>
-              </div>
-              <TemplateBodyImageOrderEditor
-                onMoveDown={handleMoveBodyImageDown}
-                onMoveUp={handleMoveBodyImageUp}
-                slots={normalizedDraftConfig.bodyImageSlots}
-              />
-            </section>
-
-            <section className="border border-[#d8d9e2] bg-white p-3">
-              <div className="mb-3">
-                <div className="text-[12px] font-medium text-[#1a1b24]">正文三张图通用样式</div>
-                <div className="mt-1 text-[11px] leading-[1.5] text-[#5a5d6d]">
-                  这组参数同时作用在正文第 1 / 2 / 3 张图上，核心就是圆角、大小和位置。
-                </div>
-              </div>
-              <div className="grid gap-3">
-                {ARTICLE_TEMPLATE_BODY_IMAGE_STYLE_FIELDS.map((field) => (
-                  <TemplateFieldInput
-                    field={field}
-                    key={field.path.join('.')}
-                    onChange={(nextValue) => handleFieldChange(field.path, nextValue)}
-                    value={getValueAtPath(normalizedDraftConfig, field.path)}
-                  />
-                ))}
-              </div>
-            </section>
-
-            {ARTICLE_TEMPLATE_FIXED_IMAGE_GROUPS.map((group) => (
-              <section className="border border-[#d8d9e2] bg-white p-3" key={group.id}>
-                <div className="mb-3">
-                  <div className="text-[12px] font-medium text-[#1a1b24]">{group.title}</div>
-                  <div className="mt-1 text-[11px] leading-[1.5] text-[#5a5d6d]">{group.description}</div>
-                </div>
-                <div className="grid gap-3">
-                  {group.fields.map((field) => (
-                    <TemplateFieldInput
-                      field={field}
-                      key={field.path.join('.')}
-                      onChange={(nextValue) => handleFieldChange(field.path, nextValue)}
-                      value={getValueAtPath(normalizedDraftConfig, field.path)}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-
-            <section className="border border-[#d8d9e2] bg-white p-3">
-              <div className="text-[12px] font-medium text-[#1a1b24]">{FIXED_LAYOUT_SLOT_META.endingText.label}</div>
-              <div className="mt-2 text-[11px] leading-[1.6] text-[#5a5d6d]">
-                文末这里仍用模拟文案展示节奏，但正文主体已经切到最近一篇真实生成稿。当前先把图片大小、圆角和位置调顺。
-              </div>
-            </section>
-          </aside>
-        </div>
-      </div>
     </div>
   )
 }
@@ -5223,7 +4075,6 @@ export default function BenchmarkWorkbenchPage() {
   const [copiedMessageId, setCopiedMessageId] = useState(null)
   const [isResizingSplit, setIsResizingSplit] = useState(false)
   const [rightPaneWidth, setRightPaneWidth] = useState(620)
-  const articleTemplateConfigState = useArticleTemplateConfigState()
 
   const composerRef = useRef(null)
   const hasInitializedContentSessionMirrorRef = useRef(false)
@@ -5245,7 +4096,6 @@ export default function BenchmarkWorkbenchPage() {
   const historySessions = useMemo(() => orderedSessions.filter(hasSessionHistory), [orderedSessions])
   const topicStatusById = useMemo(() => getTopicStatusMap(sessions), [sessions])
   const articleEntries = useMemo(() => createArticleListEntries(sessions), [sessions])
-  const templatePreviewSample = useMemo(() => resolveTemplatePreviewSample(sessions), [sessions])
 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? orderedSessions[0] ?? sessions[0] ?? null
@@ -5319,7 +4169,6 @@ export default function BenchmarkWorkbenchPage() {
   const selectedTopic = activeSession ? getSelectedTopic(activeSession) : null
   const activeVersion = activeSession ? getActiveVersion(activeSession) : null
   const activeFilterTypes = activeSession?.topicSelection?.filterTypes ?? []
-  const articleTemplateConfig = articleTemplateConfigState.config
   const visibleTopicRecommendations = useMemo(() => {
     if (!activeSession) {
       return []
@@ -5879,7 +4728,7 @@ export default function BenchmarkWorkbenchPage() {
     }
 
     const previewSections = buildPreviewSections(stripPreviewHeading(currentVersion.draftMarkdown ?? ''))
-    const matchSections = buildTemplateMatchSections(previewSections, articleTemplateConfig)
+    const matchSections = buildTemplateMatchSections(previewSections)
 
     await runFlow({
       awaitResultStepIndex: 0,
@@ -5892,7 +4741,6 @@ export default function BenchmarkWorkbenchPage() {
             ? buildImageSelectionFromMatchResult({
                 matchResult: matchedAssets,
                 sections: matchSections,
-                templateConfig: articleTemplateConfig,
                 versionId: nextVersion.id,
               })
             : current.imageSelection
@@ -5903,7 +4751,7 @@ export default function BenchmarkWorkbenchPage() {
           messages: updateMessageById(current.messages, messageId, (message) => ({
             content: appendMessageParagraph(
               message.content,
-              '极简排版预览已经准备好了。右侧可以切换 PC、移动端和字号，确认后这轮内容创作就完成了。',
+              '固定模板排版预览已经准备好了。右侧可以查看最终展示效果，确认后这轮内容创作就完成了。',
             ),
           })),
           stageId: 'preview',
@@ -5922,11 +4770,11 @@ export default function BenchmarkWorkbenchPage() {
           wordCount: currentVersion.wordCount || 0,
         }),
       sessionId: currentSessionId,
-      summary: '文字稿确认完成，系统正在整理极简排版预览。',
+      summary: '文字稿确认完成，系统正在按固定模板整理排版预览。',
       steps: [
-        { label: '整理标题、正文和段落层级', seconds: 5, tabId: 'draft' },
-        { label: '生成 PC 端排版预览', seconds: 6, tabId: 'preview' },
-        { label: '生成移动端排版预览', seconds: 6, tabId: 'preview' },
+        { label: '整理固定模板结构', seconds: 5, tabId: 'draft' },
+        { label: '匹配正文三张配图', seconds: 6, tabId: 'preview' },
+        { label: '生成固定模板预览', seconds: 6, tabId: 'preview' },
       ],
       title: '正在生成排版预览',
     })
@@ -6166,8 +5014,8 @@ export default function BenchmarkWorkbenchPage() {
       sessionId: currentSessionId,
       summary: '排版确认完成，系统正在收束本轮内容创作结果。',
       steps: [
-        { label: '确认正文层级与段落间距', seconds: 4, tabId: 'preview' },
-        { label: '写入最终字号与设备偏好', seconds: 4, tabId: 'preview' },
+        { label: '确认固定模板排版结果', seconds: 4, tabId: 'preview' },
+        { label: '写入最终预览状态', seconds: 4, tabId: 'preview' },
       ],
       title: '正在完成本轮排版确认',
     })
@@ -6352,8 +5200,6 @@ export default function BenchmarkWorkbenchPage() {
                 <LibraryModuleCanvas topicStatusById={topicStatusById} />
               ) : activeModule === 'articles' ? (
                 <ArticlesModuleCanvas articles={articleEntries} onOpenArticle={handleOpenArticlePreview} />
-              ) : activeModule === 'layout-template' ? (
-                <ArticleTemplateModuleCanvas previewSample={templatePreviewSample} templateConfigState={articleTemplateConfigState} />
               ) : activeModule === 'fixed-layout' ? (
                 <FixedLayoutConfigCanvas />
               ) : (
@@ -6510,26 +5356,7 @@ export default function BenchmarkWorkbenchPage() {
                     },
                   }))
                 }
-                onSetDevice={(device) =>
-                  updateCurrentSession((current) => ({
-                    ...current,
-                    layoutReview: {
-                      ...current.layoutReview,
-                      device,
-                    },
-                  }))
-                }
-                onSetFontSize={(fontSize) =>
-                  updateCurrentSession((current) => ({
-                    ...current,
-                    layoutReview: {
-                      ...current.layoutReview,
-                      fontSize,
-                    },
-                  }))
-                }
                 session={activeSession}
-                templateConfig={articleTemplateConfig}
                 tabs={availableTabs}
               />
             </div>
@@ -6548,7 +5375,6 @@ export default function BenchmarkWorkbenchPage() {
         onClose={handleCloseArticlePreview}
         open={activeModule === 'articles' && Boolean(activeArticleSession)}
         session={activeArticleSession}
-        templateConfig={articleTemplateConfig}
       />
     </section>
   )

@@ -6,6 +6,7 @@ import {
 
 const DEFAULT_MODEL = 'MiniMax-M2.7'
 const CONTENT_ASSISTANT_NAME = '内容创作助手'
+const REQUIRED_DRAFT_PLACEHOLDERS = ['[IMAGE_1]', '[IMAGE_2]', '[IMAGE_3]', '[ENDING]']
 
 const TITLE_FORMULA_GUIDE = [
   '1. 转折反常识式：用“不是……而是……”或“越……反而越……”制造反转。',
@@ -30,6 +31,15 @@ const TITLE_GENERATION_REQUIREMENTS = [
   '- generatedTitle 必须是字符串，只放标题本身，不要带序号、说明或公式标签。',
   '可用标题公式：',
   TITLE_FORMULA_GUIDE,
+].join('\n')
+
+const DRAFT_TEMPLATE_CONTRACT_GUIDE = [
+  '固定模板正文占位符要求：',
+  '- 正文必须完整包含且只包含一次以下 4 个占位符：[IMAGE_1]、[IMAGE_2]、[IMAGE_3]、[ENDING]。',
+  '- 三个主体部分后分别插入 [IMAGE_1]、[IMAGE_2]、[IMAGE_3]，顺序不能打乱。',
+  '- [ENDING] 必须出现在第三部分正文和 [IMAGE_3] 之后，表示进入结尾收束内容。',
+  '- [ENDING] 之后只允许保留结尾收束内容，不要再写新的主体观点，不要再插入新的图片占位符。',
+  '- 不要在正文里主动输出 ▽、二维码引导、关注提示、底部在看动图提示，这些由固定模板统一渲染。',
 ].join('\n')
 
 function buildContentSystemPrompt(ruleProfile) {
@@ -91,6 +101,8 @@ function buildSharedContentContextLines({
     buildPenExecutionNotes(ruleProfile, topic?.penName),
     '',
     ruleBlock,
+    '',
+    DRAFT_TEMPLATE_CONTRACT_GUIDE,
   ]
 }
 
@@ -116,6 +128,7 @@ function buildContentUserPrompt({
     '',
     '输出要求：',
     '- draftMarkdown：直接可读的公众号正文 Markdown，允许使用一级标题、引用、段落、小标题、列表。',
+    '- draftMarkdown 必须严格遵守固定模板占位符结构。',
     ruleProfile.reportInstruction,
     ruleProfile.reportFormattingInstruction,
     '- generatedTitle：基于最终正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
@@ -148,6 +161,7 @@ function buildDraftGenerationUserPrompt({ deepThinkingEnabled, ruleProfile, supp
     '',
     '输出要求：',
     '- draftMarkdown：直接可读的公众号正文 Markdown，允许使用一级标题、引用、段落、小标题、列表。',
+    '- draftMarkdown 必须严格遵守固定模板占位符结构。',
     '- summary：一句适合展示在工作流里的简短总结。',
     '- 只输出正文草稿，不要输出审核报告。',
     '',
@@ -177,6 +191,8 @@ function buildDraftAuditUserPrompt({ deepThinkingEnabled, draftMarkdown = '', ru
     '输出要求：',
     ruleProfile.reportInstruction,
     ruleProfile.reportFormattingInstruction,
+    '- 必须额外检查正文里 [IMAGE_1]、[IMAGE_2]、[IMAGE_3]、[ENDING] 是否齐全且顺序正确。',
+    '- 如果占位符缺失、重复、顺序错误，或 [ENDING] 后仍在展开新的主体内容，decision 只能输出 rewrite。',
     '- generatedTitle：基于当前正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
     '- decision：只能输出 pass / partial / rewrite 其中一个。',
     '- summary：一句适合展示在工作流里的简短总结。',
@@ -223,6 +239,7 @@ function buildDraftRevisionUserPrompt({
     '',
     '输出要求：',
     '- draftMarkdown：修订后的最终正文 Markdown。',
+    '- 修订后的 draftMarkdown 必须严格遵守固定模板占位符结构。',
     '- reportMarkdown：基于修订后正文输出的最终校验报告 Markdown。',
     '- generatedTitle：基于修订后正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
     '- summary：一句适合展示在工作流里的简短总结。',
@@ -444,6 +461,38 @@ function countReadableLength(content = '') {
     .trim().length
 }
 
+function validateDraftPlaceholderStructure(draftMarkdown = '') {
+  const normalizedDraft = typeof draftMarkdown === 'string' ? draftMarkdown : ''
+  const markerDetails = REQUIRED_DRAFT_PLACEHOLDERS.map((marker) => ({
+    marker,
+    count: normalizedDraft.split(marker).length - 1,
+    index: normalizedDraft.indexOf(marker),
+  }))
+  const issues = []
+
+  markerDetails.forEach((detail) => {
+    if (detail.count === 0) {
+      issues.push(`缺少 ${detail.marker}`)
+    } else if (detail.count > 1) {
+      issues.push(`${detail.marker} 出现了 ${detail.count} 次`)
+    }
+  })
+
+  const indexes = markerDetails.map((detail) => detail.index)
+  const hasOrderedMarkers =
+    markerDetails.every((detail) => detail.count === 1 && detail.index >= 0) &&
+    indexes.every((index, markerIndex) => markerIndex === 0 || index > indexes[markerIndex - 1])
+
+  if (!hasOrderedMarkers) {
+    issues.push('占位符顺序不正确，应为 [IMAGE_1] → [IMAGE_2] → [IMAGE_3] → [ENDING]')
+  }
+
+  return {
+    issues,
+    valid: issues.length === 0,
+  }
+}
+
 function sanitizeDraftMarkdown(draftMarkdown, topic) {
   let nextDraft = draftMarkdown.trim()
   const adjustments = []
@@ -464,20 +513,16 @@ function sanitizeDraftMarkdown(draftMarkdown, topic) {
     return '。'
   })
 
-  const requiresFixedEnding = topic?.type === 'A型' || topic?.type === 'B型'
+  if (nextDraft.includes('▽')) {
+    nextDraft = nextDraft.replace(/\n*\s*▽\s*/g, '\n\n').trim()
+    adjustments.push('已移除正文中的 ▽ 分隔符，避免与固定模板重复。')
+  }
 
-  if (requiresFixedEnding && !nextDraft.includes('点亮文末"爱心"')) {
-    nextDraft = [
-      nextDraft,
-      '',
-      '▽',
-      '',
-      '点亮文末"爱心"，愿你往后有光，心里有暖，脚下有路。转发分享，弘扬中华传统文化！',
-    ].join('\n')
-    adjustments.push('已自动补齐固定结尾语。')
-  } else if (topic?.type === 'A型' && !nextDraft.includes('\n▽\n')) {
-    nextDraft = `${nextDraft}\n\n▽`
-    adjustments.push('已补齐 A 型文章要求的分割线。')
+  if (nextDraft.includes('点亮文末"爱心"') || nextDraft.includes('点亮文末“爱心”')) {
+    nextDraft = nextDraft
+      .replace(/\n*\s*点亮文末["“]爱心["”][\s\S]*?弘扬中华传统文化！?/g, '')
+      .trim()
+    adjustments.push('已移除正文里的固定关注引导语，改由模板统一渲染。')
   }
 
   return {
@@ -490,10 +535,7 @@ function buildQualityCheckSection({ adjustments, draftMarkdown, ruleProfile, top
   const readableLength = countReadableLength(draftMarkdown)
   const bannedHits = ruleProfile.forbiddenAiPhrases.filter((phrase) => draftMarkdown.includes(phrase))
   const hasDash = draftMarkdown.includes('——')
-  const fixedEndingOk =
-    topic?.type === 'A型' || topic?.type === 'B型'
-      ? draftMarkdown.includes('点亮文末"爱心"')
-      : true
+  const placeholderCheck = validateDraftPlaceholderStructure(draftMarkdown)
 
   const lines = [
     '## 规则校验',
@@ -501,7 +543,7 @@ function buildQualityCheckSection({ adjustments, draftMarkdown, ruleProfile, top
     `- 字数估算：约 ${readableLength} 字。`,
     `- 破折号检查：${hasDash ? '仍检测到破折号，建议人工复核。' : '通过。'}`,
     `- AI 腔词检查：${bannedHits.length === 0 ? '未发现明显禁用词。' : `发现 ${bannedHits.join('、')}。`}`,
-    `- 固定结尾语检查：${fixedEndingOk ? '通过。' : '未通过，建议补齐。'}`,
+    `- 固定模板占位符检查：${placeholderCheck.valid ? '通过。' : `未通过：${placeholderCheck.issues.join('；')}`}`,
     adjustments.length > 0 ? `- 程序兜底修正：${adjustments.join(' ')}` : '- 程序兜底修正：本轮未触发。',
   ]
 
@@ -843,6 +885,7 @@ export async function runInitialContentPipeline({
   stagePayloads.generation = generationStage.rawContent
 
   const initialDraft = sanitizeDraftMarkdown(generationStage.draftMarkdown, topic)
+  const initialPlaceholderCheck = validateDraftPlaceholderStructure(initialDraft.draftMarkdown)
   advance(2)
   advance(3)
 
@@ -860,7 +903,7 @@ export async function runInitialContentPipeline({
 
   advance(4)
 
-  const decision = normalizeRevisionDecision(auditStage.decision, 'pass')
+  const decision = initialPlaceholderCheck.valid ? normalizeRevisionDecision(auditStage.decision, 'pass') : 'rewrite'
   let finalDraft = initialDraft
   let finalReportMarkdown = auditStage.reportMarkdown
   let finalSummary = auditStage.summary || generationStage.summary
@@ -900,6 +943,7 @@ export async function runInitialContentPipeline({
     ruleProfile,
     topic,
   })
+  const finalPlaceholderCheck = validateDraftPlaceholderStructure(finalDraft.draftMarkdown)
   const finishedAt = Date.now()
   steps = completePipelineSteps(steps, finishedAt)
   pushProgress()
@@ -909,10 +953,18 @@ export async function runInitialContentPipeline({
     draftMarkdown: finalDraft.draftMarkdown,
     model,
     rawContent: stagePayloads,
-    reportMarkdown: `${(finalReportMarkdown || buildFallbackReport({ action: 'initial', ruleProfile, supplement, topic })).trim()}\n\n${qualitySection}`,
+    reportMarkdown: `${(finalReportMarkdown || buildFallbackReport({ action: 'initial', ruleProfile, supplement, topic })).trim()}\n\n${
+      !initialPlaceholderCheck.valid
+        ? `## 固定模板结构检查\n\n- 首稿占位符结构未通过，已强制进入重写。\n- 问题：${initialPlaceholderCheck.issues.join('；')}\n\n`
+        : ''
+    }${!finalPlaceholderCheck.valid ? `## 固定模板结构结果\n\n- 最终正文仍未完全符合固定模板要求。\n- 问题：${finalPlaceholderCheck.issues.join('；')}\n\n` : ''}${qualitySection}`,
     ruleProfileId: ruleProfile.id,
     ruleProfileLabel: ruleProfile.label,
-    summary: (finalSummary || generationStage.summary || '首版稿件已经准备完成。').trim(),
+    summary: (
+      !finalPlaceholderCheck.valid
+        ? '正文结构仍未完全符合固定模板，请继续重试。'
+        : finalSummary || generationStage.summary || '首版稿件已经准备完成。'
+    ).trim(),
     generatedTitle: finalGeneratedTitle || buildFallbackGeneratedTitle(topic),
     usage: stageUsages,
   }
@@ -951,6 +1003,7 @@ export async function generateContentDraft({
       ? parsed.reportMarkdown.trim()
       : buildFallbackReport({ action, note, ruleProfile, supplement, topic })
   const sanitized = sanitizeDraftMarkdown(draftMarkdown, topic)
+  const placeholderCheck = validateDraftPlaceholderStructure(sanitized.draftMarkdown)
   const qualitySection = buildQualityCheckSection({
     adjustments: sanitized.adjustments,
     draftMarkdown: sanitized.draftMarkdown,
@@ -973,10 +1026,14 @@ export async function generateContentDraft({
     draftMarkdown: sanitized.draftMarkdown,
     model: result?.model ?? model,
     rawContent,
-    reportMarkdown: `${reportMarkdown}\n\n${qualitySection}`,
+    reportMarkdown: `${reportMarkdown}\n\n${
+      placeholderCheck.valid
+        ? ''
+        : `## 固定模板结构检查\n\n- 当前正文未完全符合固定模板要求。\n- 问题：${placeholderCheck.issues.join('；')}\n\n`
+    }${qualitySection}`,
     ruleProfileId: ruleProfile.id,
     ruleProfileLabel: ruleProfile.label,
-    summary,
+    summary: placeholderCheck.valid ? summary : '正文结构未完全符合固定模板，请继续重试。',
     generatedTitle,
     usage: result?.usage ?? null,
   }

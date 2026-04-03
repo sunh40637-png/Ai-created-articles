@@ -55,6 +55,7 @@ function normalizeFixedLayoutConfig(config) {
           : null,
     },
     footerGif: normalizeAssetRecord(config?.footerGif),
+    guideFollow: normalizeAssetRecord(config?.guideFollow),
     heroGif: normalizeAssetRecord(config?.heroGif),
     qrImage: normalizeAssetRecord(config?.qrImage),
   }
