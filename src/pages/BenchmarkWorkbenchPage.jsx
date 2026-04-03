@@ -19,6 +19,7 @@ import {
   Maximize2,
   MessageSquareText,
   Minimize2,
+  Monitor,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -27,6 +28,7 @@ import {
   Plus,
   ScrollText,
   Search,
+  Smartphone,
   Trash2,
   X,
 } from 'lucide-react'
@@ -2570,7 +2572,7 @@ function ReportWorkbench({ version }) {
   )
 }
 
-function PreviewWorkbench({ onUpdateDraftSync, session }) {
+function PreviewWorkbench({ onSetPreviewDevice, onUpdateDraftSync, session }) {
   const [copyStatus, setCopyStatus] = useState('idle')
   const [isWechatSyncing, setIsWechatSyncing] = useState(false)
   const [wechatStatus, setWechatStatus] = useState({
@@ -2583,6 +2585,7 @@ function PreviewWorkbench({ onUpdateDraftSync, session }) {
   const version = getActiveVersion(session)
   const { config: fixedLayoutConfig } = useFixedLayoutConfigState()
   const previewSlots = useRenderablePreviewSlots(session, version)
+  const previewDevice = session?.layoutReview?.device === 'desktop' || session?.layoutReview?.device === 'pc' ? 'desktop' : 'mobile'
   const bodyMarkdown = stripPreviewHeading(version?.draftMarkdown ?? '')
   const displayTitle = resolveVersionDisplayTitle(session, version)
   const previewRenderResult = useMemo(
@@ -2764,7 +2767,25 @@ function PreviewWorkbench({ onUpdateDraftSync, session }) {
     <div className="benchmark-scroll-hidden h-full min-h-0 overflow-y-auto px-6 py-6">
       <div className="mx-auto flex w-full max-w-[980px] flex-col gap-5">
         <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
-          <div className="text-[12px] text-muted-foreground">固定模板预览</div>
+          <div className="inline-flex rounded-full bg-secondary/55 p-1">
+            {[
+              { id: 'mobile', label: '移动端', icon: Smartphone },
+              { id: 'desktop', label: 'PC端', icon: Monitor },
+            ].map((item) => (
+              <button
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] transition-colors',
+                  previewDevice === item.id ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+                key={item.id}
+                onClick={() => onSetPreviewDevice?.(item.id)}
+                type="button"
+              >
+                <item.icon size={14} />
+                {item.label}
+              </button>
+            ))}
+          </div>
 
           <div className="flex items-center gap-3">
             <Button
@@ -2815,7 +2836,7 @@ function PreviewWorkbench({ onUpdateDraftSync, session }) {
         </div>
 
         <div className="flex justify-center">
-          <div className="w-full max-w-[760px]">
+          <div className={cn('w-full transition-all', previewDevice === 'mobile' ? 'max-w-[390px]' : 'max-w-[760px]')}>
             <div className="overflow-hidden rounded-[18px] border border-border/70 bg-white shadow-[0_8px_24px_rgba(18,20,38,0.06)]">
               <ArticlePreviewFrame documentHtml={previewRenderResult.documentHtml} />
             </div>
@@ -2873,6 +2894,7 @@ function RightWorkbenchShell({
   activeTabId,
   onOpenTab,
   onSelectVersion,
+  onSetPreviewDevice,
   onUpdateDraftSync,
   session,
   tabs,
@@ -2905,7 +2927,7 @@ function RightWorkbenchShell({
       case 'report':
         return <ReportWorkbench version={activeVersion} />
       case 'preview':
-        return <PreviewWorkbench onUpdateDraftSync={onUpdateDraftSync} session={session} />
+        return <PreviewWorkbench onSetPreviewDevice={onSetPreviewDevice} onUpdateDraftSync={onUpdateDraftSync} session={session} />
       case 'versions':
         return (
           <VersionsWorkbench
@@ -3018,7 +3040,7 @@ function ArticleListRow({ article, onOpen }) {
   )
 }
 
-function ArticlePreviewDrawer({ onClose, open, session }) {
+function ArticlePreviewDrawer({ onClose, onSetPreviewDevice, open, session }) {
   const availableTabs = session?.stageId === 'completed' ? ['draft', 'preview'] : ['draft']
   const [activeTab, setActiveTab] = useState(availableTabs[0] ?? 'draft')
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -3157,7 +3179,7 @@ function ArticlePreviewDrawer({ onClose, open, session }) {
         <div className="min-h-0 flex-1 overflow-hidden bg-white">
           {activeTab === 'preview' ? (
             <div className="benchmark-scroll-hidden h-full overflow-y-auto overscroll-contain">
-              <PreviewWorkbench session={session} />
+              <PreviewWorkbench onSetPreviewDevice={onSetPreviewDevice} session={session} />
             </div>
           ) : (
             <div className="benchmark-scroll-hidden h-full overflow-y-auto overscroll-contain">
@@ -4338,6 +4360,21 @@ export default function BenchmarkWorkbenchPage() {
     updateSession(currentSessionId, updater)
   }
 
+  function handleSetPreviewDevice(sessionId, nextDevice) {
+    if (!sessionId) {
+      return
+    }
+
+    const normalizedDevice = nextDevice === 'desktop' ? 'desktop' : 'mobile'
+
+    updateSession(sessionId, (current) => ({
+      layoutReview: {
+        ...(current.layoutReview ?? {}),
+        device: normalizedDevice,
+      },
+    }))
+  }
+
   async function runFlow({
     awaitResultStepIndex,
     introMessageContent,
@@ -5327,6 +5364,7 @@ export default function BenchmarkWorkbenchPage() {
               <RightWorkbenchShell
                 activeTabId={activeSession.activeWorkbenchTab}
                 onOpenTab={handleSelectWorkbenchTab}
+                onSetPreviewDevice={(nextDevice) => handleSetPreviewDevice(activeSession.id, nextDevice)}
                 onSelectVersion={(versionId) =>
                   updateCurrentSession((current) => {
                     const nextSession = {
@@ -5373,6 +5411,7 @@ export default function BenchmarkWorkbenchPage() {
 
       <ArticlePreviewDrawer
         onClose={handleCloseArticlePreview}
+        onSetPreviewDevice={(nextDevice) => handleSetPreviewDevice(activeArticleSession?.id, nextDevice)}
         open={activeModule === 'articles' && Boolean(activeArticleSession)}
         session={activeArticleSession}
       />
