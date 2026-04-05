@@ -23,7 +23,7 @@ export default async function handler(request, response) {
       slot,
     })
 
-    response.status(200).json(result)
+    response.status(200).json({ asset: result })
   } catch (error) {
     response.status(error.status || 500).json({
       error: error.message || '上传固定图片失败',

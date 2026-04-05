@@ -22,7 +22,7 @@ import { parseRequestFormData } from './server/httpFormData.js'
 import {
   deleteFixedLayoutAsset,
   readFixedLayoutConfig,
-  updateFixedLayoutText,
+  updateFixedLayoutConfig,
   uploadFixedLayoutAsset,
 } from './server/fixedLayoutConfig.js'
 import {
@@ -382,8 +382,9 @@ function fixedLayoutConfigDevApi() {
 
           if (req.method === 'PATCH' && pathname === '/') {
             const body = await readJsonBody(req)
-            const result = await updateFixedLayoutText({
-              endingText: body?.endingText ?? '',
+            const result = await updateFixedLayoutConfig({
+              endingText: body?.endingText,
+              imageSlots: body?.imageSlots,
             })
 
             res.statusCode = 200
@@ -403,7 +404,7 @@ function fixedLayoutConfigDevApi() {
 
             res.statusCode = 200
             res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify(result))
+            res.end(JSON.stringify({ asset: result }))
             return
           }
 
@@ -423,7 +424,7 @@ function fixedLayoutConfigDevApi() {
           res.setHeader('Content-Type', 'application/json')
           res.end(
             JSON.stringify({
-              error: error.message || '固定内容配置请求失败',
+              error: error.message || '模板配置请求失败',
             }),
           )
         }

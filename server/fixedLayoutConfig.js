@@ -1,10 +1,16 @@
 import path from 'node:path'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import {
+  createEmptyFixedLayoutImageSlotConfig,
   createEmptyFixedLayoutConfig,
   FIXED_LAYOUT_ALLOWED_MIME_TYPES,
   FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH,
+  FIXED_LAYOUT_IMAGE_SLOT_IDS,
   isValidFixedLayoutImageSlot,
+  normalizeFixedLayoutDisplayOrder,
+  normalizeFixedLayoutImageOrdering,
+  normalizeFixedLayoutQrWidthPreset,
+  normalizeFixedLayoutSpacingPreset,
   normalizeFixedLayoutTextContent,
 } from '../shared/fixedLayoutConfig.js'
 
@@ -15,7 +21,6 @@ const MIME_EXTENSION_MAP = {
   'image/gif': '.gif',
   'image/jpeg': '.jpg',
   'image/png': '.png',
-  'image/webp': '.webp',
 }
 
 function createFixedLayoutConfigError(message, status = 400) {
@@ -43,10 +48,38 @@ function normalizeAssetRecord(asset) {
   }
 }
 
+function cloneConfig(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function normalizeImageSlotConfig(slot, value) {
+  const fallback = createEmptyFixedLayoutImageSlotConfig(slot)
+  const legacyAsset = normalizeAssetRecord(value)
+
+  if (legacyAsset) {
+    return {
+      ...fallback,
+      asset: legacyAsset,
+    }
+  }
+
+  if (!value || typeof value !== 'object') {
+    return fallback
+  }
+
+  return {
+    ...fallback,
+    asset: normalizeAssetRecord(value?.asset),
+    displayOrder: normalizeFixedLayoutDisplayOrder(slot, value?.displayOrder),
+    spacingPreset: normalizeFixedLayoutSpacingPreset(value?.spacingPreset),
+    widthPreset: slot === 'qrImage' ? normalizeFixedLayoutQrWidthPreset(value?.widthPreset) : null,
+  }
+}
+
 function normalizeFixedLayoutConfig(config) {
   const fallback = createEmptyFixedLayoutConfig()
 
-  return {
+  return normalizeFixedLayoutImageOrdering({
     endingText: {
       content: normalizeFixedLayoutTextContent(config?.endingText?.content ?? fallback.endingText.content),
       updatedAt:
@@ -54,11 +87,11 @@ function normalizeFixedLayoutConfig(config) {
           ? config.endingText.updatedAt.trim()
           : null,
     },
-    footerGif: normalizeAssetRecord(config?.footerGif),
-    guideFollow: normalizeAssetRecord(config?.guideFollow),
-    heroGif: normalizeAssetRecord(config?.heroGif),
-    qrImage: normalizeAssetRecord(config?.qrImage),
-  }
+    footerGif: normalizeImageSlotConfig('footerGif', config?.footerGif),
+    guideFollow: normalizeImageSlotConfig('guideFollow', config?.guideFollow),
+    heroGif: normalizeImageSlotConfig('heroGif', config?.heroGif),
+    qrImage: normalizeImageSlotConfig('qrImage', config?.qrImage),
+  })
 }
 
 async function ensureFixedLayoutDir() {
@@ -93,7 +126,7 @@ function resolveUploadExtension(file) {
   const originalName = typeof file?.name === 'string' ? file.name.trim() : ''
   const extension = path.extname(originalName).toLowerCase()
 
-  if (['.gif', '.png', '.jpg', '.jpeg', '.webp'].includes(extension)) {
+  if (['.gif', '.png', '.jpg', '.jpeg'].includes(extension)) {
     return extension === '.jpeg' ? '.jpg' : extension
   }
 
@@ -122,20 +155,69 @@ export async function writeFixedLayoutConfig(config) {
   return normalizedConfig
 }
 
-export async function updateFixedLayoutText({ endingText } = {}) {
-  const content = normalizeFixedLayoutTextContent(endingText)
+export async function updateFixedLayoutConfig({ endingText, imageSlots } = {}) {
+  const previousConfig = await readFixedLayoutConfig()
+  const nextConfig = cloneConfig(previousConfig)
 
-  if (content.length > FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH) {
-    throw createFixedLayoutConfigError(`固定文案请控制在 ${FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH} 字以内。`)
+  if (typeof endingText === 'string') {
+    const content = normalizeFixedLayoutTextContent(endingText)
+
+    if (content.length > FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH) {
+      throw createFixedLayoutConfigError(`固定文案请控制在 ${FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH} 字以内。`)
+    }
+
+    nextConfig.endingText = {
+      content,
+      updatedAt: new Date().toISOString(),
+    }
   }
 
-  const nextConfig = await readFixedLayoutConfig()
-  nextConfig.endingText = {
-    content,
-    updatedAt: new Date().toISOString(),
+  if (imageSlots && typeof imageSlots === 'object') {
+    FIXED_LAYOUT_IMAGE_SLOT_IDS.forEach((slot) => {
+      if (!(slot in imageSlots)) {
+        return
+      }
+
+      const currentSlotConfig = nextConfig?.[slot] ?? createEmptyFixedLayoutImageSlotConfig(slot)
+      const slotPatch = imageSlots?.[slot] ?? {}
+
+      nextConfig[slot] = {
+        ...createEmptyFixedLayoutImageSlotConfig(slot),
+        ...currentSlotConfig,
+        asset:
+          Object.prototype.hasOwnProperty.call(slotPatch, 'asset')
+            ? normalizeAssetRecord(slotPatch?.asset)
+            : currentSlotConfig?.asset ?? null,
+        displayOrder: normalizeFixedLayoutDisplayOrder(slot, slotPatch?.displayOrder ?? currentSlotConfig?.displayOrder),
+        spacingPreset: normalizeFixedLayoutSpacingPreset(slotPatch?.spacingPreset ?? currentSlotConfig?.spacingPreset),
+        widthPreset:
+          slot === 'qrImage'
+            ? normalizeFixedLayoutQrWidthPreset(slotPatch?.widthPreset ?? currentSlotConfig?.widthPreset)
+            : null,
+      }
+    })
   }
 
-  return writeFixedLayoutConfig(nextConfig)
+  const normalizedNextConfig = await writeFixedLayoutConfig(nextConfig)
+
+  await Promise.all(
+    FIXED_LAYOUT_IMAGE_SLOT_IDS.map(async (slot) => {
+      const previousAsset = previousConfig?.[slot]?.asset ?? null
+      const nextAsset = normalizedNextConfig?.[slot]?.asset ?? null
+
+      if (!previousAsset?.path) {
+        return
+      }
+
+      if (previousAsset.path === nextAsset?.path) {
+        return
+      }
+
+      await removeStoredAsset(previousAsset)
+    }),
+  )
+
+  return normalizedNextConfig
 }
 
 export async function uploadFixedLayoutAsset({ file, slot } = {}) {
@@ -150,7 +232,7 @@ export async function uploadFixedLayoutAsset({ file, slot } = {}) {
   const mimeType = typeof file.type === 'string' ? file.type.trim().toLowerCase() : ''
 
   if (!FIXED_LAYOUT_ALLOWED_MIME_TYPES.includes(mimeType)) {
-    throw createFixedLayoutConfigError('仅支持上传 gif、png、jpg、jpeg、webp 图片。')
+    throw createFixedLayoutConfigError('仅支持上传 gif、png、jpg、jpeg 图片。')
   }
 
   const extension = resolveUploadExtension(file)
@@ -161,9 +243,6 @@ export async function uploadFixedLayoutAsset({ file, slot } = {}) {
 
   await ensureFixedLayoutDir()
 
-  const nextConfig = await readFixedLayoutConfig()
-  await removeStoredAsset(nextConfig[slot])
-
   const uploadedAt = new Date().toISOString()
   const filename = `${slot}-${Date.now()}${extension}`
   const absolutePath = path.join(FIXED_LAYOUT_ASSETS_DIR, filename)
@@ -172,14 +251,12 @@ export async function uploadFixedLayoutAsset({ file, slot } = {}) {
 
   await writeFile(absolutePath, fileBuffer)
 
-  nextConfig[slot] = {
+  return {
     filename: typeof file.name === 'string' && file.name.trim() ? file.name.trim() : filename,
     mimeType,
     path: relativePath,
     uploadedAt,
   }
-
-  return writeFixedLayoutConfig(nextConfig)
 }
 
 export async function deleteFixedLayoutAsset(slot) {
@@ -188,8 +265,12 @@ export async function deleteFixedLayoutAsset(slot) {
   }
 
   const nextConfig = await readFixedLayoutConfig()
-  await removeStoredAsset(nextConfig[slot])
-  nextConfig[slot] = null
+  await removeStoredAsset(nextConfig?.[slot]?.asset)
+  nextConfig[slot] = {
+    ...createEmptyFixedLayoutImageSlotConfig(slot),
+    ...(nextConfig?.[slot] ?? {}),
+    asset: null,
+  }
 
   return writeFixedLayoutConfig(nextConfig)
 }

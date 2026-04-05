@@ -1,4 +1,4 @@
-import { readFixedLayoutConfig, updateFixedLayoutText } from '../server/fixedLayoutConfig.js'
+import { readFixedLayoutConfig, updateFixedLayoutConfig } from '../server/fixedLayoutConfig.js'
 
 export default async function handler(request, response) {
   if (request.method === 'GET') {
@@ -7,7 +7,7 @@ export default async function handler(request, response) {
       response.status(200).json(result)
     } catch (error) {
       response.status(error.status || 500).json({
-        error: error.message || '读取固定内容配置失败',
+        error: error.message || '读取模板配置失败',
       })
     }
 
@@ -16,13 +16,14 @@ export default async function handler(request, response) {
 
   if (request.method === 'PATCH') {
     try {
-      const result = await updateFixedLayoutText({
-        endingText: request.body?.endingText ?? '',
+      const result = await updateFixedLayoutConfig({
+        endingText: request.body?.endingText,
+        imageSlots: request.body?.imageSlots,
       })
       response.status(200).json(result)
     } catch (error) {
       response.status(error.status || 500).json({
-        error: error.message || '更新固定文案失败',
+        error: error.message || '更新模板配置失败',
       })
     }
 

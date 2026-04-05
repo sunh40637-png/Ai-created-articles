@@ -1,25 +1,50 @@
 {
   "endingText": {
     "content": "",
-    "updatedAt": "2026-04-02T15:28:02.367Z"
+    "updatedAt": "2026-04-05T08:44:47.918Z"
   },
   "footerGif": {
-    "filename": "黑红色微信公众号几何立体方块点击关注动态在看提示简约新媒体分享中文动态在看提示 (1).gif",
-    "mimeType": "image/gif",
-    "path": "/assets/fixed-content/footerGif-1775061513811.gif",
-    "uploadedAt": "2026-04-01T16:38:33.811Z"
+    "asset": {
+      "filename": "黑红色微信公众号几何立体方块点击关注动态在看提示简约新媒体分享中文动态在看提示 (1).gif",
+      "mimeType": "image/gif",
+      "path": "/assets/fixed-content/footerGif-1775061513811.gif",
+      "uploadedAt": "2026-04-01T16:38:33.811Z"
+    },
+    "displayOrder": 4,
+    "spacingPreset": "none",
+    "widthPreset": null
   },
-  "guideFollow": null,
+  "guideFollow": {
+    "asset": {
+      "filename": "21c8672f51a18d7532a24a4ff1b76ef2.GIF",
+      "mimeType": "image/gif",
+      "path": "/assets/fixed-content/guideFollow-1775378629747.gif",
+      "uploadedAt": "2026-04-05T08:43:49.745Z"
+    },
+    "displayOrder": 2,
+    "spacingPreset": "none",
+    "widthPreset": null
+  },
   "heroGif": {
-    "filename": "21c8672f51a18d7532a24a4ff1b76ef2.GIF",
-    "mimeType": "image/gif",
-    "path": "/assets/fixed-content/heroGif-1775061469479.gif",
-    "uploadedAt": "2026-04-01T16:37:49.479Z"
+    "asset": {
+      "filename": "蓝白色微信公众号大学生校园清新简单纸飞机动态引导关注简洁新媒体分享中文动态引导关注.gif",
+      "mimeType": "image/gif",
+      "path": "/assets/fixed-content/heroGif-1775377074006.gif",
+      "uploadedAt": "2026-04-05T08:17:54.006Z"
+    },
+    "displayOrder": 1,
+    "spacingPreset": "none",
+    "widthPreset": null
   },
   "qrImage": {
-    "filename": "公众号二维码.jpg",
-    "mimeType": "image/jpeg",
-    "path": "/assets/fixed-content/qrImage-1775061484257.jpg",
-    "uploadedAt": "2026-04-01T16:38:04.257Z"
+    "asset": {
+      "filename": "公众号二维码.jpg",
+      "mimeType": "image/jpeg",
+      "path": "/assets/fixed-content/qrImage-1775061484257.jpg",
+      "uploadedAt": "2026-04-01T16:38:04.257Z"
+    },
+    "displayOrder": 3,
+    "spacingPreset": "medium",
+    "widthPreset": "50"
   }
 }

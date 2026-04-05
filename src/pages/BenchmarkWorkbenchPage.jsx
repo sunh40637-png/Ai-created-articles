@@ -38,11 +38,13 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
+  createTemplatePreviewPlaceholderSlots,
   buildImageSelectionFromMatchResult,
   buildPreviewSections,
   extractUsedAssetIds,
   getRenderablePreviewSlots,
   renderArticlePreviewDocument,
+  resolveRenderableAssetPath,
   renderWechatDraftHtml,
   stripPreviewHeading,
 } from '@/lib/articlePreviewHtml.jsx'
@@ -70,9 +72,12 @@ import {
   FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH,
   FIXED_LAYOUT_FILE_ACCEPT,
   FIXED_LAYOUT_IMAGE_SLOT_IDS,
+  FIXED_LAYOUT_QR_WIDTH_PRESETS,
+  FIXED_LAYOUT_SPACING_PRESETS,
   FIXED_LAYOUT_SLOT_META,
-  FIXED_LAYOUT_SLOT_ORDER,
+  getFixedLayoutImageDisplaySlots,
   normalizeFixedLayoutTextContent,
+  resolveFixedLayoutSlotAsset,
 } from '../../shared/fixedLayoutConfig.js'
 
 const reasoningModel = 'MiniMax-M2.7 深度模式'
@@ -99,6 +104,7 @@ const INITIAL_DRAFT_FLOW_STEPS = [
 ]
 const CONTENT_SESSION_STORAGE_KEY = 'content-creation-sessions-v1'
 const CONTENT_SESSION_STORAGE_VERSION = 4
+const FIXED_LAYOUT_CONFIG_UPDATED_EVENT = 'fixed-layout-config-updated'
 
 const quickMessageItems = [
   {
@@ -140,8 +146,87 @@ const sidebarModules = [
   { id: 'library', label: '选题库', icon: LibraryBig },
   { id: 'articles', label: '文章列表', icon: FileText },
   { id: 'assets', label: '素材库', icon: ImageIcon },
-  { id: 'fixed-layout', label: '图片配置', icon: ImageUp },
+  { id: 'fixed-layout', label: '模板配置', icon: ImageUp },
 ]
+
+const previewFontSizeOptions = [
+  { id: 'small', label: '小' },
+  { id: 'medium', label: '推荐' },
+  { id: 'large', label: '大' },
+]
+
+const TEMPLATE_PREVIEW_SAMPLE_TITLE = '聪明的亲家，都懂得这3条边界'
+const TEMPLATE_PREVIEW_SAMPLE_PEN_NAME = '明远'
+const TEMPLATE_PREVIEW_SAMPLE_MARKDOWN = `# 聪明的亲家，都懂得这3条边界
+
+逢年过节的家庭聚会上，你有没有见过这样的场面：亲家两家人坐在一张桌前，表面和和气气，暗地里却各怀心思。
+
+有人嘴上说着“咱们是一家人”，手却伸得老长；有人看似随意地打听对方家底，话里藏着机锋；还有人理直气壮地提要求，觉得既然成了亲家，对方帮衬自己是天经地义。
+
+结果呢？好好的喜事变成了糟心事，本该互相帮衬的两家人，最后连见面都尴尬。
+
+今天不绕弯子，咱们就聊三件事。
+
+## 一、不越位，各守本分，不插手小家庭
+
+老话说得好：“各扫门前雪，莫管他人瓦上霜。”这话听着冷，其实藏着大智慧。
+
+春秋时期，管仲和鲍叔牙合伙做生意。管仲家里穷，每次分红时总是多拿一些。旁人都替鲍叔牙不平，鲍叔牙却说：“管仲家里困难，多拿点是应该的。”后来管仲辅佐公子纠，鲍叔牙辅佐公子小白。两人各为其主，立场分明，从不因私交而越界干涉对方的决策。等小白继位成了齐桓公，鲍叔牙力荐管仲为相，自己甘居其下。这段关系之所以能传为千古美谈，靠的不是天天腻在一起，而是彼此尊重对方的边界。
+
+我见过真实的反面例子。邻居老李的儿子娶了老张的女儿，两家人住得近，走动频繁。老张有个毛病，总爱管儿子家的事。孩子该上哪个兴趣班要管，儿媳买件衣服要评价，家里怎么装修也要插嘴。一开始老李忍了，觉得毕竟是亲家，不好意思撕破脸。三年下来，矛盾越积越深，最后闹到儿子儿媳差点离婚，两家人见面跟仇人似的。
+
+教训是什么？再近的关系，一旦越位，就会变味。亲家之间，最聪明的做法是各守本分：小两口的事，小两口自己解决；小家庭的选择，双方父母只提建议，不做决定。界限清楚了，关系才能长久。
+
+## 二、不比较，各自有命，不比孩子高低
+
+逢年过节，亲家聚会最常见的场景是什么？炫耀孩子。
+
+“我家儿子今年升了主管，年薪三十万。”
+“我闺女刚买了套房子，首付就掏了一百万。”
+“我孙子这次考试年级前十，将来肯定能上985。”
+
+好像不把孩子拿出来比一比，这场聚会就白来了。
+
+可问题在于，比来比去，有什么意思？赢了，嘴上痛快几天；输了，心里堵得慌。古语有云：“人比人，气死人。”这话听着糙，道理却一点不糙。
+
+我认识两位老人，老周和老郑。俩人是老同事，又做了亲家。按说知根知底，应该相处融洽。可每次聚会都成了暗中较劲的战场。老周晒儿子买了新车，老郑就提女儿升了职；老周说孙子钢琴过了八级，老郑就讲外孙女奥数拿了奖。表面上笑呵呵，心里都憋着一口气。十年下来，两家人越走越远。明明是可以互相帮衬的亲家，最后成了最熟悉的陌生人。
+
+根子就在这个“比”字上。它让亲情变了味，让本该温暖的相聚成了两个人斗气的擂台。
+
+每个家庭都有自己的难处，也都有自己的福气。不比，才能看得清；不争，才能处得久。亲家之间，最难得的是彼此成全，而不是互相攀比。
+
+## 三、不索取，人情有度，不把亲家当资源
+
+有些人把亲家当成免费的人脉库，觉得结了亲就是一家人了，对方帮自己是理所当然。
+
+“我儿子要出国镀金，你们家有钱，借二十万呗。”
+“我闺女要办婚礼，你们家那套空房子借来做婚房呗。”
+“我孙子要上重点学校，你们家认识人，帮帮忙呗。”
+
+一次两次还行，次数多了，再好的关系也扛不住。
+
+《中国法院网》曾刊登过一起案例：两家亲家因为借款纠纷对簿公堂，最后闹到连孙子的探视权都成了筹码。法院调解时，承办法官感叹：“本是最亲近的两家人，却因为一笔糊涂账，反目成仇。”这样的案例现实中还有很多。
+
+古人说：“君子之交淡如水。”用在亲家关系上，再贴切不过。
+
+帮，是情分；不帮，是本分。结了亲家，不代表对方欠你的。红包该还就还，借钱该写就写，人情该记就记。不是斤斤计较，而是让关系清清爽爽。清爽的关系才能长久，糊涂账迟早要还。
+
+## 写在最后
+
+亲家之间，说到底是缘分。
+
+能做成亲家，两个家庭本身就合得来。既然合得来，就别让这层关系被越位、被比较、被索取给搅黄了。
+
+守住这三条边界：
+- 不越位，让彼此都有空间；
+- 不比较，让相处回到本真；
+- 不索取，让来往清清爽爽。
+
+做到了，亲家关系就不是什么难题，而是一段真正能互相帮衬、互相温暖的资源。做不到，迟早会从“一家人”变成“最熟悉的陌生人”。
+
+聪明的人，早就看清了这一点。
+
+愿每一对亲家，都能各守边界，各得自在。`
 
 const topicLibraryItems = CONTENT_TOPIC_LIBRARY
 
@@ -490,6 +575,86 @@ function formatMessageTime(value) {
     }).format(new Date(value))
   } catch {
     return ''
+  }
+}
+
+function normalizePreviewFontSize(value) {
+  if (value === 'small' || value === 'large') {
+    return value
+  }
+
+  return 'medium'
+}
+
+function resolveWechatSyncIndicatorMeta({ hasCoverImage, isWechatSyncing, wechatDraftSync, wechatStatus }) {
+  if (isWechatSyncing) {
+    return {
+      description: '正在同步到微信草稿箱，正文图片会自动上传到微信素材。',
+      icon: LoaderCircle,
+      iconClassName: 'animate-spin text-muted-foreground',
+      title: '同步中',
+      toneClassName: 'border-border/70 bg-secondary/55 text-muted-foreground',
+    }
+  }
+
+  if (wechatDraftSync?.status === 'success' && wechatDraftSync?.lastSyncedAt) {
+    const actionLabel = wechatDraftSync?.summary?.action === 'updated' ? '已更新微信草稿' : '已保存到微信草稿'
+
+    return {
+      description: `${actionLabel} · ${formatMessageTime(wechatDraftSync.lastSyncedAt)}`,
+      icon: CheckCircle2,
+      iconClassName: 'text-emerald-600',
+      title: '同步成功',
+      toneClassName: 'border-emerald-200/80 bg-emerald-50 text-emerald-600',
+    }
+  }
+
+  if (wechatDraftSync?.status === 'error' && wechatDraftSync?.error) {
+    return {
+      description: wechatDraftSync.error,
+      icon: X,
+      iconClassName: 'text-rose-600',
+      title: '同步失败',
+      toneClassName: 'border-rose-200/80 bg-rose-50 text-rose-600',
+    }
+  }
+
+  if (wechatStatus?.error) {
+    return {
+      description: wechatStatus.error,
+      icon: X,
+      iconClassName: 'text-rose-600',
+      title: '状态异常',
+      toneClassName: 'border-rose-200/80 bg-rose-50 text-rose-600',
+    }
+  }
+
+  if (!wechatStatus?.configured) {
+    return {
+      description: '当前未配置微信公众号凭证，暂时不能保存草稿。',
+      icon: History,
+      iconClassName: 'text-muted-foreground',
+      title: '待同步',
+      toneClassName: 'border-border/70 bg-secondary/55 text-muted-foreground',
+    }
+  }
+
+  if (!hasCoverImage) {
+    return {
+      description: '当前没有可用封面图，请先补齐头图或确认正文首图可用。',
+      icon: History,
+      iconClassName: 'text-muted-foreground',
+      title: '待同步',
+      toneClassName: 'border-border/70 bg-secondary/55 text-muted-foreground',
+    }
+  }
+
+  return {
+    description: '点击同步按钮后，会保存或更新公众号草稿箱，不会自动发布。',
+    icon: History,
+    iconClassName: 'text-muted-foreground',
+    title: '待同步',
+    toneClassName: 'border-border/70 bg-secondary/55 text-muted-foreground',
   }
 }
 
@@ -1057,10 +1222,10 @@ async function requestLibraryAssetDelete(assetId) {
 
 async function requestFixedLayoutConfig() {
   const response = await fetch('/api/fixed-layout-config')
-  const payload = await readJsonResponse(response, '固定内容配置接口返回异常，请刷新页面后重试。')
+  const payload = await readJsonResponse(response, '模板配置接口返回异常，请刷新页面后重试。')
 
   if (!response.ok) {
-    throw new Error(payload?.error || '读取固定内容配置失败')
+    throw new Error(payload?.error || '读取模板配置失败')
   }
 
   return {
@@ -1069,24 +1234,38 @@ async function requestFixedLayoutConfig() {
   }
 }
 
-async function requestFixedLayoutTextUpdate({ endingText = '' } = {}) {
+function announceFixedLayoutConfigUpdated(config) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(FIXED_LAYOUT_CONFIG_UPDATED_EVENT, {
+      detail: config,
+    }),
+  )
+}
+
+async function requestFixedLayoutConfigUpdate({ endingText, imageSlots } = {}) {
   const response = await fetch('/api/fixed-layout-config', {
-    body: JSON.stringify({ endingText }),
+    body: JSON.stringify({ endingText, imageSlots }),
     headers: {
       'Content-Type': 'application/json',
     },
     method: 'PATCH',
   })
-  const payload = await readJsonResponse(response, '固定文案配置接口返回异常，请稍后重试。')
+  const payload = await readJsonResponse(response, '模板配置接口返回异常，请稍后重试。')
 
   if (!response.ok) {
-    throw new Error(payload?.error || '保存固定文案失败')
+    throw new Error(payload?.error || '保存模板配置失败')
   }
 
-  return {
+  const nextConfig = {
     ...createEmptyFixedLayoutConfig(),
     ...(payload ?? {}),
   }
+  announceFixedLayoutConfigUpdated(nextConfig)
+  return nextConfig
 }
 
 async function requestFixedLayoutAssetUpload({ file, slot }) {
@@ -1104,10 +1283,7 @@ async function requestFixedLayoutAssetUpload({ file, slot }) {
     throw new Error(payload?.error || '上传固定图片失败')
   }
 
-  return {
-    ...createEmptyFixedLayoutConfig(),
-    ...(payload ?? {}),
-  }
+  return payload?.asset ?? null
 }
 
 async function requestFixedLayoutAssetDelete(slot) {
@@ -1124,10 +1300,12 @@ async function requestFixedLayoutAssetDelete(slot) {
     throw new Error(payload?.error || '删除固定图片失败')
   }
 
-  return {
+  const nextConfig = {
     ...createEmptyFixedLayoutConfig(),
     ...(payload ?? {}),
   }
+  announceFixedLayoutConfigUpdated(nextConfig)
+  return nextConfig
 }
 
 async function requestPersistedContentSessions() {
@@ -1199,6 +1377,60 @@ async function requestWechatDraftSync({ article, sessionId }) {
   return payload ?? {}
 }
 
+function cloneFixedLayoutConfig(config) {
+  return JSON.parse(JSON.stringify(config ?? createEmptyFixedLayoutConfig()))
+}
+
+function serializeFixedLayoutConfigForComparison(config) {
+  const normalized = config ?? createEmptyFixedLayoutConfig()
+
+  return JSON.stringify({
+    endingText: normalizeFixedLayoutTextContent(normalized?.endingText?.content ?? ''),
+    imageSlots: FIXED_LAYOUT_IMAGE_SLOT_IDS.map((slot) => {
+      const slotConfig = normalized?.[slot] ?? {}
+      const asset = resolveFixedLayoutSlotAsset(slotConfig)
+
+      return {
+        assetPath: asset?.path || '',
+        displayOrder: Number(slotConfig?.displayOrder || 0),
+        slot,
+        spacingPreset: slotConfig?.spacingPreset || 'medium',
+        widthPreset: slotConfig?.widthPreset || null,
+      }
+    }),
+  })
+}
+
+function areFixedLayoutConfigsEqual(leftConfig, rightConfig) {
+  return serializeFixedLayoutConfigForComparison(leftConfig) === serializeFixedLayoutConfigForComparison(rightConfig)
+}
+
+function mergeDraftConfigWithServerUpdate(currentDraftConfig, nextSavedConfig, updatedSlots = []) {
+  const nextDraftConfig = cloneFixedLayoutConfig(nextSavedConfig)
+  const currentDraft = currentDraftConfig ?? createEmptyFixedLayoutConfig()
+
+  nextDraftConfig.endingText = {
+    ...nextDraftConfig.endingText,
+    content: currentDraft?.endingText?.content ?? nextDraftConfig?.endingText?.content ?? '',
+  }
+
+  FIXED_LAYOUT_IMAGE_SLOT_IDS.forEach((slot) => {
+    const currentSlotConfig = currentDraft?.[slot] ?? {}
+    const savedSlotConfig = nextSavedConfig?.[slot] ?? {}
+    const shouldUseSavedAsset = updatedSlots.includes(slot)
+
+    nextDraftConfig[slot] = {
+      ...savedSlotConfig,
+      asset: shouldUseSavedAsset ? resolveFixedLayoutSlotAsset(savedSlotConfig) : resolveFixedLayoutSlotAsset(currentSlotConfig) || resolveFixedLayoutSlotAsset(savedSlotConfig),
+      displayOrder: currentSlotConfig?.displayOrder ?? savedSlotConfig?.displayOrder,
+      spacingPreset: currentSlotConfig?.spacingPreset ?? savedSlotConfig?.spacingPreset,
+      widthPreset: currentSlotConfig?.widthPreset ?? savedSlotConfig?.widthPreset,
+    }
+  })
+
+  return nextDraftConfig
+}
+
 function buildPersistedContentSessionItem(state) {
   return {
     state: createPersistableBenchmarkState(state),
@@ -1220,7 +1452,7 @@ function useFixedLayoutConfigState() {
       setErrorMessage('')
       return nextConfig
     } catch (error) {
-      setErrorMessage(error.message || '读取固定内容配置失败')
+      setErrorMessage(error.message || '读取模板配置失败')
       setConfig(createEmptyFixedLayoutConfig())
       return createEmptyFixedLayoutConfig()
     } finally {
@@ -1243,7 +1475,7 @@ function useFixedLayoutConfigState() {
         }
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(error.message || '读取固定内容配置失败')
+          setErrorMessage(error.message || '读取模板配置失败')
           setConfig(createEmptyFixedLayoutConfig())
         }
       } finally {
@@ -1255,8 +1487,31 @@ function useFixedLayoutConfigState() {
 
     loadConfig()
 
+    function handleConfigUpdated(event) {
+      if (cancelled) {
+        return
+      }
+
+      const nextConfig = event?.detail && typeof event.detail === 'object' ? event.detail : null
+
+      if (nextConfig) {
+        setConfig(nextConfig)
+        setErrorMessage('')
+        setIsLoading(false)
+      } else {
+        reloadConfig()
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(FIXED_LAYOUT_CONFIG_UPDATED_EVENT, handleConfigUpdated)
+    }
+
     return () => {
       cancelled = true
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(FIXED_LAYOUT_CONFIG_UPDATED_EVENT, handleConfigUpdated)
+      }
     }
   }, [])
 
@@ -2572,7 +2827,14 @@ function ReportWorkbench({ version }) {
   )
 }
 
-function PreviewWorkbench({ onSetPreviewDevice, onUpdateDraftSync, session }) {
+function PreviewWorkbench({
+  onCopyTitleSuccess,
+  onSetPreviewDevice,
+  onSetPreviewFontSize,
+  onUpdateDraftSync,
+  previewFontSize = 'medium',
+  session,
+}) {
   const [copyStatus, setCopyStatus] = useState('idle')
   const [isWechatSyncing, setIsWechatSyncing] = useState(false)
   const [wechatStatus, setWechatStatus] = useState({
@@ -2586,6 +2848,7 @@ function PreviewWorkbench({ onSetPreviewDevice, onUpdateDraftSync, session }) {
   const { config: fixedLayoutConfig } = useFixedLayoutConfigState()
   const previewSlots = useRenderablePreviewSlots(session, version)
   const previewDevice = session?.layoutReview?.device === 'desktop' || session?.layoutReview?.device === 'pc' ? 'desktop' : 'mobile'
+  const normalizedPreviewFontSize = normalizePreviewFontSize(previewFontSize)
   const bodyMarkdown = stripPreviewHeading(version?.draftMarkdown ?? '')
   const displayTitle = resolveVersionDisplayTitle(session, version)
   const previewRenderResult = useMemo(
@@ -2595,12 +2858,13 @@ function PreviewWorkbench({ onSetPreviewDevice, onUpdateDraftSync, session }) {
         bodyMarkdown,
         displayTitle,
         fixedLayoutConfig,
+        fontSize: normalizedPreviewFontSize,
         imageSlots: previewSlots,
         origin: typeof window === 'undefined' ? '' : window.location.origin,
         penName: topic?.penName || '',
         wordCount: version?.wordCount ?? 0,
       }),
-    [bodyMarkdown, displayTitle, fixedLayoutConfig, previewSlots, topic?.penName, topic?.type, version?.wordCount],
+    [bodyMarkdown, displayTitle, fixedLayoutConfig, normalizedPreviewFontSize, previewSlots, topic?.penName, topic?.type, version?.wordCount],
   )
   const wechatRenderResult = useMemo(
     () =>
@@ -2608,16 +2872,27 @@ function PreviewWorkbench({ onSetPreviewDevice, onUpdateDraftSync, session }) {
         articleType: topic?.type || '',
         bodyMarkdown,
         fixedLayoutConfig,
+        fontSize: normalizedPreviewFontSize,
         imageSlots: previewSlots,
         origin: '',
         penName: topic?.penName || '',
         wordCount: version?.wordCount ?? 0,
       }),
-    [bodyMarkdown, fixedLayoutConfig, previewSlots, topic?.penName, topic?.type, version?.wordCount],
+    [bodyMarkdown, fixedLayoutConfig, normalizedPreviewFontSize, previewSlots, topic?.penName, topic?.type, version?.wordCount],
   )
   const wechatCoverImageSrc =
-    fixedLayoutConfig?.heroGif?.path || previewSlots.map((slot) => slot?.asset?.path || '').find(Boolean) || ''
+    getFixedLayoutImageDisplaySlots(fixedLayoutConfig)
+      .map((slot) => slot?.asset?.path || '')
+      .find(Boolean) ||
+    previewSlots.map((slot) => slot?.asset?.path || '').find(Boolean) ||
+    ''
   const wechatDraftSync = session?.draftSync?.provider === 'wechat' ? session.draftSync : session?.draftSync ?? null
+  const syncIndicatorMeta = resolveWechatSyncIndicatorMeta({
+    hasCoverImage: Boolean(wechatCoverImageSrc),
+    isWechatSyncing,
+    wechatDraftSync,
+    wechatStatus,
+  })
 
   useEffect(() => {
     if (!session?.id) {
@@ -2669,7 +2944,7 @@ function PreviewWorkbench({ onSetPreviewDevice, onUpdateDraftSync, session }) {
     return () => {
       cancelled = true
     }
-  }, [session?.id])
+  }, [onUpdateDraftSync, session?.id])
 
   async function handleCopyWechat() {
     if (!previewRenderResult.bodyHtml) {
@@ -2688,6 +2963,13 @@ function PreviewWorkbench({ onSetPreviewDevice, onUpdateDraftSync, session }) {
         setCopyStatus('idle')
       }, 2000)
     }
+  }
+
+  async function handleCopyTitle() {
+    try {
+      await navigator.clipboard.writeText(displayTitle || '未命名标题')
+      onCopyTitleSuccess?.()
+    } catch {}
   }
 
   async function handleSyncWechatDraft() {
@@ -2751,93 +3033,120 @@ function PreviewWorkbench({ onSetPreviewDevice, onUpdateDraftSync, session }) {
     : wechatDraftSync?.mediaId
       ? '更新微信草稿'
       : '保存到微信草稿'
-  const syncStatusMessage = isWechatSyncing
-    ? '正在同步到微信草稿箱，正文图片会自动上传到微信素材。'
-    : wechatDraftSync?.status === 'success' && wechatDraftSync?.lastSyncedAt
-      ? `已同步到微信草稿箱 · ${formatMessageTime(wechatDraftSync.lastSyncedAt)}`
-      : wechatDraftSync?.status === 'error' && wechatDraftSync?.error
-        ? `同步失败：${wechatDraftSync.error}`
-        : wechatStatus?.error
-          ? `状态异常：${wechatStatus.error}`
-          : !wechatStatus.configured
-            ? '当前未配置微信公众号凭证，暂时不能保存草稿。'
-            : '同步后会写入公众号草稿箱，不会自动发布。'
+  const copyActionLabel = copyStatus === 'copied' ? '已复制' : copyStatus === 'error' ? '复制失败' : '复制微信样式'
+  const CopyWechatIcon = copyStatus === 'copied' ? Check : copyStatus === 'error' ? X : Copy
+  const SyncIndicatorIcon = syncIndicatorMeta.icon
 
   return (
     <div className="benchmark-scroll-hidden h-full min-h-0 overflow-y-auto px-6 py-6">
       <div className="mx-auto flex w-full max-w-[980px] flex-col gap-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
-          <div className="inline-flex rounded-full bg-secondary/55 p-1">
-            {[
-              { id: 'mobile', label: '移动端', icon: Smartphone },
-              { id: 'desktop', label: 'PC端', icon: Monitor },
-            ].map((item) => (
-              <button
-                className={cn(
-                  'inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] transition-colors',
-                  previewDevice === item.id ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                )}
-                key={item.id}
-                onClick={() => onSetPreviewDevice?.(item.id)}
-                type="button"
-              >
-                <item.icon size={14} />
-                {item.label}
-              </button>
-            ))}
+        <div className="flex items-center justify-between gap-3 px-1 py-1">
+          <div className="benchmark-scroll-hidden flex min-w-0 items-center gap-2 overflow-x-auto">
+            <div className="inline-flex shrink-0 rounded-full bg-secondary/55 p-1">
+              {[
+                { id: 'mobile', label: '移动端', icon: Smartphone },
+                { id: 'desktop', label: 'PC端', icon: Monitor },
+              ].map((item) => (
+                <button
+                  className={cn(
+                    'inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] transition-colors',
+                    previewDevice === item.id ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  key={item.id}
+                  onClick={() => onSetPreviewDevice?.(item.id)}
+                  type="button"
+                >
+                  <item.icon size={14} />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="inline-flex shrink-0 rounded-full bg-secondary/55 p-1">
+              {previewFontSizeOptions.map((item) => (
+                <button
+                  className={cn(
+                    'inline-flex items-center rounded-full px-4 py-2 text-[13px] transition-colors',
+                    normalizedPreviewFontSize === item.id
+                      ? 'bg-white text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  key={item.id}
+                  onClick={() => onSetPreviewFontSize?.(item.id)}
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Button
-              className="rounded-full"
-              disabled={!wechatStatus.configured || !wechatCoverImageSrc || !version?.id || isWechatSyncing}
-              onClick={handleSyncWechatDraft}
-              size="sm"
-              type="button"
-            >
-              {isWechatSyncing ? <LoaderCircle className="mr-1.5 animate-spin" size={13} /> : null}
-              {syncActionLabel}
-            </Button>
-            <Button className="rounded-full" onClick={handleCopyWechat} size="sm" type="button" variant="outline">
-              {copyStatus === 'copied' ? (
-                <>
-                  <Check size={13} className="mr-1.5" />
-                  已复制
-                </>
-              ) : copyStatus === 'error' ? (
-                <>
-                  <X size={13} className="mr-1.5" />
-                  复制失败
-                </>
-              ) : (
-                <>
-                  <Copy size={13} className="mr-1.5" />
-                  复制微信样式
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    aria-label={syncActionLabel}
+                    className="rounded-full"
+                    disabled={!wechatStatus.configured || !wechatCoverImageSrc || !version?.id || isWechatSyncing}
+                    onClick={handleSyncWechatDraft}
+                    size="icon-lg"
+                    type="button"
+                  >
+                    {isWechatSyncing ? <LoaderCircle className="animate-spin" size={16} /> : <MessageSquareText size={16} />}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={10}>{syncActionLabel}</TooltipContent>
+            </Tooltip>
 
-        <div className="rounded-[18px] border border-border/70 bg-secondary/25 px-4 py-3 text-[12px] leading-6 text-muted-foreground">
-          <div>{syncStatusMessage}</div>
-          {wechatStatus.appId ? <div className="mt-1">公众号 AppID：{wechatStatus.appId}</div> : null}
-          {!wechatCoverImageSrc && wechatStatus.configured ? (
-            <div className="mt-1 text-[#b42318]">当前没有可用封面图，微信草稿同步会被拦截。</div>
-          ) : null}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className={cn(
+                    'inline-flex size-10 items-center justify-center rounded-full border shadow-sm',
+                    syncIndicatorMeta.toneClassName,
+                  )}
+                >
+                  <SyncIndicatorIcon className={syncIndicatorMeta.iconClassName} size={17} />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[280px] flex-col items-start gap-1.5 px-3 py-2 text-left" sideOffset={10}>
+                <div className="text-[12px] font-medium">{syncIndicatorMeta.title}</div>
+                <div className="text-[12px] leading-5 text-background/80">{syncIndicatorMeta.description}</div>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button aria-label={copyActionLabel} className="rounded-full" onClick={handleCopyWechat} size="icon-lg" type="button" variant="outline">
+                    <CopyWechatIcon size={16} />
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={10}>{copyActionLabel}</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
 
         <div className="rounded-[22px] border border-border/70 bg-white px-5 py-4 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
-          <div className="text-[11px] tracking-[0.08em] text-muted-foreground">文章标题</div>
-          <div className="mt-2 text-[18px] font-semibold leading-[1.55] text-foreground">{displayTitle || '未命名标题'}</div>
-          <div className="mt-2 text-[12px] leading-6 text-muted-foreground">
-            标题单独展示在预览壳层里，不会进入右侧文章画布，也不会进入复制出来的微信内容。
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 text-[18px] font-semibold leading-[1.55] text-foreground">{displayTitle || '未命名标题'}</div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button aria-label="复制标题" className="rounded-full" onClick={handleCopyTitle} size="icon-sm" type="button" variant="ghost">
+                  <Copy size={15} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={10}>复制标题</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
         <div className="flex justify-center">
           <div className={cn('w-full transition-all', previewDevice === 'mobile' ? 'max-w-[390px]' : 'max-w-[760px]')}>
-            <div className="overflow-hidden rounded-[18px] border border-border/70 bg-white shadow-[0_8px_24px_rgba(18,20,38,0.06)]">
+            <div className="overflow-hidden rounded-none border border-border/70 bg-white shadow-[0_8px_24px_rgba(18,20,38,0.06)]">
               <ArticlePreviewFrame documentHtml={previewRenderResult.documentHtml} />
             </div>
           </div>
@@ -2893,14 +3202,17 @@ function VersionsWorkbench({ activeVersionId, onSelectVersion, versions }) {
 function RightWorkbenchShell({
   activeTabId,
   onOpenTab,
+  onCopyTitleSuccess,
   onSelectVersion,
   onSetPreviewDevice,
+  onSetPreviewFontSize,
   onUpdateDraftSync,
   session,
   tabs,
 }) {
   const activeVersion = getActiveVersion(session)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const previewFontSize = normalizePreviewFontSize(session?.layoutReview?.fontSize)
 
   useEffect(() => {
     if (!isFullscreen) {
@@ -2927,7 +3239,16 @@ function RightWorkbenchShell({
       case 'report':
         return <ReportWorkbench version={activeVersion} />
       case 'preview':
-        return <PreviewWorkbench onSetPreviewDevice={onSetPreviewDevice} onUpdateDraftSync={onUpdateDraftSync} session={session} />
+        return (
+          <PreviewWorkbench
+            onCopyTitleSuccess={onCopyTitleSuccess}
+            onSetPreviewDevice={onSetPreviewDevice}
+            onSetPreviewFontSize={onSetPreviewFontSize}
+            onUpdateDraftSync={onUpdateDraftSync}
+            previewFontSize={previewFontSize}
+            session={session}
+          />
+        )
       case 'versions':
         return (
           <VersionsWorkbench
@@ -3040,7 +3361,7 @@ function ArticleListRow({ article, onOpen }) {
   )
 }
 
-function ArticlePreviewDrawer({ onClose, onSetPreviewDevice, open, session }) {
+function ArticlePreviewDrawer({ onClose, onCopyTitleSuccess, onSetPreviewDevice, onSetPreviewFontSize, open, session }) {
   const availableTabs = session?.stageId === 'completed' ? ['draft', 'preview'] : ['draft']
   const [activeTab, setActiveTab] = useState(availableTabs[0] ?? 'draft')
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -3179,7 +3500,13 @@ function ArticlePreviewDrawer({ onClose, onSetPreviewDevice, open, session }) {
         <div className="min-h-0 flex-1 overflow-hidden bg-white">
           {activeTab === 'preview' ? (
             <div className="benchmark-scroll-hidden h-full overflow-y-auto overscroll-contain">
-              <PreviewWorkbench onSetPreviewDevice={onSetPreviewDevice} session={session} />
+              <PreviewWorkbench
+                onCopyTitleSuccess={onCopyTitleSuccess}
+                onSetPreviewDevice={onSetPreviewDevice}
+                onSetPreviewFontSize={onSetPreviewFontSize}
+                previewFontSize={normalizePreviewFontSize(session?.layoutReview?.fontSize)}
+                session={session}
+              />
             </div>
           ) : (
             <div className="benchmark-scroll-hidden h-full overflow-y-auto overscroll-contain">
@@ -3547,6 +3874,8 @@ function FixedLayoutImageLightbox({ asset, onClose }) {
     return null
   }
 
+  const assetSrc = resolveRenderableAssetPath(asset, typeof window === 'undefined' ? '' : window.location.origin)
+
   return createPortal(
     <div className="fixed inset-0 z-[80] bg-black/88" onClick={onClose} role="presentation">
       <button
@@ -3559,11 +3888,11 @@ function FixedLayoutImageLightbox({ asset, onClose }) {
       </button>
 
       <div className="flex h-full w-full items-center justify-center px-8 py-8 sm:px-12 sm:py-10" onClick={(event) => event.stopPropagation()}>
-        {asset.path ? (
+        {assetSrc ? (
           <img
             alt={asset.label}
             className="max-h-full max-w-[calc(100vw-140px)] rounded-[18px] object-contain"
-            src={asset.path}
+            src={assetSrc}
           />
         ) : (
           <div className="flex min-h-[320px] w-full max-w-[960px] items-center justify-center rounded-[18px] border border-white/10 bg-white/6 px-6 text-center text-[15px] text-white/68">
@@ -3576,13 +3905,82 @@ function FixedLayoutImageLightbox({ asset, onClose }) {
   )
 }
 
-function FixedLayoutAssetRow({ asset, deletingSlot, onDelete, onPreview, onUpload, slot, uploadingSlot }) {
+function FixedLayoutTextRow({ onChange, value }) {
+  const normalizedValue = typeof value === 'string' ? value : ''
+  return (
+    <div className="rounded-[22px] border border-border/70 bg-white p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[15px] font-medium text-foreground">{FIXED_LAYOUT_SLOT_META.endingText.label}</div>
+          <div className="mt-1 text-[12px] leading-6 text-muted-foreground">{FIXED_LAYOUT_SLOT_META.endingText.description}</div>
+        </div>
+        <div className="text-[12px] text-muted-foreground">最多 {FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH} 字</div>
+      </div>
+
+      <div className="mt-4 rounded-[18px] border border-border/70 bg-secondary/10 p-3">
+        <Textarea
+          className="min-h-[116px] resize-none rounded-[14px] border border-border/70 bg-white px-4 py-3 text-[14px] leading-7 shadow-none focus-visible:ring-0"
+          maxLength={FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="这里填写正文结束后的固定引导文案。"
+          value={normalizedValue}
+        />
+      </div>
+
+      <div className="mt-3 text-[12px] text-muted-foreground">
+        {normalizedValue.length}/{FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
+      </div>
+    </div>
+  )
+}
+
+function FixedLayoutTemplatePreview({ config, selectedSlot }) {
+  const origin = typeof window === 'undefined' ? '' : window.location.origin
+  const previewRenderResult = useMemo(
+    () =>
+      renderArticlePreviewDocument({
+        bodyMarkdown: stripPreviewHeading(TEMPLATE_PREVIEW_SAMPLE_MARKDOWN),
+        fixedLayoutConfig: config,
+        fontSize: 'medium',
+        imageSlots: createTemplatePreviewPlaceholderSlots(),
+        origin,
+        penName: TEMPLATE_PREVIEW_SAMPLE_PEN_NAME,
+      }),
+    [config, origin],
+  )
+
+  return (
+    <div className="mx-auto w-[375px] max-w-full overflow-hidden border border-[#e8eaef] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
+      <div className="border-b border-[#eef1f5] px-4 py-4">
+        <div className="text-[18px] font-semibold leading-8 text-foreground">{TEMPLATE_PREVIEW_SAMPLE_TITLE}</div>
+      </div>
+      <div className="w-full bg-white">
+        <ArticlePreviewFrame documentHtml={previewRenderResult.documentHtml} title="模板预览" />
+      </div>
+    </div>
+  )
+}
+
+function FixedLayoutImageSlotCard({
+  onDelete,
+  onMove,
+  onPreview,
+  onSelect,
+  onSetQrWidth,
+  onSetSpacing,
+  onUpload,
+  isSavingTemplate,
+  selected,
+  slotConfig,
+  uploadingSlot,
+}) {
   const fileInputRef = useRef(null)
-  const slotMeta = FIXED_LAYOUT_SLOT_META[slot]
-  const isUploading = uploadingSlot === slot
-  const isDeleting = deletingSlot === slot
-  const hasAsset = Boolean(asset?.path)
+  const slot = slotConfig.slot
+  const asset = resolveFixedLayoutSlotAsset(slotConfig)
   const uploadedAtLabel = asset?.uploadedAt ? formatLibraryAssetDate(asset.uploadedAt) : ''
+  const isUploading = uploadingSlot === slot
+  const hasAsset = Boolean(asset?.path)
+  const isQrSlot = slot === 'qrImage'
 
   async function handleFileChange(event) {
     const nextFile = event.target.files?.[0]
@@ -3595,49 +3993,132 @@ function FixedLayoutAssetRow({ asset, deletingSlot, onDelete, onPreview, onUploa
   }
 
   return (
-    <div className="grid gap-4 border-b border-border/70 px-5 py-5 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6 lg:px-6">
-      <div className="flex min-w-0 items-start gap-4">
+    <article
+      className={cn(
+        'rounded-[24px] border bg-white p-4 transition-all',
+        selected ? 'border-foreground/20 shadow-[0_16px_28px_rgba(15,23,42,0.08)]' : 'border-border/70',
+      )}
+    >
+      <button className="block w-full text-left" onClick={() => onSelect(slot)} type="button">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: slotConfig.accent }} />
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-medium text-foreground">{slotConfig.label}</div>
+              <div className="mt-1 text-[12px] text-muted-foreground">第 {slotConfig.displayOrder} 位 · {slotConfig.description}</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <Button
+              className="h-8 w-8 rounded-full"
+              disabled={isSavingTemplate || isUploading || slotConfig.displayOrder === 1}
+              onClick={(event) => {
+                event.stopPropagation()
+                onMove(slot, -1)
+              }}
+              size="icon"
+              type="button"
+              variant="outline"
+            >
+              <ArrowUp size={14} />
+            </Button>
+            <Button
+              className="h-8 w-8 rounded-full"
+              disabled={isSavingTemplate || isUploading || slotConfig.displayOrder === FIXED_LAYOUT_IMAGE_SLOT_IDS.length}
+              onClick={(event) => {
+                event.stopPropagation()
+                onMove(slot, 1)
+              }}
+              size="icon"
+              type="button"
+              variant="outline"
+            >
+              <ArrowDown size={14} />
+            </Button>
+          </div>
+        </div>
+      </button>
+
+      <div className="mt-4 flex items-start gap-4">
         <button
-          className="group relative inline-flex h-[76px] w-[112px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] border border-border/70 bg-secondary/20"
+          className="group relative inline-flex h-[92px] w-[132px] shrink-0 items-center justify-center overflow-hidden rounded-[18px] border border-border/70 bg-secondary/20"
           disabled={!hasAsset}
-          onClick={() => hasAsset && onPreview({ label: slotMeta.label, path: asset.path })}
+          onClick={() =>
+            hasAsset &&
+            onPreview({
+              ...asset,
+              label: slotConfig.label,
+            })
+          }
           type="button"
         >
           {hasAsset ? (
             <img
-              alt={slotMeta.label}
+              alt={slotConfig.label}
               className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-              src={asset.path}
+              src={resolveRenderableAssetPath(asset, typeof window === 'undefined' ? '' : window.location.origin)}
             />
           ) : (
-            <div className="px-3 text-center text-[12px] leading-5 text-muted-foreground">未上传</div>
+            <div className="h-full w-full" style={{ backgroundColor: slotConfig.accent }} />
           )}
         </button>
 
-        <div className="min-w-0 pt-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="truncate text-[15px] font-medium text-foreground">{slotMeta.label}</div>
-            <span className="inline-flex rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">图片</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px] text-muted-foreground">{asset?.filename || '支持 gif、png、jpg、jpeg'}</div>
+          {uploadedAtLabel ? <div className="mt-1 text-[12px] text-muted-foreground">更新于 {uploadedAtLabel}</div> : null}
+
+          <div className="mt-4">
+            <div className="text-[12px] font-medium text-muted-foreground">间距</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {FIXED_LAYOUT_SPACING_PRESETS.map((preset) => (
+                <button
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-[12px] transition-colors',
+                    slotConfig.spacingPreset === preset.id
+                      ? 'border-foreground/20 bg-secondary text-foreground'
+                      : 'border-border/70 bg-white text-muted-foreground hover:text-foreground',
+                  )}
+                  key={preset.id}
+                  onClick={() => onSetSpacing(slot, preset.id)}
+                  type="button"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="mt-1 text-[13px] leading-6 text-muted-foreground">{slotMeta.description}</div>
-          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
-            <span className="truncate">{asset?.filename || '支持 gif、png、jpg、jpeg、webp'}</span>
-            {uploadedAtLabel ? <span>更新于 {uploadedAtLabel}</span> : null}
-          </div>
+
+          {isQrSlot ? (
+            <div className="mt-4">
+              <div className="text-[12px] font-medium text-muted-foreground">二维码宽度</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {FIXED_LAYOUT_QR_WIDTH_PRESETS.map((preset) => (
+                  <button
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-[12px] transition-colors',
+                      slotConfig.widthPreset === preset.id
+                        ? 'border-foreground/20 bg-secondary text-foreground'
+                        : 'border-border/70 bg-white text-muted-foreground hover:text-foreground',
+                    )}
+                    key={preset.id}
+                    onClick={() => onSetQrWidth(slot, preset.id)}
+                    type="button"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
-        <input
-          accept={FIXED_LAYOUT_FILE_ACCEPT}
-          className="hidden"
-          onChange={handleFileChange}
-          ref={fileInputRef}
-          type="file"
-        />
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <input accept={FIXED_LAYOUT_FILE_ACCEPT} className="hidden" onChange={handleFileChange} ref={fileInputRef} type="file" />
         <Button
           className="rounded-full"
-          disabled={isUploading || isDeleting}
+          disabled={isSavingTemplate || isUploading}
           onClick={() => fileInputRef.current?.click()}
           size="sm"
           type="button"
@@ -3649,88 +4130,116 @@ function FixedLayoutAssetRow({ asset, deletingSlot, onDelete, onPreview, onUploa
         {hasAsset ? (
           <Button
             className="rounded-full"
-            disabled={isUploading || isDeleting}
-            onClick={() => onDelete(slot, slotMeta.label)}
+            disabled={isSavingTemplate || isUploading}
+            onClick={() => onDelete(slot, slotConfig.label)}
             size="sm"
             type="button"
             variant="outline"
           >
-            {isDeleting ? <LoaderCircle className="animate-spin" size={14} /> : <Trash2 size={14} />}
+            <Trash2 size={14} />
             删除
           </Button>
         ) : null}
       </div>
-    </div>
-  )
-}
-
-function FixedLayoutTextRow({ onSave, saving, value }) {
-  const [draft, setDraft] = useState(value?.content ?? '')
-
-  useEffect(() => {
-    setDraft(value?.content ?? '')
-  }, [value?.content])
-
-  const isDirty = normalizeFixedLayoutTextContent(draft) !== normalizeFixedLayoutTextContent(value?.content ?? '')
-
-  return (
-    <div className="grid gap-4 border-b border-border/70 px-5 py-5 last:border-b-0 md:grid-cols-[280px_minmax(0,1fr)] md:gap-6 lg:px-6">
-      <div className="min-w-0 pt-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="text-[15px] font-medium text-foreground">{FIXED_LAYOUT_SLOT_META.endingText.label}</div>
-          <span className="inline-flex rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">文案</span>
-        </div>
-        <div className="mt-1 text-[13px] leading-6 text-muted-foreground">{FIXED_LAYOUT_SLOT_META.endingText.description}</div>
-        <div className="mt-2 text-[12px] text-muted-foreground">最多 {FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH} 字</div>
-      </div>
-
-      <div className="w-full">
-        <div className="rounded-[18px] border border-border/70 bg-secondary/10 p-3">
-          <Textarea
-            className="min-h-[124px] resize-none rounded-[14px] border border-border/70 bg-white px-4 py-3 text-[14px] leading-7 shadow-none focus-visible:ring-0"
-            maxLength={FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="这里填写正文结束后的固定引导文案。"
-            value={draft}
-          />
-        </div>
-
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="text-[12px] text-muted-foreground">
-            {draft.length}/{FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
-          </div>
-          <Button className="rounded-full" disabled={saving || !isDirty} onClick={() => onSave(draft)} size="sm" type="button">
-            {saving ? <LoaderCircle className="animate-spin" size={14} /> : <Check size={14} />}
-            保存
-          </Button>
-        </div>
-      </div>
-    </div>
+    </article>
   )
 }
 
 function FixedLayoutConfigCanvas() {
   const { config, errorMessage, isLoading, setConfig, setErrorMessage } = useFixedLayoutConfigState()
-  const [savingText, setSavingText] = useState(false)
+  const [draftConfig, setDraftConfig] = useState(() => createEmptyFixedLayoutConfig())
+  const [hasHydratedDraft, setHasHydratedDraft] = useState(false)
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false)
+  const [savedConfigSnapshot, setSavedConfigSnapshot] = useState(() => createEmptyFixedLayoutConfig())
+  const [selectedSlot, setSelectedSlot] = useState(FIXED_LAYOUT_IMAGE_SLOT_IDS[0])
   const [uploadingSlot, setUploadingSlot] = useState('')
-  const [deletingSlot, setDeletingSlot] = useState('')
   const [previewAsset, setPreviewAsset] = useState(null)
-  const slotCount = FIXED_LAYOUT_SLOT_ORDER.length
+  const draftPreviewUrlMapRef = useRef(new Map())
+  const imageSlots = useMemo(() => getFixedLayoutImageDisplaySlots(draftConfig), [draftConfig])
+  const isDirty = useMemo(() => !areFixedLayoutConfigsEqual(draftConfig, savedConfigSnapshot), [draftConfig, savedConfigSnapshot])
+  const isServerMutationPending = Boolean(uploadingSlot)
 
-  async function handleSaveEndingText(content) {
-    setSavingText(true)
+  useEffect(() => {
+    if (isLoading || hasHydratedDraft) {
+      return
+    }
+
+    const nextConfig = cloneFixedLayoutConfig(config)
+    setSavedConfigSnapshot(nextConfig)
+    setDraftConfig(nextConfig)
+    setHasHydratedDraft(true)
+  }, [config, hasHydratedDraft, isLoading])
+
+  useEffect(() => {
+    if (!imageSlots.some((slot) => slot.slot === selectedSlot)) {
+      setSelectedSlot(imageSlots[0]?.slot || FIXED_LAYOUT_IMAGE_SLOT_IDS[0])
+    }
+  }, [imageSlots, selectedSlot])
+
+  function revokeDraftPreviewUrl(slot) {
+    const previewUrl = draftPreviewUrlMapRef.current.get(slot)
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl)
+      draftPreviewUrlMapRef.current.delete(slot)
+    }
+  }
+
+  function revokeAllDraftPreviewUrls() {
+    draftPreviewUrlMapRef.current.forEach((previewUrl) => {
+      URL.revokeObjectURL(previewUrl)
+    })
+    draftPreviewUrlMapRef.current.clear()
+  }
+
+  useEffect(() => () => revokeAllDraftPreviewUrls(), [])
+
+  function handleDraftEndingTextChange(content) {
+    setDraftConfig((current) => ({
+      ...current,
+      endingText: {
+        ...(current?.endingText ?? {}),
+        content,
+      },
+    }))
+  }
+
+  async function handleSaveTemplate() {
+    const imageSlotsPayload = Object.fromEntries(
+      FIXED_LAYOUT_IMAGE_SLOT_IDS.map((slot) => [
+        slot,
+        {
+          asset: resolveFixedLayoutSlotAsset(draftConfig?.[slot]),
+          displayOrder: draftConfig?.[slot]?.displayOrder,
+          spacingPreset: draftConfig?.[slot]?.spacingPreset,
+          widthPreset: draftConfig?.[slot]?.widthPreset,
+        },
+      ]),
+    )
+
+    setIsSavingTemplate(true)
     setErrorMessage('')
 
     try {
-      const nextConfig = await requestFixedLayoutTextUpdate({
-        endingText: content,
+      const nextConfig = await requestFixedLayoutConfigUpdate({
+        endingText: draftConfig?.endingText?.content ?? '',
+        imageSlots: imageSlotsPayload,
       })
+      revokeAllDraftPreviewUrls()
       setConfig(nextConfig)
+      setSavedConfigSnapshot(cloneFixedLayoutConfig(nextConfig))
+      setDraftConfig(cloneFixedLayoutConfig(nextConfig))
     } catch (error) {
-      setErrorMessage(error.message || '保存固定文案失败')
+      setErrorMessage(error.message || '保存模板配置失败')
     } finally {
-      setSavingText(false)
+      setIsSavingTemplate(false)
     }
+  }
+
+  function handleRestoreSaved() {
+    revokeAllDraftPreviewUrls()
+    setDraftConfig(cloneFixedLayoutConfig(savedConfigSnapshot))
+    setErrorMessage('')
   }
 
   async function handleUpload(slot, file) {
@@ -3738,45 +4247,117 @@ function FixedLayoutConfigCanvas() {
     setErrorMessage('')
 
     try {
-      const nextConfig = await requestFixedLayoutAssetUpload({
+      const nextAsset = await requestFixedLayoutAssetUpload({
         file,
         slot,
       })
-      setConfig(nextConfig)
+      const previewUrl =
+        typeof window !== 'undefined' && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : ''
+
+      revokeDraftPreviewUrl(slot)
+      if (previewUrl) {
+        draftPreviewUrlMapRef.current.set(slot, previewUrl)
+      }
+      setSelectedSlot(slot)
+
+      setDraftConfig((current) => ({
+        ...current,
+        [slot]: {
+          ...current?.[slot],
+          asset: nextAsset
+            ? {
+                ...nextAsset,
+                ...(previewUrl ? { previewUrl } : null),
+              }
+            : null,
+        },
+      }))
     } catch (error) {
-      setErrorMessage(error.message || '上传固定图片失败')
+      setErrorMessage(error.message || '上传模板图片失败')
     } finally {
       setUploadingSlot('')
     }
   }
 
-  async function handleDelete(slot, label) {
-    const confirmed = window.confirm(`确认清空“${label}”吗？对应图片文件也会从项目里移除。`)
+  function handleDelete(slot, label) {
+    const confirmed = window.confirm(`确认清空“${label}”吗？当前只会清空模板草稿，点击“保存模板”后才会正式生效。`)
 
     if (!confirmed) {
       return
     }
 
-    setDeletingSlot(slot)
     setErrorMessage('')
+    revokeDraftPreviewUrl(slot)
+    setDraftConfig((current) => ({
+      ...current,
+      [slot]: {
+        ...current?.[slot],
+        asset: null,
+      },
+    }))
+  }
 
-    try {
-      const nextConfig = await requestFixedLayoutAssetDelete(slot)
-      setConfig(nextConfig)
-    } catch (error) {
-      setErrorMessage(error.message || '删除固定图片失败')
-    } finally {
-      setDeletingSlot('')
+  function handleMove(slot, direction) {
+    const currentIndex = imageSlots.findIndex((item) => item.slot === slot)
+    const targetIndex = currentIndex + direction
+
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= imageSlots.length) {
+      return
     }
+
+    const reordered = imageSlots.slice()
+    const [movedSlot] = reordered.splice(currentIndex, 1)
+    reordered.splice(targetIndex, 0, movedSlot)
+    const imageSlotPatch = Object.fromEntries(
+      reordered.map((item, index) => [
+        item.slot,
+        {
+          displayOrder: index + 1,
+          spacingPreset: item.spacingPreset,
+          widthPreset: item.widthPreset,
+        },
+      ]),
+    )
+
+    setDraftConfig((current) => {
+      const nextDraftConfig = cloneFixedLayoutConfig(current)
+      Object.entries(imageSlotPatch).forEach(([slotId, patch]) => {
+        nextDraftConfig[slotId] = {
+          ...nextDraftConfig[slotId],
+          ...patch,
+        }
+      })
+      return nextDraftConfig
+    })
+  }
+
+  function handleSetSpacing(slot, spacingPreset) {
+    setDraftConfig((current) => ({
+      ...current,
+      [slot]: {
+        ...current?.[slot],
+        spacingPreset,
+      },
+    }))
+  }
+
+  function handleSetQrWidth(slot, widthPreset) {
+    setDraftConfig((current) => ({
+      ...current,
+      [slot]: {
+        ...current?.[slot],
+        widthPreset,
+      },
+    }))
   }
 
   return (
     <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white">
-      <div className="mx-auto w-full max-w-[1180px] px-4 py-8 sm:px-5 lg:px-6">
+      <div className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-5 lg:px-6">
         <div className="mb-6">
-          <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-foreground sm:text-[32px]">图片配置</h1>
+          <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-foreground sm:text-[32px]">模板配置</h1>
           <p className="mt-2 text-[14px] leading-7 text-muted-foreground">
-            统一维护文章固定图片和文末文案。当前共 {slotCount} 个配置项。
+            左侧看移动端模板预览，右侧管理固定图片的顺序、上传和轻量间距预设。
           </p>
         </div>
 
@@ -3786,50 +4367,98 @@ function FixedLayoutConfigCanvas() {
           </div>
         ) : null}
 
-        <section>
-          <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white">
-            <div className="flex items-center justify-between border-b border-border/70 px-5 py-4 lg:px-6">
-              <div>
-                <div className="text-[15px] font-medium text-foreground">固定内容配置</div>
-                <div className="mt-1 text-[12px] text-muted-foreground">开头动图、二维码、底部动图和文末固定文案。</div>
-              </div>
-              <div className="text-[12px] text-muted-foreground">{slotCount} 项</div>
+        {isLoading ? (
+          <div className="py-16 text-center text-[14px] text-muted-foreground">
+            <div className="inline-flex items-center gap-2">
+              <LoaderCircle className="animate-spin" size={16} />
+              正在读取模板配置
             </div>
+          </div>
+        ) : (
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)]">
+            <section className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[15px] font-medium text-foreground">移动端模板预览</div>
+                  <div className="mt-1 text-[12px] leading-6 text-muted-foreground">左侧始终显示当前草稿效果，宽度固定为 375。</div>
+                </div>
+                <div className="text-[12px] text-muted-foreground">375 预览宽度</div>
+              </div>
 
-            {isLoading ? (
-              <div className="py-16 text-center text-[14px] text-muted-foreground">
-                <div className="inline-flex items-center gap-2">
-                  <LoaderCircle className="animate-spin" size={16} />
-                  正在读取固定内容配置
+              <FixedLayoutTemplatePreview config={draftConfig} selectedSlot={selectedSlot} />
+            </section>
+
+            <section className="space-y-5">
+              <div className="rounded-[22px] border border-border/70 bg-white p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[15px] font-medium text-foreground">图片顺序与图片设置</div>
+                    <div className="mt-1 text-[12px] leading-6 text-muted-foreground">左侧实时看草稿效果，点击保存模板后才会同步到正式排版预览、复制微信样式和微信草稿。</div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        'rounded-full px-3 py-1.5 text-[12px]',
+                        isDirty ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+                      )}
+                    >
+                      {isDirty ? '有未保存更改' : '当前已保存'}
+                    </span>
+                    <Button
+                      className="rounded-full"
+                      disabled={!isDirty || isSavingTemplate || isServerMutationPending}
+                      onClick={handleRestoreSaved}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      恢复已保存
+                    </Button>
+                    <Button
+                      className="rounded-full"
+                      disabled={!isDirty || isSavingTemplate || isServerMutationPending}
+                      onClick={handleSaveTemplate}
+                      size="sm"
+                      type="button"
+                    >
+                      {isSavingTemplate ? <LoaderCircle className="animate-spin" size={14} /> : <Check size={14} />}
+                      保存模板
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-[18px] border border-dashed border-border/70 bg-secondary/10 px-4 py-3 text-[12px] leading-6 text-muted-foreground">
+                  替换图片会先进入当前草稿预览；顺序、间距、二维码宽度、删除和文案内容都需要点击“保存模板”后才会全局生效。
                 </div>
               </div>
-            ) : (
-              <div>
-                {FIXED_LAYOUT_SLOT_ORDER.map((slot) =>
-                  FIXED_LAYOUT_IMAGE_SLOT_IDS.includes(slot) ? (
-                    <FixedLayoutAssetRow
-                      asset={config?.[slot]}
-                      deletingSlot={deletingSlot}
-                      key={slot}
-                      onDelete={handleDelete}
-                      onPreview={setPreviewAsset}
-                      onUpload={handleUpload}
-                      slot={slot}
-                      uploadingSlot={uploadingSlot}
-                    />
-                  ) : (
-                    <FixedLayoutTextRow
-                      key={slot}
-                      onSave={handleSaveEndingText}
-                      saving={savingText}
-                      value={config?.[slot]}
-                    />
-                  ),
-                )}
+
+              <div className="space-y-4">
+                {imageSlots.map((slotConfig) => (
+                  <FixedLayoutImageSlotCard
+                    isSavingTemplate={isSavingTemplate}
+                    key={slotConfig.slot}
+                    onDelete={handleDelete}
+                    onMove={handleMove}
+                    onPreview={setPreviewAsset}
+                    onSelect={setSelectedSlot}
+                    onSetQrWidth={handleSetQrWidth}
+                    onSetSpacing={handleSetSpacing}
+                    onUpload={handleUpload}
+                    selected={selectedSlot === slotConfig.slot}
+                    slotConfig={slotConfig}
+                    uploadingSlot={uploadingSlot}
+                  />
+                ))}
               </div>
-            )}
+
+              <div className="rounded-[22px] border border-dashed border-border/70 bg-secondary/10 p-4 text-[12px] leading-6 text-muted-foreground">
+                非二维码图片固定按 100% 宽显示。上传格式支持 jpg、png、gif；webp 不再作为模板图片格式。
+              </div>
+
+              <FixedLayoutTextRow onChange={handleDraftEndingTextChange} value={draftConfig?.endingText?.content ?? ''} />
+            </section>
           </div>
-        </section>
+        )}
       </div>
 
       <FixedLayoutImageLightbox asset={previewAsset} onClose={() => setPreviewAsset(null)} />
@@ -4096,6 +4725,7 @@ export default function BenchmarkWorkbenchPage() {
   const [sessionPendingDelete, setSessionPendingDelete] = useState(null)
   const [copiedMessageId, setCopiedMessageId] = useState(null)
   const [isResizingSplit, setIsResizingSplit] = useState(false)
+  const [pageToast, setPageToast] = useState(null)
   const [rightPaneWidth, setRightPaneWidth] = useState(620)
 
   const composerRef = useRef(null)
@@ -4352,6 +4982,20 @@ export default function BenchmarkWorkbenchPage() {
     }
   }, [isResizingSplit])
 
+  useEffect(() => {
+    if (!pageToast?.id) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setPageToast((current) => (current?.id === pageToast.id ? null : current))
+    }, 2000)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [pageToast])
+
   function updateCurrentSession(updater) {
     if (!currentSessionId) {
       return
@@ -4373,6 +5017,29 @@ export default function BenchmarkWorkbenchPage() {
         device: normalizedDevice,
       },
     }))
+  }
+
+  function handleSetPreviewFontSize(sessionId, nextFontSize) {
+    if (!sessionId) {
+      return
+    }
+
+    const normalizedFontSize = normalizePreviewFontSize(nextFontSize)
+
+    updateSession(sessionId, (current) => ({
+      layoutReview: {
+        ...(current.layoutReview ?? {}),
+        fontSize: normalizedFontSize,
+      },
+    }))
+  }
+
+  function showPageToast(message) {
+    setPageToast({
+      id: createId('toast'),
+      message,
+      tone: 'success',
+    })
   }
 
   async function runFlow({
@@ -5363,8 +6030,10 @@ export default function BenchmarkWorkbenchPage() {
               </button>
               <RightWorkbenchShell
                 activeTabId={activeSession.activeWorkbenchTab}
+                onCopyTitleSuccess={() => showPageToast('标题复制成功')}
                 onOpenTab={handleSelectWorkbenchTab}
                 onSetPreviewDevice={(nextDevice) => handleSetPreviewDevice(activeSession.id, nextDevice)}
+                onSetPreviewFontSize={(nextFontSize) => handleSetPreviewFontSize(activeSession.id, nextFontSize)}
                 onSelectVersion={(versionId) =>
                   updateCurrentSession((current) => {
                     const nextSession = {
@@ -5411,10 +6080,21 @@ export default function BenchmarkWorkbenchPage() {
 
       <ArticlePreviewDrawer
         onClose={handleCloseArticlePreview}
+        onCopyTitleSuccess={() => showPageToast('标题复制成功')}
         onSetPreviewDevice={(nextDevice) => handleSetPreviewDevice(activeArticleSession?.id, nextDevice)}
+        onSetPreviewFontSize={(nextFontSize) => handleSetPreviewFontSize(activeArticleSession?.id, nextFontSize)}
         open={activeModule === 'articles' && Boolean(activeArticleSession)}
         session={activeArticleSession}
       />
+
+      {pageToast ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[80] flex justify-center px-4">
+          <div className="inline-flex max-w-[420px] items-center gap-2 rounded-full border border-emerald-200/80 bg-white px-4 py-2 shadow-[0_12px_36px_rgba(16,24,40,0.12)]">
+            <CheckCircle2 className="text-emerald-600" size={16} />
+            <span className="text-[13px] font-medium text-foreground">{pageToast.message}</span>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

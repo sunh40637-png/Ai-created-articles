@@ -1,7 +1,11 @@
 import ReactMarkdown from 'react-markdown'
 import { renderToStaticMarkup } from 'react-dom/server'
 import remarkGfm from 'remark-gfm'
-import { FIXED_LAYOUT_SLOT_META } from '../../shared/fixedLayoutConfig.js'
+import {
+  FIXED_LAYOUT_SLOT_META,
+  FIXED_LAYOUT_SPACING_PRESETS,
+  getFixedLayoutImageDisplaySlots,
+} from '../../shared/fixedLayoutConfig.js'
 
 export const ARTICLE_PREVIEW_SECTION_COUNT = 3
 export const MISSING_PREVIEW_ASSET_SRC_PREFIX = 'asset-missing://'
@@ -10,6 +14,79 @@ const PREVIEW_SOURCE_ACCOUNT_NAME = '煮酒问人生'
 const FIXED_TEMPLATE_MAX_WIDTH = 677
 const DEFAULT_ENDING_GUIDE_TEXT = '点亮文末“爱心”，愿你往后有光，心里有暖，脚下有路。转发分享，弘扬中华传统文化！'
 const PLACEHOLDER_MARKERS = ['[IMAGE_1]', '[IMAGE_2]', '[IMAGE_3]', '[ENDING]']
+const PREVIEW_FONT_PRESETS = {
+  small: {
+    bodyLineHeight: 2.0,
+    bodySize: 15,
+    blockquoteSize: 14,
+    endingGuideSize: 15,
+    endingSymbolSize: 16,
+    h2Size: 17,
+    h3Size: 16,
+    metaSize: 12,
+    tableCellSize: 14,
+    tableHeadSize: 12,
+  },
+  medium: {
+    bodyLineHeight: 2.1,
+    bodySize: 16,
+    blockquoteSize: 15,
+    endingGuideSize: 16,
+    endingSymbolSize: 17,
+    h2Size: 18,
+    h3Size: 17,
+    metaSize: 13,
+    tableCellSize: 15,
+    tableHeadSize: 13,
+  },
+  large: {
+    bodyLineHeight: 2.2,
+    bodySize: 17,
+    blockquoteSize: 16,
+    endingGuideSize: 17,
+    endingSymbolSize: 18,
+    h2Size: 19,
+    h3Size: 18,
+    metaSize: 14,
+    tableCellSize: 16,
+    tableHeadSize: 14,
+  },
+}
+const TEMPLATE_IMAGE_SPACING_MAP = {
+  large: 32,
+  medium: 24,
+  none: 0,
+  small: 16,
+}
+const TEMPLATE_STRUCTURE_BLOCKS = [
+  { id: 'title', label: '文章标题', tint: '#eef2ff', type: 'title' },
+  { id: 'intro', label: '开头正文', tint: '#eff6ff', type: 'body' },
+  { id: 'section-1-title', label: '正文1标题', tint: '#ecfeff', type: 'heading' },
+  { id: 'section-1-body', label: '正文1正文', tint: '#f0fdf4', type: 'body' },
+  { id: 'section-1-image', label: '正文插图1', tint: '#dbeafe', type: 'image' },
+  { id: 'section-2-title', label: '正文2标题', tint: '#fef3c7', type: 'heading' },
+  { id: 'section-2-body', label: '正文2正文', tint: '#fff7ed', type: 'body' },
+  { id: 'section-2-image', label: '正文插图2', tint: '#fde68a', type: 'image' },
+  { id: 'section-3-title', label: '正文3标题', tint: '#fae8ff', type: 'heading' },
+  { id: 'section-3-body', label: '正文3正文', tint: '#fdf2f8', type: 'body' },
+  { id: 'section-3-image', label: '正文插图3', tint: '#fbcfe8', type: 'image' },
+  { id: 'outro-title', label: '结尾标题', tint: '#ede9fe', type: 'heading' },
+  { id: 'outro-body', label: '结尾正文', tint: '#f5f3ff', type: 'body' },
+  { id: 'blessing', label: '祝福语', tint: '#fef2f2', type: 'body' },
+  { id: 'cta', label: '互动引导语', tint: '#f3f4f6', type: 'cta' },
+]
+
+function resolveTemplateImageSpacing(preset = 'medium') {
+  return TEMPLATE_IMAGE_SPACING_MAP[preset] ?? TEMPLATE_IMAGE_SPACING_MAP.medium
+}
+
+function resolveQrWidthPercent(slotConfig = null) {
+  return slotConfig?.widthPreset === '60' ? 60 : 50
+}
+
+function resolveFixedImageWidthPercent(slotConfig = null) {
+  return slotConfig?.slot === 'qrImage' ? resolveQrWidthPercent(slotConfig) : 100
+}
 
 function buildPlaceholderImageDataUri(label = '图片占位', { background = '#f3f4f6', foreground = '#9ca3af' } = {}) {
   const safeLabel = String(label || '图片占位').replace(/[<>&]/g, '')
@@ -28,6 +105,10 @@ function buildPlaceholderImageDataUri(label = '图片占位', { background = '#f
 
 function normalizeMarkdown(markdown = '') {
   return String(markdown).replace(/\r/g, '').trim()
+}
+
+function resolvePreviewFontPreset(fontSize = 'medium') {
+  return PREVIEW_FONT_PRESETS[fontSize] ?? PREVIEW_FONT_PRESETS.medium
 }
 
 export function stripPreviewHeading(markdown = '') {
@@ -408,6 +489,16 @@ export function resolveAbsoluteAssetPath(src = '', origin = '') {
   }
 }
 
+export function resolveRenderableAssetPath(asset = null, origin = '') {
+  const previewUrl = typeof asset?.previewUrl === 'string' ? asset.previewUrl.trim() : ''
+
+  if (previewUrl) {
+    return previewUrl
+  }
+
+  return resolveAbsoluteAssetPath(asset?.path || '', origin)
+}
+
 export function extractUsedAssetIds(imageSelection, sourceVersionId = '') {
   if (imageSelection?.sourceVersionId !== sourceVersionId) {
     return []
@@ -430,7 +521,7 @@ function FixedOrPlaceholderImage({
   style = {},
   placeholderStyle = {},
 }) {
-  const resolvedSrc = resolveAbsoluteAssetPath(asset?.path || '', origin)
+  const resolvedSrc = resolveRenderableAssetPath(asset, origin)
   const src = resolvedSrc || buildPlaceholderImageDataUri(label)
 
   return (
@@ -448,13 +539,15 @@ function FixedOrPlaceholderImage({
   )
 }
 
-function createMarkdownComponents() {
+function createMarkdownComponents(fontSize = 'medium') {
+  const preset = resolvePreviewFontPreset(fontSize)
+
   return {
     h1: ({ node, ...props }) => (
       <h2
         style={{
           color: '#111111',
-          fontSize: '18px',
+          fontSize: `${preset.h2Size}px`,
           fontWeight: 700,
           lineHeight: 1.7,
           margin: '32px 0 16px',
@@ -466,7 +559,7 @@ function createMarkdownComponents() {
       <h2
         style={{
           color: '#111111',
-          fontSize: '18px',
+          fontSize: `${preset.h2Size}px`,
           fontWeight: 700,
           lineHeight: 1.7,
           margin: '32px 0 16px',
@@ -478,7 +571,7 @@ function createMarkdownComponents() {
       <h3
         style={{
           color: '#111111',
-          fontSize: '17px',
+          fontSize: `${preset.h3Size}px`,
           fontWeight: 700,
           lineHeight: 1.8,
           margin: '28px 0 12px',
@@ -490,8 +583,8 @@ function createMarkdownComponents() {
       <p
         style={{
           color: '#000000',
-          fontSize: '17px',
-          lineHeight: 1.9,
+          fontSize: `${preset.bodySize}px`,
+          lineHeight: preset.bodyLineHeight,
           margin: '16px 0 0',
         }}
         {...props}
@@ -501,8 +594,8 @@ function createMarkdownComponents() {
       <ul
         style={{
           color: '#000000',
-          fontSize: '17px',
-          lineHeight: 1.9,
+          fontSize: `${preset.bodySize}px`,
+          lineHeight: preset.bodyLineHeight,
           listStyleType: 'disc',
           margin: '16px 0 0',
           paddingLeft: '24px',
@@ -514,8 +607,8 @@ function createMarkdownComponents() {
       <ol
         style={{
           color: '#000000',
-          fontSize: '17px',
-          lineHeight: 1.9,
+          fontSize: `${preset.bodySize}px`,
+          lineHeight: preset.bodyLineHeight,
           listStyleType: 'decimal',
           margin: '16px 0 0',
           paddingLeft: '24px',
@@ -530,8 +623,8 @@ function createMarkdownComponents() {
         style={{
           borderLeft: '2px solid rgba(0,0,0,0.15)',
           color: 'rgba(0,0,0,0.72)',
-          fontSize: '15px',
-          lineHeight: 1.9,
+          fontSize: `${preset.blockquoteSize}px`,
+          lineHeight: preset.bodyLineHeight,
           margin: '20px 0 0',
           paddingLeft: '16px',
         }}
@@ -552,16 +645,7 @@ function createMarkdownComponents() {
         {...props}
       />
     ),
-    hr: ({ node, ...props }) => (
-      <hr
-        style={{
-          border: 'none',
-          borderTop: '1px solid rgba(0,0,0,0.08)',
-          margin: '28px 0',
-        }}
-        {...props}
-      />
-    ),
+    hr: () => null,
     table: ({ node, ...props }) => (
       <div
         style={{
@@ -579,7 +663,7 @@ function createMarkdownComponents() {
     th: ({ node, ...props }) => (
       <th
         style={{
-          fontSize: '13px',
+          fontSize: `${preset.tableHeadSize}px`,
           fontWeight: 600,
           lineHeight: 1.7,
           padding: '12px 14px',
@@ -593,8 +677,8 @@ function createMarkdownComponents() {
       <td
         style={{
           color: '#000000',
-          fontSize: '15px',
-          lineHeight: 1.85,
+          fontSize: `${preset.tableCellSize}px`,
+          lineHeight: Math.max(1.85, preset.bodyLineHeight - 0.1),
           padding: '12px 14px',
           verticalAlign: 'top',
         }}
@@ -660,15 +744,273 @@ function buildPreviewPlainText({ bodyMarkdown = '', fixedLayoutConfig = null, pe
   return parts.filter(Boolean).join('\n\n').trim()
 }
 
+function buildOrderedFixedImageAnchors(fixedLayoutConfig = null) {
+  const orderedSlots = getFixedLayoutImageDisplaySlots(fixedLayoutConfig)
+
+  return {
+    footerSlot: orderedSlots[3] ?? null,
+    qrSlot: orderedSlots[2] ?? null,
+    topPrimarySlot: orderedSlots[0] ?? null,
+    topSecondarySlot: orderedSlots[1] ?? null,
+  }
+}
+
+function TemplatePreviewTextBlock({ label = '', tint = '#f3f4f6', type = 'body' }) {
+  const isTitle = type === 'title'
+  const isHeading = type === 'heading'
+  const isCta = type === 'cta'
+  const isImage = type === 'image'
+  const lines = isTitle ? [80, 62] : isHeading ? [46] : isCta ? [54, 40] : [100, 94, 88, 68]
+
+  return (
+    <div
+      style={{
+        backgroundColor: tint,
+        borderRadius: isCta ? '14px' : isImage ? '14px' : '16px',
+        padding: isImage ? '12px 14px 14px' : isTitle ? '18px 16px' : isHeading ? '14px 14px' : isCta ? '14px 16px' : '18px 16px',
+      }}
+    >
+      {label ? (
+        <div
+          style={{
+            color: 'rgba(15,23,42,0.56)',
+            fontSize: '11px',
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+            marginBottom: isImage ? '10px' : '8px',
+          }}
+        >
+          {label}
+        </div>
+      ) : null}
+
+      {isImage ? (
+        <div
+          style={{
+            backgroundColor: 'rgba(15,23,42,0.12)',
+            borderRadius: '12px',
+            height: '96px',
+            width: '100%',
+          }}
+        />
+      ) : (
+        <div style={{ display: 'grid', gap: isTitle ? '10px' : '8px' }}>
+          {lines.map((width, index) => (
+            <div
+              key={`${type}-${index}`}
+              style={{
+                backgroundColor: 'rgba(15,23,42,0.12)',
+                borderRadius: '999px',
+                height: isTitle ? '12px' : isHeading ? '10px' : isCta ? '9px' : '8px',
+                width: `${width}%`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TemplatePreviewImageBlock({ slotConfig = null, origin = '', selected = false }) {
+  const asset = slotConfig?.asset ?? null
+  const accent = slotConfig?.accent || '#e5e7eb'
+  const spacing = resolveTemplateImageSpacing(slotConfig?.spacingPreset)
+  const isQrSlot = slotConfig?.slot === 'qrImage'
+  const widthPercent = isQrSlot ? resolveQrWidthPercent(slotConfig) : 100
+
+  return (
+    <div
+      style={{
+        marginTop: `${spacing}px`,
+        textAlign: isQrSlot ? 'center' : 'left',
+      }}
+    >
+      <div
+        style={{
+          display: 'inline-block',
+          width: `${widthPercent}%`,
+        }}
+      >
+        <FixedOrPlaceholderImage
+          alt={slotConfig?.label || '模板图片'}
+          asset={asset}
+          label=""
+          origin={origin}
+          placeholderStyle={{ backgroundColor: accent }}
+          style={{
+            boxSizing: 'border-box',
+            display: 'block',
+            height: 'auto',
+            minHeight: asset?.path ? undefined : isQrSlot ? '180px' : '192px',
+            objectFit: 'cover',
+            width: '100%',
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function GuideFollowMarker({
+  color = '#111111',
+  fontSize = '18px',
+  marginTop = '12px',
+  textAlign = 'center',
+}) {
+  return (
+    <div
+      style={{
+        color,
+        fontSize,
+        fontWeight: 700,
+        lineHeight: 1.2,
+        marginTop,
+        textAlign,
+      }}
+    >
+      ▽
+    </div>
+  )
+}
+
+function TemplatePreviewFixedImageSlot({ origin = '', selected = false, slotConfig = null }) {
+  if (!slotConfig) {
+    return null
+  }
+
+  return (
+    <>
+      <TemplatePreviewImageBlock origin={origin} selected={selected} slotConfig={slotConfig} />
+      {slotConfig?.slot === 'guideFollow' ? <GuideFollowMarker /> : null}
+    </>
+  )
+}
+
+export function TemplateStructurePreviewArticle({ fixedLayoutConfig = null, origin = '', selectedSlot = '' }) {
+  const { footerSlot, qrSlot, topPrimarySlot, topSecondarySlot } = buildOrderedFixedImageAnchors(fixedLayoutConfig)
+  const articleStructureBlocks = TEMPLATE_STRUCTURE_BLOCKS.filter((block) => block.id !== 'cta')
+
+  return (
+    <div
+      style={{
+        backgroundColor: '#ffffff',
+        boxSizing: 'border-box',
+        color: '#0f172a',
+        fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+        minHeight: '100%',
+        padding: '16px 16px 40px',
+        width: '100%',
+      }}
+    >
+      <div style={{ margin: '0 auto', maxWidth: `${FIXED_TEMPLATE_MAX_WIDTH}px` }}>
+        <TemplatePreviewFixedImageSlot origin={origin} selected={selectedSlot === topPrimarySlot?.slot} slotConfig={topPrimarySlot} />
+        <TemplatePreviewFixedImageSlot origin={origin} selected={selectedSlot === topSecondarySlot?.slot} slotConfig={topSecondarySlot} />
+
+        <div style={{ display: 'grid', gap: '14px', marginTop: '20px' }}>
+          {articleStructureBlocks.map((block) => (
+            <TemplatePreviewTextBlock key={block.id} label={block.label} tint={block.tint} type={block.type} />
+          ))}
+        </div>
+
+        <div
+          style={{
+            color: '#111111',
+            fontSize: '18px',
+            fontWeight: 700,
+            lineHeight: 1.4,
+            marginTop: '28px',
+            textAlign: 'center',
+          }}
+        >
+          ▽
+        </div>
+
+        <div style={{ marginTop: '16px' }}>
+          <TemplatePreviewTextBlock label="互动引导语" tint="#f8fafc" type="cta" />
+        </div>
+
+        <div style={{ marginTop: '20px' }}>
+          <TemplatePreviewFixedImageSlot origin={origin} selected={selectedSlot === qrSlot?.slot} slotConfig={qrSlot} />
+        </div>
+
+        <div style={{ marginTop: '12px' }}>
+          <TemplatePreviewTextBlock label="二维码提示语" tint="#dcfce7" type="cta" />
+        </div>
+
+        <TemplatePreviewFixedImageSlot origin={origin} selected={selectedSlot === footerSlot?.slot} slotConfig={footerSlot} />
+      </div>
+    </div>
+  )
+}
+
+function FixedTemplateImageBlock({
+  applyDefaultSpacing = true,
+  fallbackLabel = '模板图片',
+  markerFontSize = '18px',
+  origin = '',
+  placeholderColor = '#f3f4f6',
+  slotConfig = null,
+  wrapperStyle = {},
+}) {
+  if (!slotConfig) {
+    return null
+  }
+
+  const spacing = resolveTemplateImageSpacing(slotConfig?.spacingPreset)
+  const isQrSlot = slotConfig?.slot === 'qrImage'
+  const baseWrapperStyle = applyDefaultSpacing
+    ? {
+        margin: isQrSlot ? `0 auto ${spacing}px` : `0 0 ${spacing}px`,
+        textAlign: isQrSlot ? 'center' : 'left',
+      }
+    : {
+        textAlign: isQrSlot ? 'center' : 'left',
+      }
+
+  return (
+    <div
+      style={{
+        ...baseWrapperStyle,
+        ...wrapperStyle,
+      }}
+    >
+      <div
+        style={{
+          display: 'inline-block',
+          width: `${resolveFixedImageWidthPercent(slotConfig)}%`,
+        }}
+      >
+        <FixedOrPlaceholderImage
+          alt={slotConfig?.label || fallbackLabel}
+          asset={slotConfig?.asset}
+          label={slotConfig?.label || fallbackLabel}
+          origin={origin}
+          placeholderStyle={{ backgroundColor: placeholderColor }}
+          style={{
+            objectFit: 'cover',
+            width: '100%',
+          }}
+        />
+      </div>
+
+      {slotConfig?.slot === 'guideFollow' ? <GuideFollowMarker fontSize={markerFontSize} /> : null}
+    </div>
+  )
+}
+
 function FixedTemplateArticle({
   bodyMarkdown = '',
+  fontSize = 'medium',
   fixedLayoutConfig = null,
   imageSlots = [],
   origin = '',
   penName = '',
 }) {
-  const markdownComponents = createMarkdownComponents()
+  const markdownComponents = createMarkdownComponents(fontSize)
+  const fontPreset = resolvePreviewFontPreset(fontSize)
   const { introMarkdown, sections, endingMarkdown } = buildPreviewContentParts(bodyMarkdown)
+  const { footerSlot, qrSlot, topPrimarySlot, topSecondarySlot } = buildOrderedFixedImageAnchors(fixedLayoutConfig)
   const previewSlots = Array.from({ length: ARTICLE_PREVIEW_SECTION_COUNT }, (_, index) => {
     const matchedSlot =
       (Array.isArray(imageSlots) ? imageSlots : []).find((slot) => Number(slot?.sectionOrder || slot?.order) === index + 1) ?? null
@@ -682,6 +1024,7 @@ function FixedTemplateArticle({
     )
   })
   const endingGuideText = fixedLayoutConfig?.endingText?.content?.trim() || DEFAULT_ENDING_GUIDE_TEXT
+  const qrGap = Math.max(8, Math.round(resolveTemplateImageSpacing(qrSlot?.spacingPreset) / 3))
 
   return (
     <div
@@ -702,30 +1045,19 @@ function FixedTemplateArticle({
           width: '100%',
         }}
       >
-        <FixedOrPlaceholderImage
-          alt={FIXED_LAYOUT_SLOT_META.heroGif.label}
-          asset={fixedLayoutConfig?.heroGif}
-          label={FIXED_LAYOUT_SLOT_META.heroGif.label}
+        <FixedTemplateImageBlock
+          fallbackLabel={FIXED_LAYOUT_SLOT_META.heroGif.label}
           origin={origin}
-          placeholderStyle={{ backgroundColor: '#eef2ff' }}
-          style={{
-            borderRadius: '8px',
-            margin: '0 0 24px',
-            objectFit: 'cover',
-          }}
+          placeholderColor={topPrimarySlot?.accent || '#eef2ff'}
+          slotConfig={topPrimarySlot}
         />
 
-        <FixedOrPlaceholderImage
-          alt={FIXED_LAYOUT_SLOT_META.guideFollow.label}
-          asset={fixedLayoutConfig?.guideFollow}
-          label={FIXED_LAYOUT_SLOT_META.guideFollow.label}
+        <FixedTemplateImageBlock
+          fallbackLabel={FIXED_LAYOUT_SLOT_META.guideFollow.label}
           origin={origin}
-          placeholderStyle={{ backgroundColor: '#eef6ff' }}
-          style={{
-            borderRadius: '8px',
-            margin: '0 0 28px',
-            objectFit: 'cover',
-          }}
+          placeholderColor={topSecondarySlot?.accent || '#eef6ff'}
+          slotConfig={topSecondarySlot}
+          markerFontSize={`${fontPreset.endingSymbolSize}px`}
         />
 
         {renderMarkdown(introMarkdown, markdownComponents)}
@@ -740,7 +1072,7 @@ function FixedTemplateArticle({
               origin={origin}
               style={{
                 borderRadius: '8px',
-                margin: '24px 0 0',
+                margin: '24px 0 32px',
                 objectFit: 'cover',
               }}
             />
@@ -752,9 +1084,9 @@ function FixedTemplateArticle({
         <div
           style={{
             color: '#111111',
-            fontSize: '17px',
+            fontSize: `${fontPreset.endingSymbolSize}px`,
             fontWeight: 700,
-            lineHeight: 1.9,
+            lineHeight: fontPreset.bodyLineHeight,
             marginTop: '28px',
             textAlign: 'center',
           }}
@@ -765,9 +1097,9 @@ function FixedTemplateArticle({
         <p
           style={{
             color: '#000000',
-            fontSize: '17px',
+            fontSize: `${fontPreset.endingGuideSize}px`,
             fontWeight: 700,
-            lineHeight: 1.9,
+            lineHeight: fontPreset.bodyLineHeight,
             margin: '16px 0 0',
           }}
         >
@@ -777,13 +1109,13 @@ function FixedTemplateArticle({
         <div
           style={{
             color: '#8a8a8a',
-            fontSize: '13px',
+            fontSize: `${fontPreset.metaSize}px`,
             lineHeight: 1.8,
             marginTop: '20px',
+            whiteSpace: 'pre-wrap',
           }}
         >
-          <div>作者：{penName?.trim() || '未署名'}</div>
-          <div>来源：{PREVIEW_SOURCE_ACCOUNT_NAME}</div>
+          {`作者：${penName?.trim() || '未署名'}    来源：${PREVIEW_SOURCE_ACCOUNT_NAME}`}
         </div>
 
         <div
@@ -799,51 +1131,42 @@ function FixedTemplateArticle({
           {PREVIEW_SOURCE_ACCOUNT_NAME}
         </div>
 
-        <div
-          style={{
-            borderTop: '1px solid rgba(0,0,0,0.12)',
-            margin: '12px auto 0',
-            width: '120px',
-          }}
-        />
-
-        <div style={{ marginTop: '24px', textAlign: 'center' }}>
-          <FixedOrPlaceholderImage
-            alt={FIXED_LAYOUT_SLOT_META.qrImage.label}
-            asset={fixedLayoutConfig?.qrImage}
-            label={FIXED_LAYOUT_SLOT_META.qrImage.label}
+        <div style={{ marginTop: `${qrGap}px` }}>
+          <FixedTemplateImageBlock
+            applyDefaultSpacing={false}
+            fallbackLabel={FIXED_LAYOUT_SLOT_META.qrImage.label}
             origin={origin}
-            style={{
-              borderRadius: '8px',
-              margin: '0 auto',
-              maxWidth: '160px',
-              width: '160px',
-            }}
+            placeholderColor={qrSlot?.accent || '#ede9fe'}
+            slotConfig={qrSlot}
+            markerFontSize={`${fontPreset.endingSymbolSize}px`}
           />
         </div>
 
-        <div
-          style={{
-            color: '#666666',
-            fontSize: '13px',
-            lineHeight: 1.8,
-            marginTop: '12px',
-            textAlign: 'center',
-          }}
-        >
-          ▲ 长按识别二维码 关注我们
+        <div style={{ marginTop: '12px', textAlign: 'center' }}>
+          <div
+            style={{
+              backgroundColor: '#556b4f',
+              borderRadius: '10px',
+              color: '#ffffff',
+              display: 'inline-block',
+              fontSize: '13px',
+              lineHeight: 1.4,
+              padding: '6px 12px',
+            }}
+          >
+            ▲ 长按识别二维码 关注我们
+          </div>
         </div>
 
-        <FixedOrPlaceholderImage
-          alt={FIXED_LAYOUT_SLOT_META.footerGif.label}
-          asset={fixedLayoutConfig?.footerGif}
-          label={FIXED_LAYOUT_SLOT_META.footerGif.label}
+        <FixedTemplateImageBlock
+          applyDefaultSpacing={false}
+          fallbackLabel={FIXED_LAYOUT_SLOT_META.footerGif.label}
           origin={origin}
-          placeholderStyle={{ backgroundColor: '#f5f5f5' }}
-          style={{
-            borderRadius: '8px',
-            margin: '24px 0 0',
-            objectFit: 'cover',
+          placeholderColor={footerSlot?.accent || '#f5f5f5'}
+          slotConfig={footerSlot}
+          markerFontSize={`${fontPreset.endingSymbolSize}px`}
+          wrapperStyle={{
+            marginTop: `${resolveTemplateImageSpacing(footerSlot?.spacingPreset)}px`,
           }}
         />
       </article>
@@ -853,6 +1176,7 @@ function FixedTemplateArticle({
 
 export function renderArticlePreviewDocument({
   bodyMarkdown = '',
+  fontSize = 'medium',
   fixedLayoutConfig = null,
   imageSlots = [],
   origin = '',
@@ -861,6 +1185,7 @@ export function renderArticlePreviewDocument({
   const bodyHtml = renderToStaticMarkup(
     <FixedTemplateArticle
       bodyMarkdown={bodyMarkdown}
+      fontSize={fontSize}
       fixedLayoutConfig={fixedLayoutConfig}
       imageSlots={imageSlots}
       origin={origin}
@@ -881,6 +1206,7 @@ export function renderArticlePreviewDocument({
 
 export function renderWechatDraftHtml({
   bodyMarkdown = '',
+  fontSize = 'medium',
   fixedLayoutConfig = null,
   imageSlots = [],
   origin = '',
@@ -888,6 +1214,7 @@ export function renderWechatDraftHtml({
 } = {}) {
   const result = renderArticlePreviewDocument({
     bodyMarkdown,
+    fontSize,
     fixedLayoutConfig,
     imageSlots,
     origin,
