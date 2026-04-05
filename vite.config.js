@@ -35,6 +35,7 @@ import {
 import { chatWithMiniMax } from './server/minimax.js'
 import { resolveDoubaoAsrConfig, resolveMiniMaxConfig } from './server/runtimeConfig.js'
 import { generateTopicRecommendations } from './server/topicRecommendations.js'
+import { prepareWechatClipboardHtml } from './server/wechatClipboard.js'
 import { readWechatDraftStatus, syncSessionToWechatDraft } from './server/wechatDraft.js'
 
 function parseRangeHeader(rangeHeader, size) {
@@ -556,6 +557,37 @@ function wechatDraftDevApi() {
             JSON.stringify({
               details: error.payload ?? null,
               error: error.message || '微信草稿同步失败',
+            }),
+          )
+        }
+      })
+
+      server.middlewares.use('/api/wechat/clipboard', async (req, res, next) => {
+        const requestUrl = new URL(req.url, 'http://127.0.0.1')
+        const pathname = requestUrl.pathname || '/'
+
+        try {
+          if (req.method === 'POST' && pathname === '/prepare') {
+            const body = await readJsonBody(req)
+            const result = await prepareWechatClipboardHtml({
+              bodyHtml: body?.bodyHtml ?? '',
+              plainText: body?.plainText ?? '',
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          next()
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              details: error.payload ?? null,
+              error: error.message || '准备复制微信样式失败',
             }),
           )
         }

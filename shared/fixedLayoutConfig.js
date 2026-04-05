@@ -13,10 +13,7 @@ export const FIXED_LAYOUT_SPACING_PRESETS = [
   { id: 'medium', label: '中' },
   { id: 'large', label: '大' },
 ]
-export const FIXED_LAYOUT_QR_WIDTH_PRESETS = [
-  { id: '50', label: '50%' },
-  { id: '60', label: '60%' },
-]
+export const FIXED_LAYOUT_QR_WIDTH_PX = 200
 
 export const FIXED_LAYOUT_SLOT_META = {
   heroGif: {
@@ -38,7 +35,7 @@ export const FIXED_LAYOUT_SLOT_META = {
   },
   qrImage: {
     accent: '#ede9fe',
-    description: '固定图片区块，可调整顺序，并单独切换二维码宽度。',
+    description: '固定图片区块，可调整顺序，二维码宽度固定为 200px。',
     label: '二维码图片',
     type: 'image',
   },
@@ -62,9 +59,9 @@ export function normalizeFixedLayoutSpacingPreset(value) {
   return FIXED_LAYOUT_SPACING_PRESETS.some((preset) => preset.id === value) ? value : 'medium'
 }
 
-export function normalizeFixedLayoutQrWidthPreset(value) {
-  const normalized = String(value ?? '').trim()
-  return FIXED_LAYOUT_QR_WIDTH_PRESETS.some((preset) => preset.id === normalized) ? normalized : '50'
+export function normalizeFixedLayoutQrWidthPx(value) {
+  const parsed = Number.parseInt(value, 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : FIXED_LAYOUT_QR_WIDTH_PX
 }
 
 export function normalizeFixedLayoutDisplayOrder(slot, value) {
@@ -78,7 +75,7 @@ export function createEmptyFixedLayoutImageSlotConfig(slot) {
     asset: null,
     displayOrder: FIXED_LAYOUT_IMAGE_SLOT_DEFAULT_ORDER[slot] ?? 1,
     spacingPreset: 'medium',
-    widthPreset: slot === 'qrImage' ? '50' : null,
+    widthPx: slot === 'qrImage' ? FIXED_LAYOUT_QR_WIDTH_PX : null,
   }
 }
 
@@ -133,7 +130,7 @@ export function normalizeFixedLayoutImageOrdering(config) {
       ...(nextConfig?.[slot] ?? {}),
       displayOrder: index + 1,
       spacingPreset: normalizeFixedLayoutSpacingPreset(nextConfig?.[slot]?.spacingPreset),
-      widthPreset: slot === 'qrImage' ? normalizeFixedLayoutQrWidthPreset(nextConfig?.[slot]?.widthPreset) : null,
+      widthPx: slot === 'qrImage' ? normalizeFixedLayoutQrWidthPx(nextConfig?.[slot]?.widthPx) : null,
     }
   })
 

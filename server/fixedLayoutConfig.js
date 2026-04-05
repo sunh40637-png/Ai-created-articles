@@ -9,7 +9,7 @@ import {
   isValidFixedLayoutImageSlot,
   normalizeFixedLayoutDisplayOrder,
   normalizeFixedLayoutImageOrdering,
-  normalizeFixedLayoutQrWidthPreset,
+  normalizeFixedLayoutQrWidthPx,
   normalizeFixedLayoutSpacingPreset,
   normalizeFixedLayoutTextContent,
 } from '../shared/fixedLayoutConfig.js'
@@ -72,7 +72,7 @@ function normalizeImageSlotConfig(slot, value) {
     asset: normalizeAssetRecord(value?.asset),
     displayOrder: normalizeFixedLayoutDisplayOrder(slot, value?.displayOrder),
     spacingPreset: normalizeFixedLayoutSpacingPreset(value?.spacingPreset),
-    widthPreset: slot === 'qrImage' ? normalizeFixedLayoutQrWidthPreset(value?.widthPreset) : null,
+    widthPx: slot === 'qrImage' ? normalizeFixedLayoutQrWidthPx(value?.widthPx) : null,
   }
 }
 
@@ -190,9 +190,9 @@ export async function updateFixedLayoutConfig({ endingText, imageSlots } = {}) {
             : currentSlotConfig?.asset ?? null,
         displayOrder: normalizeFixedLayoutDisplayOrder(slot, slotPatch?.displayOrder ?? currentSlotConfig?.displayOrder),
         spacingPreset: normalizeFixedLayoutSpacingPreset(slotPatch?.spacingPreset ?? currentSlotConfig?.spacingPreset),
-        widthPreset:
+        widthPx:
           slot === 'qrImage'
-            ? normalizeFixedLayoutQrWidthPreset(slotPatch?.widthPreset ?? currentSlotConfig?.widthPreset)
+            ? normalizeFixedLayoutQrWidthPx(slotPatch?.widthPx ?? currentSlotConfig?.widthPx)
             : null,
       }
     })

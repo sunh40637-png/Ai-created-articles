@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import { renderToStaticMarkup } from 'react-dom/server'
 import remarkGfm from 'remark-gfm'
 import {
+  FIXED_LAYOUT_QR_WIDTH_PX,
   FIXED_LAYOUT_SLOT_META,
   FIXED_LAYOUT_SPACING_PRESETS,
   getFixedLayoutImageDisplaySlots,
@@ -12,6 +13,8 @@ export const MISSING_PREVIEW_ASSET_SRC_PREFIX = 'asset-missing://'
 
 const PREVIEW_SOURCE_ACCOUNT_NAME = '煮酒问人生'
 const FIXED_TEMPLATE_MAX_WIDTH = 677
+const FIXED_TEMPLATE_HORIZONTAL_PADDING = 16
+const FIXED_TEMPLATE_INNER_MAX_WIDTH = FIXED_TEMPLATE_MAX_WIDTH - FIXED_TEMPLATE_HORIZONTAL_PADDING * 2
 const DEFAULT_ENDING_GUIDE_TEXT = '点亮文末“爱心”，愿你往后有光，心里有暖，脚下有路。转发分享，弘扬中华传统文化！'
 const PLACEHOLDER_MARKERS = ['[IMAGE_1]', '[IMAGE_2]', '[IMAGE_3]', '[ENDING]']
 const PREVIEW_FONT_PRESETS = {
@@ -80,12 +83,20 @@ function resolveTemplateImageSpacing(preset = 'medium') {
   return TEMPLATE_IMAGE_SPACING_MAP[preset] ?? TEMPLATE_IMAGE_SPACING_MAP.medium
 }
 
-function resolveQrWidthPercent(slotConfig = null) {
-  return slotConfig?.widthPreset === '60' ? 60 : 50
-}
+function resolveFixedImageWidthStyle(slotConfig = null) {
+  if (slotConfig?.slot !== 'qrImage') {
+    return {
+      maxWidth: '100%',
+      width: '100%',
+    }
+  }
 
-function resolveFixedImageWidthPercent(slotConfig = null) {
-  return slotConfig?.slot === 'qrImage' ? resolveQrWidthPercent(slotConfig) : 100
+  const canonicalWidth = Number.isInteger(Number(slotConfig?.widthPx)) && Number(slotConfig?.widthPx) > 0 ? Number(slotConfig.widthPx) : FIXED_LAYOUT_QR_WIDTH_PX
+
+  return {
+    maxWidth: `${canonicalWidth}px`,
+    width: `${canonicalWidth}px`,
+  }
 }
 
 function buildPlaceholderImageDataUri(label = '图片占位', { background = '#f3f4f6', foreground = '#9ca3af' } = {}) {
@@ -121,8 +132,30 @@ export function stripPreviewHeading(markdown = '') {
   return normalizeMarkdown(markdown)
 }
 
+function stripFixedTemplateArtifacts(markdown = '') {
+  let normalized = normalizeMarkdown(markdown)
+
+  if (!normalized) {
+    return ''
+  }
+
+  normalized = normalized
+    .replace(/\n*\s*▽\s*(?=\n|$)/g, '\n\n')
+    .replace(/\n*\s*点亮文末["“]爱心["”][\s\S]*?弘扬中华传统文化！?/g, '')
+    .replace(/(?:^|\n)\s*作者：.*?来源：.*?(?=\n|$)/g, '\n')
+    .replace(/\n*\s*[▲△]?\s*长按识别二维码\s*关注我们\s*(?=\n|$)/g, '\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  return normalized
+}
+
 function stripTemplateMarkers(markdown = '') {
-  return normalizeMarkdown(markdown).replace(/\[IMAGE_[123]\]|\[ENDING\]/g, '').trim()
+  return stripFixedTemplateArtifacts(normalizeMarkdown(markdown)).replace(/\[IMAGE_[123]\]|\[ENDING\]/g, '').trim()
+}
+
+export function getReadableDraftBodyMarkdown(markdown = '') {
+  return stripTemplateMarkers(stripPreviewHeading(markdown))
 }
 
 function markerCount(markdown = '', marker = '') {
@@ -158,6 +191,183 @@ function parsePlaceholderDraft(markdown = '') {
     endingMarkdown: normalized.slice(ending.index + ending.marker.length).trim(),
     hasExplicitPlaceholders: true,
     normalizedMarkdown: normalized,
+  }
+}
+
+function readPreviewSectionHeading(markdown = '') {
+  const normalized = stripTemplateMarkers(markdown)
+  const match = normalized.match(/^##\s+(.+?)(?:\n|$)/)
+
+  if (!match) {
+    return null
+  }
+
+  return {
+    bodyMarkdown: normalized.slice(match[0].length).trim(),
+    title: match[1].trim(),
+  }
+}
+
+function isPreviewOutroHeadingTitle(title = '') {
+  return /(写在最后|写到最后|最后|结尾|结语|尾声|收尾)/.test(String(title).trim())
+}
+
+function splitPreviewMarkdownBlocks(markdown = '') {
+  return stripTemplateMarkers(markdown)
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+}
+
+function isPreviewDividerBlock(block = '') {
+  return /^([-*_]){3,}$/.test(String(block).replace(/\s/g, ''))
+}
+
+function buildStructuredSection(order, title = '', bodyMarkdown = '') {
+  const markdown = [`## ${title}`, bodyMarkdown].filter(Boolean).join('\n\n').trim()
+  const { blocks } = collectPreviewMarkdownBlocks(markdown)
+
+  return {
+    blockIndex: Math.max(blocks.length - 1, 0),
+    bodyMarkdown,
+    markdown,
+    order,
+    positionLabel: `第 ${order} 段后`,
+    text: stripMarkdownToPlainText(markdown),
+    title,
+  }
+}
+
+function splitRawPreviewBlocks(markdown = '') {
+  return normalizeMarkdown(markdown)
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+}
+
+function isPreviewTemplateMarkerBlock(block = '') {
+  return PLACEHOLDER_MARKERS.includes(String(block).trim())
+}
+
+function buildPreviewBlockMeta(markdown = '') {
+  return splitRawPreviewBlocks(markdown).map((rawBlock, index) => {
+    const cleanBlock = stripTemplateMarkers(rawBlock)
+
+    return {
+      clean: cleanBlock,
+      index,
+      isDivider: isPreviewDividerBlock(rawBlock),
+      isEndingMarker: rawBlock.trim() === '[ENDING]',
+      isHeading: /^##\s+/.test(cleanBlock),
+      isTemplateMarker: isPreviewTemplateMarkerBlock(rawBlock),
+      raw: rawBlock,
+    }
+  })
+}
+
+function collectRenderablePreviewBlockContents(blockMeta = [], startIndex = 0, endIndex = blockMeta.length) {
+  return blockMeta
+    .slice(startIndex, endIndex)
+    .filter((block) => !block.isDivider && !block.isTemplateMarker && block.clean)
+    .map((block) => block.clean)
+}
+
+export function analyzeStructuredPreviewDraft(markdown = '', options = {}) {
+  const requireTitle = options.requireTitle ?? false
+  const normalizedDraft = normalizeMarkdown(markdown)
+  const titleMatch = normalizedDraft.match(/^#\s+(.+?)(?:\n|$)/)
+  const articleTitle = titleMatch?.[1]?.trim() || ''
+  const bodyMarkdown = titleMatch ? normalizedDraft.slice(titleMatch[0].length).trim() : normalizedDraft
+  const issues = []
+
+  if (requireTitle && !articleTitle) {
+    issues.push('缺少一级标题')
+  }
+
+  const blockMeta = buildPreviewBlockMeta(bodyMarkdown)
+  const headingIndices = blockMeta.filter((block) => block.isHeading).map((block) => block.index)
+  const endingMarkerIndex = blockMeta.findIndex((block) => block.isEndingMarker)
+  let outroHeadingIndex = -1
+  let sectionHeadingIndices = []
+
+  if (endingMarkerIndex >= 0) {
+    const headingsAfterEnding = headingIndices.filter((index) => index > endingMarkerIndex)
+
+    if (headingsAfterEnding.length !== 1) {
+      issues.push('结尾结构无法稳定识别')
+    }
+
+    outroHeadingIndex = headingsAfterEnding[0] ?? -1
+    sectionHeadingIndices = headingIndices.filter((index) => index < endingMarkerIndex)
+  } else if (headingIndices.length >= 2) {
+    const trailingHeading = readPreviewSectionHeading(blockMeta[headingIndices[headingIndices.length - 1]]?.clean || '')
+
+    if (isPreviewOutroHeadingTitle(trailingHeading?.title || '')) {
+      outroHeadingIndex = headingIndices[headingIndices.length - 1]
+      sectionHeadingIndices = headingIndices.slice(0, -1)
+    } else {
+      issues.push('结尾结构无法稳定识别')
+      sectionHeadingIndices = headingIndices
+    }
+  } else {
+    if (headingIndices.length === 0) {
+      issues.push('主体标题无法稳定识别')
+    }
+
+    issues.push('结尾结构无法稳定识别')
+  }
+
+  if (sectionHeadingIndices.length === 0) {
+    issues.push('主体标题无法稳定识别')
+  }
+
+  const introBoundaryIndex = sectionHeadingIndices[0] ?? outroHeadingIndex
+  const introMarkdown =
+    introBoundaryIndex > 0 ? collectRenderablePreviewBlockContents(blockMeta, 0, introBoundaryIndex).join('\n\n').trim() : ''
+
+  const sections = sectionHeadingIndices.map((headingIndex, index) => {
+    const nextHeadingIndex = sectionHeadingIndices[index + 1] ?? outroHeadingIndex
+    const heading = readPreviewSectionHeading(blockMeta[headingIndex]?.clean || '')
+
+    if (!heading?.title) {
+      issues.push(`正文${index + 1}标题无法稳定识别`)
+      return null
+    }
+
+    const bodyBlocks = collectRenderablePreviewBlockContents(
+      blockMeta,
+      headingIndex + 1,
+      nextHeadingIndex > -1 ? nextHeadingIndex : blockMeta.length,
+    )
+
+    return buildStructuredSection(index + 1, heading.title, bodyBlocks.join('\n\n').trim())
+  })
+
+  const outroHeading = outroHeadingIndex > -1 ? readPreviewSectionHeading(blockMeta[outroHeadingIndex]?.clean || '') : null
+
+  if (!outroHeading?.title) {
+    issues.push('结尾标题无法稳定识别')
+  }
+
+  const outroBlocks =
+    outroHeadingIndex > -1 ? collectRenderablePreviewBlockContents(blockMeta, outroHeadingIndex + 1, blockMeta.length) : []
+  const blessingMarkdown = outroBlocks.length > 1 ? outroBlocks[outroBlocks.length - 1] : ''
+  const outroBodyMarkdown = (outroBlocks.length > 1 ? outroBlocks.slice(0, -1) : outroBlocks).join('\n\n').trim()
+  const endingMarkdown = outroHeading?.title ? [`## ${outroHeading.title}`, outroBodyMarkdown].filter(Boolean).join('\n\n').trim() : ''
+
+  if (!outroBodyMarkdown) {
+    issues.push('结尾正文无法稳定识别')
+  }
+
+  return {
+    articleTitle,
+    blessingMarkdown,
+    bodyMarkdown,
+    canPreview: issues.length === 0 && sections.filter(Boolean).length > 0 && Boolean(endingMarkdown),
+    endingMarkdown,
+    introMarkdown,
+    issues: Array.from(new Set(issues)),
+    sections: sections.filter(Boolean),
   }
 }
 
@@ -344,6 +554,22 @@ function buildPlaceholderSections(markdown = '', options = {}) {
 }
 
 export function buildPreviewSections(markdown = '', options = {}) {
+  const structuredDraft = analyzeStructuredPreviewDraft(markdown)
+
+  if (structuredDraft.canPreview) {
+    const sectionLimit = Math.max(1, Number(options.maxSections ?? ARTICLE_PREVIEW_SECTION_COUNT))
+    const sections = structuredDraft.sections.slice(0, sectionLimit)
+
+    if (options.fillTrailingSections ?? true) {
+      while (sections.length < sectionLimit) {
+        const fallbackText = sections[sections.length - 1]?.markdown ?? ''
+        sections.push(buildEmptyPreviewSection(sections.length + 1, fallbackText))
+      }
+    }
+
+    return sections
+  }
+
   const placeholderSections = buildPlaceholderSections(markdown, options)
 
   if (placeholderSections) {
@@ -550,7 +776,7 @@ function createMarkdownComponents(fontSize = 'medium') {
           fontSize: `${preset.h2Size}px`,
           fontWeight: 700,
           lineHeight: 1.7,
-          margin: '32px 0 16px',
+          margin: '72px 0 18px',
         }}
         {...props}
       />
@@ -562,7 +788,7 @@ function createMarkdownComponents(fontSize = 'medium') {
           fontSize: `${preset.h2Size}px`,
           fontWeight: 700,
           lineHeight: 1.7,
-          margin: '32px 0 16px',
+          margin: '72px 0 18px',
         }}
         {...props}
       />
@@ -574,7 +800,7 @@ function createMarkdownComponents(fontSize = 'medium') {
           fontSize: `${preset.h3Size}px`,
           fontWeight: 700,
           lineHeight: 1.8,
-          margin: '28px 0 12px',
+          margin: '64px 0 14px',
         }}
         {...props}
       />
@@ -688,6 +914,203 @@ function createMarkdownComponents(fontSize = 'medium') {
   }
 }
 
+function createWechatClipboardMarkdownComponents(fontSize = 'medium') {
+  const preset = resolvePreviewFontPreset(fontSize)
+
+  return {
+    h1: ({ node, ...props }) => (
+      <h2
+        style={{
+          color: '#111111',
+          fontSize: `${preset.h2Size}px`,
+          fontWeight: 700,
+          letterSpacing: '0.2px',
+          lineHeight: 1.7,
+          margin: '72px 0 18px 0',
+          textAlign: 'left',
+          wordBreak: 'break-word',
+        }}
+        {...props}
+      />
+    ),
+    h2: ({ node, ...props }) => (
+      <h2
+        style={{
+          color: '#111111',
+          fontSize: `${preset.h2Size}px`,
+          fontWeight: 700,
+          letterSpacing: '0.2px',
+          lineHeight: 1.7,
+          margin: '72px 0 18px 0',
+          textAlign: 'left',
+          wordBreak: 'break-word',
+        }}
+        {...props}
+      />
+    ),
+    h3: ({ node, ...props }) => (
+      <h3
+        style={{
+          color: '#111111',
+          fontSize: `${preset.h3Size}px`,
+          fontWeight: 700,
+          letterSpacing: '0.2px',
+          lineHeight: 1.8,
+          margin: '64px 0 14px 0',
+          textAlign: 'left',
+          wordBreak: 'break-word',
+        }}
+        {...props}
+      />
+    ),
+    p: ({ node, ...props }) => (
+      <p
+        style={{
+          color: '#000000',
+          fontSize: `${preset.bodySize}px`,
+          letterSpacing: '0.2px',
+          lineHeight: preset.bodyLineHeight,
+          margin: '0 0 28px 0',
+          textAlign: 'left',
+          wordBreak: 'break-word',
+        }}
+        {...props}
+      />
+    ),
+    ul: ({ node, ...props }) => (
+      <ul
+        style={{
+          color: '#000000',
+          fontSize: `${preset.bodySize}px`,
+          letterSpacing: '0.2px',
+          lineHeight: preset.bodyLineHeight,
+          listStyleType: 'disc',
+          margin: '0 0 28px 0',
+          paddingLeft: '24px',
+          textAlign: 'left',
+          wordBreak: 'break-word',
+        }}
+        {...props}
+      />
+    ),
+    ol: ({ node, ...props }) => (
+      <ol
+        style={{
+          color: '#000000',
+          fontSize: `${preset.bodySize}px`,
+          letterSpacing: '0.2px',
+          lineHeight: preset.bodyLineHeight,
+          listStyleType: 'decimal',
+          margin: '0 0 28px 0',
+          paddingLeft: '24px',
+          textAlign: 'left',
+          wordBreak: 'break-word',
+        }}
+        {...props}
+      />
+    ),
+    li: ({ node, ...props }) => (
+      <li
+        style={{
+          marginBottom: '10px',
+          paddingLeft: '4px',
+          textAlign: 'left',
+          wordBreak: 'break-word',
+        }}
+        {...props}
+      />
+    ),
+    strong: ({ node, ...props }) => <strong style={{ color: '#000000', fontWeight: 700 }} {...props} />,
+    blockquote: ({ node, ...props }) => (
+      <blockquote
+        style={{
+          borderLeft: '2px solid rgba(0,0,0,0.15)',
+          color: 'rgba(0,0,0,0.72)',
+          fontSize: `${preset.blockquoteSize}px`,
+          lineHeight: preset.bodyLineHeight,
+          margin: '0 0 28px 0',
+          paddingLeft: '16px',
+          textAlign: 'left',
+          wordBreak: 'break-word',
+        }}
+        {...props}
+      />
+    ),
+    img: ({ node, alt = '', src = '', ...props }) => (
+      <img
+        alt={alt}
+        src={src}
+        style={{
+          borderRadius: '8px',
+          display: 'block',
+          height: 'auto',
+          margin: '24px 0 28px 0',
+          maxWidth: '100%',
+          width: '100%',
+        }}
+        {...props}
+      />
+    ),
+    hr: () => null,
+    table: ({ node, ...props }) => (
+      <div
+        style={{
+          border: '1px solid rgba(0,0,0,0.08)',
+          borderRadius: '8px',
+          margin: '0 0 28px 0',
+          overflowX: 'auto',
+          width: '100%',
+        }}
+      >
+        <table style={{ borderCollapse: 'collapse', width: '100%' }} {...props} />
+      </div>
+    ),
+    thead: ({ node, ...props }) => <thead style={{ backgroundColor: '#f5f5f5' }} {...props} />,
+    tr: ({ node, ...props }) => <tr style={{ borderTop: '1px solid rgba(0,0,0,0.08)' }} {...props} />,
+    th: ({ node, ...props }) => (
+      <th
+        style={{
+          fontSize: `${preset.tableHeadSize}px`,
+          fontWeight: 600,
+          lineHeight: 1.7,
+          padding: '12px 14px',
+          textAlign: 'left',
+          verticalAlign: 'top',
+          wordBreak: 'break-word',
+        }}
+        {...props}
+      />
+    ),
+    td: ({ node, ...props }) => (
+      <td
+        style={{
+          color: '#000000',
+          fontSize: `${preset.tableCellSize}px`,
+          lineHeight: Math.max(1.85, preset.bodyLineHeight - 0.1),
+          padding: '12px 14px',
+          textAlign: 'left',
+          verticalAlign: 'top',
+          wordBreak: 'break-word',
+        }}
+        {...props}
+      />
+    ),
+    code: ({ inline, node, ...props }) => (
+      <code
+        style={{
+          backgroundColor: inline ? 'rgba(15,23,42,0.06)' : '#0f172a',
+          borderRadius: inline ? '4px' : '10px',
+          color: inline ? '#111111' : '#f8fafc',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+          fontSize: inline ? '0.92em' : `${Math.max(12, preset.bodySize - 1)}px`,
+          padding: inline ? '2px 5px' : '0',
+        }}
+        {...props}
+      />
+    ),
+  }
+}
+
 function renderMarkdown(markdown = '', components) {
   const normalized = stripTemplateMarkers(markdown)
 
@@ -703,6 +1126,17 @@ function renderMarkdown(markdown = '', components) {
 }
 
 function buildPreviewContentParts(bodyMarkdown = '') {
+  const structuredDraft = analyzeStructuredPreviewDraft(bodyMarkdown)
+
+  if (structuredDraft.canPreview) {
+    return {
+      blessingMarkdown: structuredDraft.blessingMarkdown,
+      endingMarkdown: structuredDraft.endingMarkdown,
+      introMarkdown: structuredDraft.introMarkdown,
+      sections: structuredDraft.sections,
+    }
+  }
+
   const placeholderSections = buildPlaceholderSections(bodyMarkdown, {
     fillTrailingSections: true,
     maxSections: ARTICLE_PREVIEW_SECTION_COUNT,
@@ -710,6 +1144,7 @@ function buildPreviewContentParts(bodyMarkdown = '') {
 
   if (placeholderSections) {
     return {
+      blessingMarkdown: '',
       endingMarkdown: placeholderSections.endingMarkdown,
       introMarkdown: placeholderSections.introMarkdown,
       sections: placeholderSections.sections,
@@ -717,6 +1152,7 @@ function buildPreviewContentParts(bodyMarkdown = '') {
   }
 
   return {
+    blessingMarkdown: '',
     endingMarkdown: '',
     introMarkdown: extractPreviewLeadingMarkdown(bodyMarkdown),
     sections: buildPreviewSections(bodyMarkdown, {
@@ -727,17 +1163,17 @@ function buildPreviewContentParts(bodyMarkdown = '') {
 }
 
 function buildPreviewPlainText({ bodyMarkdown = '', fixedLayoutConfig = null, penName = '' }) {
-  const { introMarkdown, sections, endingMarkdown } = buildPreviewContentParts(bodyMarkdown)
+  const { introMarkdown, sections, endingMarkdown, blessingMarkdown } = buildPreviewContentParts(bodyMarkdown)
   const guideText = fixedLayoutConfig?.endingText?.content?.trim() || DEFAULT_ENDING_GUIDE_TEXT
   const parts = [
     stripMarkdownToPlainText(introMarkdown),
     ...sections.map((section) => stripMarkdownToPlainText(section.markdown)),
     stripMarkdownToPlainText(endingMarkdown),
+    stripMarkdownToPlainText(blessingMarkdown),
     '▽',
     guideText,
     `作者：${penName?.trim() || '未署名'}`,
     `来源：${PREVIEW_SOURCE_ACCOUNT_NAME}`,
-    PREVIEW_SOURCE_ACCOUNT_NAME,
     '▲ 长按识别二维码 关注我们',
   ]
 
@@ -817,7 +1253,7 @@ function TemplatePreviewImageBlock({ slotConfig = null, origin = '', selected = 
   const accent = slotConfig?.accent || '#e5e7eb'
   const spacing = resolveTemplateImageSpacing(slotConfig?.spacingPreset)
   const isQrSlot = slotConfig?.slot === 'qrImage'
-  const widthPercent = isQrSlot ? resolveQrWidthPercent(slotConfig) : 100
+  const widthStyle = resolveFixedImageWidthStyle(slotConfig)
 
   return (
     <div
@@ -829,7 +1265,7 @@ function TemplatePreviewImageBlock({ slotConfig = null, origin = '', selected = 
       <div
         style={{
           display: 'inline-block',
-          width: `${widthPercent}%`,
+          ...widthStyle,
         }}
       >
         <FixedOrPlaceholderImage
@@ -959,6 +1395,7 @@ function FixedTemplateImageBlock({
 
   const spacing = resolveTemplateImageSpacing(slotConfig?.spacingPreset)
   const isQrSlot = slotConfig?.slot === 'qrImage'
+  const widthStyle = resolveFixedImageWidthStyle(slotConfig)
   const baseWrapperStyle = applyDefaultSpacing
     ? {
         margin: isQrSlot ? `0 auto ${spacing}px` : `0 0 ${spacing}px`,
@@ -975,27 +1412,122 @@ function FixedTemplateImageBlock({
         ...wrapperStyle,
       }}
     >
-      <div
+      <FixedOrPlaceholderImage
+        alt={slotConfig?.label || fallbackLabel}
+        asset={slotConfig?.asset}
+        label={slotConfig?.label || fallbackLabel}
+        origin={origin}
+        placeholderStyle={{ backgroundColor: placeholderColor }}
         style={{
-          display: 'inline-block',
-          width: `${resolveFixedImageWidthPercent(slotConfig)}%`,
+          display: 'block',
+          margin: isQrSlot ? '0 auto' : undefined,
+          objectFit: 'cover',
+          ...widthStyle,
+          width: isQrSlot ? widthStyle.width : '100%',
         }}
-      >
+      />
+
+      {slotConfig?.slot === 'guideFollow' ? <GuideFollowMarker fontSize={markerFontSize} /> : null}
+    </div>
+  )
+}
+
+function WechatClipboardImageBlock({
+  applyDefaultSpacing = true,
+  fallbackLabel = '模板图片',
+  markerFontSize = '18px',
+  origin = '',
+  placeholderColor = '#f3f4f6',
+  slotConfig = null,
+  wrapperStyle = {},
+}) {
+  if (!slotConfig) {
+    return null
+  }
+
+  const spacing = resolveTemplateImageSpacing(slotConfig?.spacingPreset)
+  const isQrSlot = slotConfig?.slot === 'qrImage'
+  const widthStyle = resolveFixedImageWidthStyle(slotConfig)
+  const baseMargin = applyDefaultSpacing ? `0 0 ${spacing}px 0` : '0'
+  const imageStyle = isQrSlot
+    ? {
+        display: 'block',
+        height: 'auto',
+        margin: '0 auto',
+        objectFit: 'cover',
+        verticalAlign: 'top',
+        ...widthStyle,
+      }
+    : {
+        display: 'block',
+        height: 'auto',
+        maxWidth: '100%',
+        objectFit: 'cover',
+        verticalAlign: 'top',
+        width: '100%',
+      }
+
+  return (
+    <section
+      style={{
+        fontSize: isQrSlot ? 0 : undefined,
+        lineHeight: isQrSlot ? 0 : undefined,
+        margin: baseMargin,
+        textAlign: isQrSlot ? 'center' : 'left',
+        width: '100%',
+        ...wrapperStyle,
+      }}
+    >
+      {isQrSlot ? (
+        <span
+          style={{
+            display: 'inline-block',
+            verticalAlign: 'top',
+            ...widthStyle,
+          }}
+        >
+          <FixedOrPlaceholderImage
+            alt={slotConfig?.label || fallbackLabel}
+            asset={slotConfig?.asset}
+            label={slotConfig?.label || fallbackLabel}
+            origin={origin}
+            placeholderStyle={{ backgroundColor: placeholderColor }}
+            style={imageStyle}
+          />
+        </span>
+      ) : (
         <FixedOrPlaceholderImage
           alt={slotConfig?.label || fallbackLabel}
           asset={slotConfig?.asset}
           label={slotConfig?.label || fallbackLabel}
           origin={origin}
           placeholderStyle={{ backgroundColor: placeholderColor }}
-          style={{
-            objectFit: 'cover',
-            width: '100%',
-          }}
+          style={imageStyle}
         />
-      </div>
+      )}
 
-      {slotConfig?.slot === 'guideFollow' ? <GuideFollowMarker fontSize={markerFontSize} /> : null}
-    </div>
+      {slotConfig?.slot === 'guideFollow' ? (
+        <p
+          style={{
+            textAlign: 'center',
+            margin: '12px 0 0 0',
+          }}
+        >
+          <span
+            style={{
+              color: '#111111',
+              display: 'inline-block',
+              fontSize: markerFontSize,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              verticalAlign: 'top',
+            }}
+          >
+            ▽
+          </span>
+        </p>
+      ) : null}
+    </section>
   )
 }
 
@@ -1006,10 +1538,11 @@ function FixedTemplateArticle({
   imageSlots = [],
   origin = '',
   penName = '',
+  structuredContent = null,
 }) {
   const markdownComponents = createMarkdownComponents(fontSize)
   const fontPreset = resolvePreviewFontPreset(fontSize)
-  const { introMarkdown, sections, endingMarkdown } = buildPreviewContentParts(bodyMarkdown)
+  const { introMarkdown, sections, endingMarkdown, blessingMarkdown } = structuredContent ?? buildPreviewContentParts(bodyMarkdown)
   const { footerSlot, qrSlot, topPrimarySlot, topSecondarySlot } = buildOrderedFixedImageAnchors(fixedLayoutConfig)
   const previewSlots = Array.from({ length: ARTICLE_PREVIEW_SECTION_COUNT }, (_, index) => {
     const matchedSlot =
@@ -1065,21 +1598,24 @@ function FixedTemplateArticle({
         {sections.map((section, index) => (
           <section key={`section-${section.order}`}>
             {renderMarkdown(section.markdown, markdownComponents)}
-            <FixedOrPlaceholderImage
-              alt={`正文配图 ${index + 1}`}
-              asset={previewSlots[index]?.asset}
-              label={previewSlots[index]?.placeholderLabel || `正文配图 ${index + 1}`}
-              origin={origin}
-              style={{
-                borderRadius: '8px',
-                margin: '24px 0 32px',
-                objectFit: 'cover',
-              }}
-            />
+            {index < ARTICLE_PREVIEW_SECTION_COUNT ? (
+              <FixedOrPlaceholderImage
+                alt={`正文配图 ${index + 1}`}
+                asset={previewSlots[index]?.asset}
+                label={previewSlots[index]?.placeholderLabel || `正文配图 ${index + 1}`}
+                origin={origin}
+                style={{
+                  borderRadius: '8px',
+                  margin: '24px 0 72px',
+                  objectFit: 'cover',
+                }}
+              />
+            ) : null}
           </section>
         ))}
 
         {renderMarkdown(endingMarkdown, markdownComponents)}
+        {renderMarkdown(blessingMarkdown, markdownComponents)}
 
         <div
           style={{
@@ -1099,7 +1635,7 @@ function FixedTemplateArticle({
             color: '#000000',
             fontSize: `${fontPreset.endingGuideSize}px`,
             fontWeight: 700,
-            lineHeight: fontPreset.bodyLineHeight,
+            lineHeight: 1.7,
             margin: '16px 0 0',
           }}
         >
@@ -1111,27 +1647,20 @@ function FixedTemplateArticle({
             color: '#8a8a8a',
             fontSize: `${fontPreset.metaSize}px`,
             lineHeight: 1.8,
-            marginTop: '20px',
+            marginTop: '12px',
             whiteSpace: 'pre-wrap',
           }}
         >
           {`作者：${penName?.trim() || '未署名'}    来源：${PREVIEW_SOURCE_ACCOUNT_NAME}`}
         </div>
 
-        <div
+        <section
           style={{
-            color: '#556b4f',
-            fontSize: '18px',
-            fontWeight: 700,
-            lineHeight: 1.4,
-            marginTop: '18px',
+            marginTop: `${qrGap}px`,
             textAlign: 'center',
+            width: '100%',
           }}
         >
-          {PREVIEW_SOURCE_ACCOUNT_NAME}
-        </div>
-
-        <div style={{ marginTop: `${qrGap}px` }}>
           <FixedTemplateImageBlock
             applyDefaultSpacing={false}
             fallbackLabel={FIXED_LAYOUT_SLOT_META.qrImage.label}
@@ -1140,23 +1669,23 @@ function FixedTemplateArticle({
             slotConfig={qrSlot}
             markerFontSize={`${fontPreset.endingSymbolSize}px`}
           />
-        </div>
 
-        <div style={{ marginTop: '12px', textAlign: 'center' }}>
-          <div
-            style={{
-              backgroundColor: '#556b4f',
-              borderRadius: '10px',
-              color: '#ffffff',
-              display: 'inline-block',
-              fontSize: '13px',
-              lineHeight: 1.4,
-              padding: '6px 12px',
-            }}
-          >
-            ▲ 长按识别二维码 关注我们
+          <div style={{ marginTop: '4px', textAlign: 'center' }}>
+            <div
+              style={{
+                backgroundColor: '#556b4f',
+                borderRadius: '10px',
+                color: '#ffffff',
+                display: 'inline-block',
+                fontSize: '13px',
+                lineHeight: 1.4,
+                padding: '6px 12px',
+              }}
+            >
+              ▲ 长按识别二维码 关注我们
+            </div>
           </div>
-        </div>
+        </section>
 
         <FixedTemplateImageBlock
           applyDefaultSpacing={false}
@@ -1174,6 +1703,202 @@ function FixedTemplateArticle({
   )
 }
 
+function WechatClipboardArticle({
+  bodyMarkdown = '',
+  fontSize = 'medium',
+  fixedLayoutConfig = null,
+  imageSlots = [],
+  origin = '',
+  penName = '',
+  structuredContent = null,
+}) {
+  const markdownComponents = createWechatClipboardMarkdownComponents(fontSize)
+  const fontPreset = resolvePreviewFontPreset(fontSize)
+  const { introMarkdown, sections, endingMarkdown, blessingMarkdown } = structuredContent ?? buildPreviewContentParts(bodyMarkdown)
+  const { footerSlot, qrSlot, topPrimarySlot, topSecondarySlot } = buildOrderedFixedImageAnchors(fixedLayoutConfig)
+  const previewSlots = Array.from({ length: ARTICLE_PREVIEW_SECTION_COUNT }, (_, index) => {
+    const matchedSlot =
+      (Array.isArray(imageSlots) ? imageSlots : []).find((slot) => Number(slot?.sectionOrder || slot?.order) === index + 1) ?? null
+
+    return (
+      matchedSlot ?? {
+        order: index + 1,
+        sectionOrder: index + 1,
+        status: 'placeholder',
+      }
+    )
+  })
+  const endingGuideText = fixedLayoutConfig?.endingText?.content?.trim() || DEFAULT_ENDING_GUIDE_TEXT
+  const qrGap = Math.max(8, Math.round(resolveTemplateImageSpacing(qrSlot?.spacingPreset) / 3))
+  const qrImageSrc = resolveRenderableAssetPath(qrSlot?.asset, origin) || buildPlaceholderImageDataUri(FIXED_LAYOUT_SLOT_META.qrImage.label)
+
+  return (
+    <article
+      style={{
+        boxSizing: 'border-box',
+        color: '#000000',
+        fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+        margin: '0',
+        padding: '0',
+        width: '100%',
+      }}
+    >
+      <WechatClipboardImageBlock
+        fallbackLabel={FIXED_LAYOUT_SLOT_META.heroGif.label}
+        origin={origin}
+        placeholderColor={topPrimarySlot?.accent || '#eef2ff'}
+        slotConfig={topPrimarySlot}
+      />
+
+      <WechatClipboardImageBlock
+        fallbackLabel={FIXED_LAYOUT_SLOT_META.guideFollow.label}
+        origin={origin}
+        placeholderColor={topSecondarySlot?.accent || '#eef6ff'}
+        slotConfig={topSecondarySlot}
+        markerFontSize={`${fontPreset.endingSymbolSize}px`}
+      />
+
+      {renderMarkdown(introMarkdown, markdownComponents)}
+
+      {sections.map((section, index) => (
+        <section key={`wechat-section-${section.order}`} style={{ margin: '0', padding: '0' }}>
+          {renderMarkdown(section.markdown, markdownComponents)}
+          {index < ARTICLE_PREVIEW_SECTION_COUNT ? (
+            <img
+              alt={`正文配图 ${index + 1}`}
+              src={resolveRenderableAssetPath(previewSlots[index]?.asset, origin) || buildPlaceholderImageDataUri(`正文配图 ${index + 1}`)}
+              style={{
+                borderRadius: '8px',
+                display: 'block',
+                height: 'auto',
+                margin: '24px 0 72px 0',
+                maxWidth: '100%',
+                objectFit: 'cover',
+                width: '100%',
+              }}
+            />
+          ) : null}
+        </section>
+      ))}
+
+      {renderMarkdown(endingMarkdown, markdownComponents)}
+      {renderMarkdown(blessingMarkdown, markdownComponents)}
+
+      <p
+        style={{
+          textAlign: 'center',
+          margin: '28px 0 0 0',
+        }}
+      >
+        <span
+          style={{
+            color: '#111111',
+            display: 'inline-block',
+            fontSize: `${fontPreset.endingSymbolSize}px`,
+            fontWeight: 700,
+            lineHeight: 1.4,
+            verticalAlign: 'top',
+          }}
+        >
+          ▽
+        </span>
+      </p>
+
+      <p
+        style={{
+          color: '#000000',
+          fontSize: `${fontPreset.endingGuideSize}px`,
+          fontWeight: 700,
+          lineHeight: 1.7,
+          margin: '16px 0 0 0',
+          textAlign: 'left',
+          wordBreak: 'break-word',
+        }}
+      >
+        {endingGuideText}
+      </p>
+
+      <p
+        style={{
+          color: '#8a8a8a',
+          fontSize: `${fontPreset.metaSize}px`,
+          lineHeight: 1.8,
+          margin: '12px 0 0 0',
+          textAlign: 'left',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}
+      >
+        {`作者：${penName?.trim() || '未署名'}    来源：${PREVIEW_SOURCE_ACCOUNT_NAME}`}
+      </p>
+
+      <section
+        style={{
+          marginTop: `${qrGap}px`,
+          width: '100%',
+        }}
+      >
+        <p style={{ lineHeight: 0, margin: '0' }}>
+          <img
+            alt={FIXED_LAYOUT_SLOT_META.qrImage.label}
+            src={qrImageSrc}
+            style={{
+              display: 'block',
+              height: 'auto',
+              margin: '0 auto',
+              maxWidth: `${FIXED_LAYOUT_QR_WIDTH_PX}px`,
+              objectFit: 'cover',
+              verticalAlign: 'top',
+              width: `${FIXED_LAYOUT_QR_WIDTH_PX}px`,
+            }}
+          />
+        </p>
+
+        <p style={{ margin: '4px 0 0 0', textAlign: 'center', width: '100%' }}>
+          <span
+            style={{
+              backgroundColor: '#556b4f',
+              borderRadius: '10px',
+              color: '#ffffff',
+              display: 'inline-block',
+              fontSize: '13px',
+              lineHeight: 1.4,
+              padding: '6px 12px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ▲ 长按识别二维码 关注我们
+          </span>
+        </p>
+      </section>
+
+      <WechatClipboardImageBlock
+        applyDefaultSpacing={false}
+        fallbackLabel={FIXED_LAYOUT_SLOT_META.footerGif.label}
+        origin={origin}
+        placeholderColor={footerSlot?.accent || '#f5f5f5'}
+        slotConfig={footerSlot}
+        wrapperStyle={{
+          marginTop: `${resolveTemplateImageSpacing(footerSlot?.spacingPreset)}px`,
+        }}
+      />
+    </article>
+  )
+}
+
+function resolveStructuredRenderContent(structuredContent = null) {
+  if (!structuredContent?.canPreview) {
+    return null
+  }
+
+  return {
+    blessingMarkdown: structuredContent.blessingMarkdown,
+    endingMarkdown: structuredContent.endingMarkdown,
+    introMarkdown: structuredContent.introMarkdown,
+    sections: structuredContent.sections,
+  }
+}
+
 export function renderArticlePreviewDocument({
   bodyMarkdown = '',
   fontSize = 'medium',
@@ -1181,7 +1906,17 @@ export function renderArticlePreviewDocument({
   imageSlots = [],
   origin = '',
   penName = '',
+  structuredContent = null,
 } = {}) {
+  if (structuredContent && !structuredContent.canPreview) {
+    return {
+      bodyHtml: '',
+      documentHtml: '',
+      plainText: '',
+      valid: false,
+    }
+  }
+
   const bodyHtml = renderToStaticMarkup(
     <FixedTemplateArticle
       bodyMarkdown={bodyMarkdown}
@@ -1190,6 +1925,7 @@ export function renderArticlePreviewDocument({
       imageSlots={imageSlots}
       origin={origin}
       penName={penName}
+      structuredContent={resolveStructuredRenderContent(structuredContent)}
     />,
   )
 
@@ -1201,6 +1937,47 @@ export function renderArticlePreviewDocument({
       fixedLayoutConfig,
       penName,
     }),
+    valid: true,
+  }
+}
+
+export function renderWechatClipboardHtml({
+  bodyMarkdown = '',
+  fontSize = 'medium',
+  fixedLayoutConfig = null,
+  imageSlots = [],
+  origin = '',
+  penName = '',
+  structuredContent = null,
+} = {}) {
+  if (structuredContent && !structuredContent.canPreview) {
+    return {
+      bodyHtml: '',
+      plainText: '',
+      valid: false,
+    }
+  }
+
+  const bodyHtml = renderToStaticMarkup(
+    <WechatClipboardArticle
+      bodyMarkdown={bodyMarkdown}
+      fixedLayoutConfig={fixedLayoutConfig}
+      fontSize={fontSize}
+      imageSlots={imageSlots}
+      origin={origin}
+      penName={penName}
+      structuredContent={resolveStructuredRenderContent(structuredContent)}
+    />,
+  )
+
+  return {
+    bodyHtml,
+    plainText: buildPreviewPlainText({
+      bodyMarkdown,
+      fixedLayoutConfig,
+      penName,
+    }),
+    valid: true,
   }
 }
 
@@ -1211,6 +1988,7 @@ export function renderWechatDraftHtml({
   imageSlots = [],
   origin = '',
   penName = '',
+  structuredContent = null,
 } = {}) {
   const result = renderArticlePreviewDocument({
     bodyMarkdown,
@@ -1219,11 +1997,13 @@ export function renderWechatDraftHtml({
     imageSlots,
     origin,
     penName,
+    structuredContent,
   })
 
   return {
     bodyHtml: result.bodyHtml,
     plainText: result.plainText,
+    valid: result.valid,
   }
 }
 

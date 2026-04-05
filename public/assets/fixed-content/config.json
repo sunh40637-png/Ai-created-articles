@@ -1,18 +1,18 @@
 {
   "endingText": {
     "content": "",
-    "updatedAt": "2026-04-05T08:44:47.918Z"
+    "updatedAt": "2026-04-05T15:54:03.232Z"
   },
   "footerGif": {
     "asset": {
       "filename": "黑红色微信公众号几何立体方块点击关注动态在看提示简约新媒体分享中文动态在看提示 (1).gif",
       "mimeType": "image/gif",
-      "path": "/assets/fixed-content/footerGif-1775061513811.gif",
-      "uploadedAt": "2026-04-01T16:38:33.811Z"
+      "path": "/assets/fixed-content/footerGif-1775402608639.gif",
+      "uploadedAt": "2026-04-05T15:23:28.637Z"
     },
     "displayOrder": 4,
-    "spacingPreset": "none",
-    "widthPreset": null
+    "spacingPreset": "medium",
+    "widthPx": null
   },
   "guideFollow": {
     "asset": {
@@ -23,18 +23,18 @@
     },
     "displayOrder": 2,
     "spacingPreset": "none",
-    "widthPreset": null
+    "widthPx": null
   },
   "heroGif": {
     "asset": {
-      "filename": "蓝白色微信公众号大学生校园清新简单纸飞机动态引导关注简洁新媒体分享中文动态引导关注.gif",
+      "filename": "红蓝色简约点击上方蓝字关注我们动态微信公众号引导关注 (1).gif",
       "mimeType": "image/gif",
-      "path": "/assets/fixed-content/heroGif-1775377074006.gif",
-      "uploadedAt": "2026-04-05T08:17:54.006Z"
+      "path": "/assets/fixed-content/heroGif-1775404427279.gif",
+      "uploadedAt": "2026-04-05T15:53:47.278Z"
     },
     "displayOrder": 1,
-    "spacingPreset": "none",
-    "widthPreset": null
+    "spacingPreset": "small",
+    "widthPx": null
   },
   "qrImage": {
     "asset": {
@@ -44,7 +44,7 @@
       "uploadedAt": "2026-04-01T16:38:04.257Z"
     },
     "displayOrder": 3,
-    "spacingPreset": "medium",
-    "widthPreset": "50"
+    "spacingPreset": "none",
+    "widthPx": 200
   }
 }

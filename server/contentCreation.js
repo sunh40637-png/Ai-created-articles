@@ -1,5 +1,6 @@
 import { chatWithMiniMax } from './minimax.js'
 import {
+  CONTENT_TARGET_WORD_COUNT_RANGE,
   DEFAULT_CONTENT_RULE_PROFILE_ID,
   resolveContentRuleProfile,
 } from './contentRuleProfiles.js'
@@ -34,12 +35,15 @@ const TITLE_GENERATION_REQUIREMENTS = [
 ].join('\n')
 
 const DRAFT_TEMPLATE_CONTRACT_GUIDE = [
-  '固定模板正文占位符要求：',
-  '- 正文必须完整包含且只包含一次以下 4 个占位符：[IMAGE_1]、[IMAGE_2]、[IMAGE_3]、[ENDING]。',
-  '- 三个主体部分后分别插入 [IMAGE_1]、[IMAGE_2]、[IMAGE_3]，顺序不能打乱。',
-  '- [ENDING] 必须出现在第三部分正文和 [IMAGE_3] 之后，表示进入结尾收束内容。',
-  '- [ENDING] 之后只允许保留结尾收束内容，不要再写新的主体观点，不要再插入新的图片占位符。',
-  '- 不要在正文里主动输出 ▽、二维码引导、关注提示、底部在看动图提示，这些由固定模板统一渲染。',
+  '固定 Markdown 骨架要求：',
+  '- 正文第一行必须是且只允许是 1 个一级标题：# 文章标题。',
+  '- 一级标题后先写开头正文，用于引出全文，不要在开头正文里插图片占位符。',
+  '- 主体固定写 3 段，结构必须严格为：## 正文1标题 + 正文1正文 + [IMAGE_1]；## 正文2标题 + 正文2正文 + [IMAGE_2]；## 正文3标题 + 正文3正文 + [IMAGE_3]。',
+  '- [IMAGE_1]、[IMAGE_2]、[IMAGE_3]、[ENDING] 必须各出现且只出现一次，顺序固定不能打乱。',
+  '- [ENDING] 必须出现在第三部分正文和 [IMAGE_3] 之后，表示进入结尾区域。',
+  '- [ENDING] 后必须继续输出 1 个二级标题作为结尾标题，再写结尾正文，最后单独写 1 段祝福语。',
+  '- [ENDING] 之后禁止再展开新的主体观点，禁止再插入新的图片占位符。',
+  '- 不要在正文里主动输出 ▽、作者/来源、二维码提示、关注引导或底部动图提示，这些都由固定模板统一渲染。',
 ].join('\n')
 
 function buildContentSystemPrompt(ruleProfile) {
@@ -128,7 +132,7 @@ function buildContentUserPrompt({
     '',
     '输出要求：',
     '- draftMarkdown：直接可读的公众号正文 Markdown，允许使用一级标题、引用、段落、小标题、列表。',
-    '- draftMarkdown 必须严格遵守固定模板占位符结构。',
+    '- draftMarkdown 必须严格遵守固定 Markdown 骨架与占位符结构。',
     ruleProfile.reportInstruction,
     ruleProfile.reportFormattingInstruction,
     '- generatedTitle：基于最终正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
@@ -161,7 +165,7 @@ function buildDraftGenerationUserPrompt({ deepThinkingEnabled, ruleProfile, supp
     '',
     '输出要求：',
     '- draftMarkdown：直接可读的公众号正文 Markdown，允许使用一级标题、引用、段落、小标题、列表。',
-    '- draftMarkdown 必须严格遵守固定模板占位符结构。',
+    '- draftMarkdown 必须严格遵守固定 Markdown 骨架与占位符结构。',
     '- summary：一句适合展示在工作流里的简短总结。',
     '- 只输出正文草稿，不要输出审核报告。',
     '',
@@ -192,7 +196,8 @@ function buildDraftAuditUserPrompt({ deepThinkingEnabled, draftMarkdown = '', ru
     ruleProfile.reportInstruction,
     ruleProfile.reportFormattingInstruction,
     '- 必须额外检查正文里 [IMAGE_1]、[IMAGE_2]、[IMAGE_3]、[ENDING] 是否齐全且顺序正确。',
-    '- 如果占位符缺失、重复、顺序错误，或 [ENDING] 后仍在展开新的主体内容，decision 只能输出 rewrite。',
+    '- 必须额外检查正文是否满足“一级标题 + 开头正文 + 3 个主体段 + [ENDING] + 结尾标题 + 结尾正文 + 祝福语”的固定 Markdown 骨架。',
+    '- 如果主体段数不等于 3，可记录为结构偏差，但不要因此丢弃正文内容；只有在标题层级、结尾结构或主体边界无法稳定识别时，才优先判为 rewrite。',
     '- generatedTitle：基于当前正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
     '- decision：只能输出 pass / partial / rewrite 其中一个。',
     '- summary：一句适合展示在工作流里的简短总结。',
@@ -239,7 +244,7 @@ function buildDraftRevisionUserPrompt({
     '',
     '输出要求：',
     '- draftMarkdown：修订后的最终正文 Markdown。',
-    '- 修订后的 draftMarkdown 必须严格遵守固定模板占位符结构。',
+    '- 修订后的 draftMarkdown 必须严格遵守固定 Markdown 骨架与占位符结构。',
     '- reportMarkdown：基于修订后正文输出的最终校验报告 Markdown。',
     '- generatedTitle：基于修订后正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
     '- summary：一句适合展示在工作流里的简短总结。',
@@ -461,8 +466,12 @@ function countReadableLength(content = '') {
     .trim().length
 }
 
+function normalizeDraftMarkdown(content = '') {
+  return typeof content === 'string' ? content.replace(/\r/g, '').trim() : ''
+}
+
 function validateDraftPlaceholderStructure(draftMarkdown = '') {
-  const normalizedDraft = typeof draftMarkdown === 'string' ? draftMarkdown : ''
+  const normalizedDraft = normalizeDraftMarkdown(draftMarkdown)
   const markerDetails = REQUIRED_DRAFT_PLACEHOLDERS.map((marker) => ({
     marker,
     count: normalizedDraft.split(marker).length - 1,
@@ -490,6 +499,174 @@ function validateDraftPlaceholderStructure(draftMarkdown = '') {
   return {
     issues,
     valid: issues.length === 0,
+  }
+}
+
+function readSectionHeadingLine(markdown = '') {
+  const normalized = normalizeDraftMarkdown(markdown)
+  const match = normalized.match(/^##\s+(.+?)(?:\n|$)/)
+
+  if (!match) {
+    return null
+  }
+
+  return {
+    bodyMarkdown: normalized.slice(match[0].length).trim(),
+    title: match[1].trim(),
+  }
+}
+
+function isOutroHeadingTitle(title = '') {
+  return /(写在最后|写到最后|最后|结尾|结语|尾声|收尾)/.test(String(title).trim())
+}
+
+function parseStructuredDraftMarkdown(draftMarkdown = '') {
+  const normalizedDraft = normalizeDraftMarkdown(draftMarkdown)
+  const issues = []
+
+  if (!normalizedDraft) {
+    return {
+      issues: ['正文为空'],
+      valid: false,
+    }
+  }
+
+  const titleMatch = normalizedDraft.match(/^#\s+(.+?)(?:\n|$)/)
+
+  if (!titleMatch?.[1]?.trim()) {
+    return {
+      issues: ['缺少一级标题，固定骨架必须以 # 文章标题 开头'],
+      valid: false,
+    }
+  }
+
+  const articleTitle = titleMatch[1].trim()
+  const bodyWithoutTitle = normalizedDraft.slice(titleMatch[0].length).trim()
+  const blocks = bodyWithoutTitle
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block, index) => ({
+      clean: block.replace(/\[IMAGE_[123]\]|\[ENDING\]/g, '').trim(),
+      index,
+      isDivider: /^([-*_]){3,}$/.test(block.replace(/\s/g, '')),
+      isEndingMarker: block === '[ENDING]',
+      isHeading: /^##\s+/.test(block.replace(/\[IMAGE_[123]\]|\[ENDING\]/g, '').trim()),
+      isMarker: REQUIRED_DRAFT_PLACEHOLDERS.includes(block),
+      raw: block,
+    }))
+  const headingIndices = blocks.filter((block) => block.isHeading).map((block) => block.index)
+  const endingMarkerIndex = blocks.findIndex((block) => block.isEndingMarker)
+  let outroHeadingIndex = -1
+  let sectionHeadingIndices = []
+
+  if (endingMarkerIndex >= 0) {
+    const headingsAfterEnding = headingIndices.filter((index) => index > endingMarkerIndex)
+
+    if (headingsAfterEnding.length !== 1) {
+      issues.push('结尾结构无法稳定识别')
+    }
+
+    outroHeadingIndex = headingsAfterEnding[0] ?? -1
+    sectionHeadingIndices = headingIndices.filter((index) => index < endingMarkerIndex)
+  } else if (headingIndices.length >= 2) {
+    const trailingHeading = readSectionHeadingLine(blocks[headingIndices[headingIndices.length - 1]]?.clean || '')
+
+    if (isOutroHeadingTitle(trailingHeading?.title || '')) {
+      outroHeadingIndex = headingIndices[headingIndices.length - 1]
+      sectionHeadingIndices = headingIndices.slice(0, -1)
+    } else {
+      issues.push('结尾结构无法稳定识别')
+      sectionHeadingIndices = headingIndices
+    }
+  } else {
+    if (headingIndices.length === 0) {
+      issues.push('主体标题无法稳定识别')
+    }
+
+    issues.push('结尾结构无法稳定识别')
+  }
+
+  if (sectionHeadingIndices.length === 0) {
+    issues.push('主体标题无法稳定识别')
+  }
+
+  const introBoundaryIndex = sectionHeadingIndices[0] ?? outroHeadingIndex
+  const introBody =
+    introBoundaryIndex > 0
+      ? blocks
+          .slice(0, introBoundaryIndex)
+          .filter((block) => !block.isDivider && !block.isMarker && block.clean)
+          .map((block) => block.clean)
+          .join('\n\n')
+          .trim()
+      : ''
+
+  const sectionResults = sectionHeadingIndices.map((headingIndex) => {
+    const nextHeadingIndex =
+      sectionHeadingIndices.find((index) => index > headingIndex) ??
+      (outroHeadingIndex > -1 ? outroHeadingIndex : blocks.length)
+    const heading = readSectionHeadingLine(blocks[headingIndex]?.clean || '')
+
+    if (!heading?.title) {
+      return null
+    }
+
+    const bodyMarkdown = blocks
+      .slice(headingIndex + 1, nextHeadingIndex)
+      .filter((block) => !block.isDivider && !block.isMarker && block.clean)
+      .map((block) => block.clean)
+      .join('\n\n')
+      .trim()
+
+    return {
+      bodyMarkdown,
+      title: heading.title,
+    }
+  })
+
+  const parsedOutro = outroHeadingIndex > -1 ? readSectionHeadingLine(blocks[outroHeadingIndex]?.clean || '') : null
+  const endingBlocks =
+    outroHeadingIndex > -1
+      ? blocks
+          .slice(outroHeadingIndex + 1)
+          .filter((block) => !block.isDivider && !block.isMarker && block.clean)
+          .map((block) => block.clean)
+      : []
+
+  if (!parsedOutro?.title) {
+    issues.push('缺少结尾标题')
+  }
+
+  if (endingBlocks.length === 0) {
+    issues.push('缺少结尾正文')
+  }
+
+  const blessing = endingBlocks.length > 1 ? endingBlocks[endingBlocks.length - 1] : ''
+  const outroBody = (endingBlocks.length > 1 ? endingBlocks.slice(0, -1) : endingBlocks).join('\n\n').trim()
+
+  return {
+    articleTitle,
+    blessing,
+    introBody,
+    issues: Array.from(new Set(issues)),
+    outro: parsedOutro
+      ? {
+          bodyMarkdown: outroBody,
+          title: parsedOutro.title,
+        }
+      : null,
+    sections: sectionResults.filter(Boolean),
+    valid: issues.length === 0 && sectionResults.filter(Boolean).length > 0 && Boolean(parsedOutro?.title) && Boolean(outroBody),
+  }
+}
+
+function validateStructuredDraftMarkdown(draftMarkdown = '') {
+  const parsed = parseStructuredDraftMarkdown(draftMarkdown)
+
+  return {
+    issues: Array.isArray(parsed?.issues) ? parsed.issues : [],
+    valid: Boolean(parsed?.valid),
   }
 }
 
@@ -525,6 +702,19 @@ function sanitizeDraftMarkdown(draftMarkdown, topic) {
     adjustments.push('已移除正文里的固定关注引导语，改由模板统一渲染。')
   }
 
+  if (/(?:^|\n)\s*作者：.*?来源：.*?(?=\n|$)/.test(nextDraft)) {
+    nextDraft = nextDraft.replace(/(?:^|\n)\s*作者：.*?来源：.*?(?=\n|$)/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+    adjustments.push('已移除正文里的作者/来源信息，改由模板统一渲染。')
+  }
+
+  if (nextDraft.includes('长按识别二维码') || nextDraft.includes('关注我们')) {
+    nextDraft = nextDraft
+      .replace(/\n*\s*[▲△]?\s*长按识别二维码\s*关注我们\s*/g, '\n\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+    adjustments.push('已移除正文里的二维码提示语，改由模板统一渲染。')
+  }
+
   return {
     adjustments,
     draftMarkdown: nextDraft,
@@ -536,14 +726,18 @@ function buildQualityCheckSection({ adjustments, draftMarkdown, ruleProfile, top
   const bannedHits = ruleProfile.forbiddenAiPhrases.filter((phrase) => draftMarkdown.includes(phrase))
   const hasDash = draftMarkdown.includes('——')
   const placeholderCheck = validateDraftPlaceholderStructure(draftMarkdown)
+  const structureCheck = validateStructuredDraftMarkdown(draftMarkdown)
+  const withinTargetWordCount =
+    readableLength >= CONTENT_TARGET_WORD_COUNT_RANGE.min && readableLength <= CONTENT_TARGET_WORD_COUNT_RANGE.max
 
   const lines = [
     '## 规则校验',
     '',
-    `- 字数估算：约 ${readableLength} 字。`,
+    `- 字数估算：约 ${readableLength} 字（目标范围：${CONTENT_TARGET_WORD_COUNT_RANGE.min}~${CONTENT_TARGET_WORD_COUNT_RANGE.max} 字，${withinTargetWordCount ? '当前在范围内' : '当前不在范围内'}）。`,
     `- 破折号检查：${hasDash ? '仍检测到破折号，建议人工复核。' : '通过。'}`,
     `- AI 腔词检查：${bannedHits.length === 0 ? '未发现明显禁用词。' : `发现 ${bannedHits.join('、')}。`}`,
     `- 固定模板占位符检查：${placeholderCheck.valid ? '通过。' : `未通过：${placeholderCheck.issues.join('；')}`}`,
+    `- 固定 Markdown 骨架检查：${structureCheck.valid ? '通过。' : `未通过：${structureCheck.issues.join('；')}`}`,
     adjustments.length > 0 ? `- 程序兜底修正：${adjustments.join(' ')}` : '- 程序兜底修正：本轮未触发。',
   ]
 
@@ -886,6 +1080,7 @@ export async function runInitialContentPipeline({
 
   const initialDraft = sanitizeDraftMarkdown(generationStage.draftMarkdown, topic)
   const initialPlaceholderCheck = validateDraftPlaceholderStructure(initialDraft.draftMarkdown)
+  const initialStructureCheck = validateStructuredDraftMarkdown(initialDraft.draftMarkdown)
   advance(2)
   advance(3)
 
@@ -903,7 +1098,7 @@ export async function runInitialContentPipeline({
 
   advance(4)
 
-  const decision = initialPlaceholderCheck.valid ? normalizeRevisionDecision(auditStage.decision, 'pass') : 'rewrite'
+  const decision = normalizeRevisionDecision(auditStage.decision, 'pass')
   let finalDraft = initialDraft
   let finalReportMarkdown = auditStage.reportMarkdown
   let finalSummary = auditStage.summary || generationStage.summary
@@ -944,6 +1139,7 @@ export async function runInitialContentPipeline({
     topic,
   })
   const finalPlaceholderCheck = validateDraftPlaceholderStructure(finalDraft.draftMarkdown)
+  const finalStructureCheck = validateStructuredDraftMarkdown(finalDraft.draftMarkdown)
   const finishedAt = Date.now()
   steps = completePipelineSteps(steps, finishedAt)
   pushProgress()
@@ -957,13 +1153,27 @@ export async function runInitialContentPipeline({
       !initialPlaceholderCheck.valid
         ? `## 固定模板结构检查\n\n- 首稿占位符结构未通过，已强制进入重写。\n- 问题：${initialPlaceholderCheck.issues.join('；')}\n\n`
         : ''
-    }${!finalPlaceholderCheck.valid ? `## 固定模板结构结果\n\n- 最终正文仍未完全符合固定模板要求。\n- 问题：${finalPlaceholderCheck.issues.join('；')}\n\n` : ''}${qualitySection}`,
+    }${
+      !initialStructureCheck.valid
+        ? `## 固定 Markdown 骨架检查\n\n- 首稿骨架未通过，已强制进入重写。\n- 问题：${initialStructureCheck.issues.join('；')}\n\n`
+        : ''
+    }${
+      !finalPlaceholderCheck.valid
+        ? `## 固定模板结构结果\n\n- 最终正文仍未完全符合固定模板要求。\n- 问题：${finalPlaceholderCheck.issues.join('；')}\n\n`
+        : ''
+    }${
+      !finalStructureCheck.valid
+        ? `## 固定 Markdown 骨架结果\n\n- 最终正文仍未完全符合固定骨架要求。\n- 问题：${finalStructureCheck.issues.join('；')}\n\n`
+        : ''
+    }${qualitySection}`,
     ruleProfileId: ruleProfile.id,
     ruleProfileLabel: ruleProfile.label,
     summary: (
-      !finalPlaceholderCheck.valid
-        ? '正文结构仍未完全符合固定模板，请继续重试。'
-        : finalSummary || generationStage.summary || '首版稿件已经准备完成。'
+      !finalStructureCheck.valid
+        ? '正文已生成，但当前结构存在兼容问题，进入排版前建议先复核。'
+        : !finalPlaceholderCheck.valid
+          ? '正文已生成，但图片占位符结构存在问题，排版前建议先复核。'
+          : finalSummary || generationStage.summary || '首版稿件已经准备完成。'
     ).trim(),
     generatedTitle: finalGeneratedTitle || buildFallbackGeneratedTitle(topic),
     usage: stageUsages,
@@ -1004,6 +1214,7 @@ export async function generateContentDraft({
       : buildFallbackReport({ action, note, ruleProfile, supplement, topic })
   const sanitized = sanitizeDraftMarkdown(draftMarkdown, topic)
   const placeholderCheck = validateDraftPlaceholderStructure(sanitized.draftMarkdown)
+  const structureCheck = validateStructuredDraftMarkdown(sanitized.draftMarkdown)
   const qualitySection = buildQualityCheckSection({
     adjustments: sanitized.adjustments,
     draftMarkdown: sanitized.draftMarkdown,
@@ -1030,10 +1241,18 @@ export async function generateContentDraft({
       placeholderCheck.valid
         ? ''
         : `## 固定模板结构检查\n\n- 当前正文未完全符合固定模板要求。\n- 问题：${placeholderCheck.issues.join('；')}\n\n`
+    }${
+      structureCheck.valid
+        ? ''
+        : `## 固定 Markdown 骨架检查\n\n- 当前正文未完全符合固定骨架要求。\n- 问题：${structureCheck.issues.join('；')}\n\n`
     }${qualitySection}`,
     ruleProfileId: ruleProfile.id,
     ruleProfileLabel: ruleProfile.label,
-    summary: placeholderCheck.valid ? summary : '正文结构未完全符合固定模板，请继续重试。',
+    summary: structureCheck.valid
+      ? placeholderCheck.valid
+        ? summary
+        : '正文已生成，但图片占位符结构存在问题，排版前建议先复核。'
+      : '正文已生成，但当前结构存在兼容问题，进入排版前建议先复核。',
     generatedTitle,
     usage: result?.usage ?? null,
   }
