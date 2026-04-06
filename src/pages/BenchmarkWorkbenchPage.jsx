@@ -72,7 +72,6 @@ import {
 } from '../../shared/libraryAssets.js'
 import {
   createEmptyFixedLayoutConfig,
-  FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH,
   FIXED_LAYOUT_FILE_ACCEPT,
   FIXED_LAYOUT_IMAGE_SLOT_IDS,
   FIXED_LAYOUT_SPACING_PRESETS,
@@ -1297,28 +1296,6 @@ async function requestFixedLayoutAssetUpload({ file, slot }) {
   }
 
   return payload?.asset ?? null
-}
-
-async function requestFixedLayoutAssetDelete(slot) {
-  const response = await fetch('/api/fixed-layout-config/asset', {
-    body: JSON.stringify({ slot }),
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    method: 'DELETE',
-  })
-  const payload = await readJsonResponse(response, '固定图片删除接口返回异常，请稍后重试。')
-
-  if (!response.ok) {
-    throw new Error(payload?.error || '删除固定图片失败')
-  }
-
-  const nextConfig = {
-    ...createEmptyFixedLayoutConfig(),
-    ...(payload ?? {}),
-  }
-  announceFixedLayoutConfigUpdated(nextConfig)
-  return nextConfig
 }
 
 async function requestPersistedContentSessions() {
@@ -4158,7 +4135,7 @@ function FixedLayoutImageLightbox({ asset, onClose }) {
         {assetSrc ? (
           <img
             alt={asset.label}
-            className="max-h-full max-w-[calc(100vw-140px)] rounded-[18px] object-contain"
+            className="max-h-full max-w-[calc(100vw-140px)] object-contain"
             src={assetSrc}
           />
         ) : (
@@ -4172,36 +4149,7 @@ function FixedLayoutImageLightbox({ asset, onClose }) {
   )
 }
 
-function FixedLayoutTextRow({ onChange, value }) {
-  const normalizedValue = typeof value === 'string' ? value : ''
-  return (
-    <div className="rounded-[22px] border border-border/70 bg-white p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-[15px] font-medium text-foreground">{FIXED_LAYOUT_SLOT_META.endingText.label}</div>
-          <div className="mt-1 text-[12px] leading-6 text-muted-foreground">{FIXED_LAYOUT_SLOT_META.endingText.description}</div>
-        </div>
-        <div className="text-[12px] text-muted-foreground">最多 {FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH} 字</div>
-      </div>
-
-      <div className="mt-4 rounded-[18px] border border-border/70 bg-secondary/10 p-3">
-        <Textarea
-          className="min-h-[116px] resize-none rounded-[14px] border border-border/70 bg-white px-4 py-3 text-[14px] leading-7 shadow-none focus-visible:ring-0"
-          maxLength={FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="这里填写正文结束后的固定引导文案。"
-          value={normalizedValue}
-        />
-      </div>
-
-      <div className="mt-3 text-[12px] text-muted-foreground">
-        {normalizedValue.length}/{FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH}
-      </div>
-    </div>
-  )
-}
-
-function FixedLayoutTemplatePreview({ config, selectedSlot }) {
+function FixedLayoutTemplatePreview({ config }) {
   const origin = typeof window === 'undefined' ? '' : window.location.origin
   const previewRenderResult = useMemo(
     () =>
@@ -4230,7 +4178,6 @@ function FixedLayoutTemplatePreview({ config, selectedSlot }) {
 
 function FixedLayoutImageSlotCard({
   onDelete,
-  onMove,
   onPreview,
   onSelect,
   onSetSpacing,
@@ -4260,54 +4207,23 @@ function FixedLayoutImageSlotCard({
   return (
     <article
       className={cn(
-        'rounded-[24px] border bg-white p-4 transition-all',
-        selected ? 'border-foreground/20 shadow-[0_16px_28px_rgba(15,23,42,0.08)]' : 'border-border/70',
+        'rounded-[22px] border border-border/70 bg-white p-4 transition-all',
+        selected ? 'bg-secondary/10 shadow-[0_16px_28px_rgba(15,23,42,0.08)]' : '',
       )}
     >
       <button className="block w-full text-left" onClick={() => onSelect(slot)} type="button">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: slotConfig.accent }} />
-            <div className="min-w-0">
-              <div className="truncate text-[15px] font-medium text-foreground">{slotConfig.label}</div>
-              <div className="mt-1 text-[12px] text-muted-foreground">第 {slotConfig.displayOrder} 位 · {slotConfig.description}</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <Button
-              className="h-8 w-8 rounded-full"
-              disabled={isSavingTemplate || isUploading || slotConfig.displayOrder === 1}
-              onClick={(event) => {
-                event.stopPropagation()
-                onMove(slot, -1)
-              }}
-              size="icon"
-              type="button"
-              variant="outline"
-            >
-              <ArrowUp size={14} />
-            </Button>
-            <Button
-              className="h-8 w-8 rounded-full"
-              disabled={isSavingTemplate || isUploading || slotConfig.displayOrder === FIXED_LAYOUT_IMAGE_SLOT_IDS.length}
-              onClick={(event) => {
-                event.stopPropagation()
-                onMove(slot, 1)
-              }}
-              size="icon"
-              type="button"
-              variant="outline"
-            >
-              <ArrowDown size={14} />
-            </Button>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: slotConfig.accent }} />
+          <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+            <div className="truncate text-[15px] font-medium text-foreground">{slotConfig.label}</div>
+            <div className="shrink-0 text-right text-[12px] text-muted-foreground">{slotConfig.description}</div>
           </div>
         </div>
       </button>
 
       <div className="mt-4 flex items-start gap-4">
         <button
-          className="group relative inline-flex h-[92px] w-[132px] shrink-0 items-center justify-center overflow-hidden rounded-[18px] border border-border/70 bg-secondary/20"
+          className="group relative inline-flex h-[92px] w-[132px] shrink-0 items-center justify-center overflow-hidden rounded-[12px] border border-border/70 bg-secondary/20"
           disabled={!hasAsset}
           onClick={() =>
             hasAsset &&
@@ -4333,16 +4249,16 @@ function FixedLayoutImageSlotCard({
           <div className="text-[12px] text-muted-foreground">{asset?.filename || '支持 gif、png、jpg、jpeg'}</div>
           {uploadedAtLabel ? <div className="mt-1 text-[12px] text-muted-foreground">更新于 {uploadedAtLabel}</div> : null}
 
-          <div className="mt-4">
-            <div className="text-[12px] font-medium text-muted-foreground">间距</div>
-            <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="shrink-0 text-[12px] font-medium text-muted-foreground">间距</div>
+            <div className="flex flex-nowrap gap-2">
               {FIXED_LAYOUT_SPACING_PRESETS.map((preset) => (
                 <button
                   className={cn(
-                    'rounded-full border px-3 py-1.5 text-[12px] transition-colors',
+                    'shrink-0 rounded-[12px] border border-border/70 px-3 py-1.5 text-[12px] transition-colors',
                     slotConfig.spacingPreset === preset.id
-                      ? 'border-foreground/20 bg-secondary text-foreground'
-                      : 'border-border/70 bg-white text-muted-foreground hover:text-foreground',
+                      ? 'bg-secondary text-foreground'
+                      : 'bg-white text-muted-foreground hover:text-foreground',
                   )}
                   key={preset.id}
                   onClick={() => onSetSpacing(slot, preset.id)}
@@ -4361,7 +4277,7 @@ function FixedLayoutImageSlotCard({
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <input accept={FIXED_LAYOUT_FILE_ACCEPT} className="hidden" onChange={handleFileChange} ref={fileInputRef} type="file" />
         <Button
-          className="rounded-full"
+          className="rounded-[12px]"
           disabled={isSavingTemplate || isUploading}
           onClick={() => fileInputRef.current?.click()}
           size="sm"
@@ -4373,7 +4289,7 @@ function FixedLayoutImageSlotCard({
         </Button>
         {hasAsset ? (
           <Button
-            className="rounded-full"
+            className="rounded-[12px]"
             disabled={isSavingTemplate || isUploading}
             onClick={() => onDelete(slot, slotConfig.label)}
             size="sm"
@@ -4437,16 +4353,6 @@ function FixedLayoutConfigCanvas() {
   }
 
   useEffect(() => () => revokeAllDraftPreviewUrls(), [])
-
-  function handleDraftEndingTextChange(content) {
-    setDraftConfig((current) => ({
-      ...current,
-      endingText: {
-        ...(current?.endingText ?? {}),
-        content,
-      },
-    }))
-  }
 
   async function handleSaveTemplate() {
     const imageSlotsPayload = Object.fromEntries(
@@ -4541,40 +4447,6 @@ function FixedLayoutConfigCanvas() {
     }))
   }
 
-  function handleMove(slot, direction) {
-    const currentIndex = imageSlots.findIndex((item) => item.slot === slot)
-    const targetIndex = currentIndex + direction
-
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= imageSlots.length) {
-      return
-    }
-
-    const reordered = imageSlots.slice()
-    const [movedSlot] = reordered.splice(currentIndex, 1)
-    reordered.splice(targetIndex, 0, movedSlot)
-    const imageSlotPatch = Object.fromEntries(
-      reordered.map((item, index) => [
-        item.slot,
-        {
-          displayOrder: index + 1,
-          spacingPreset: item.spacingPreset,
-          widthPx: item.widthPx,
-        },
-      ]),
-    )
-
-    setDraftConfig((current) => {
-      const nextDraftConfig = cloneFixedLayoutConfig(current)
-      Object.entries(imageSlotPatch).forEach(([slotId, patch]) => {
-        nextDraftConfig[slotId] = {
-          ...nextDraftConfig[slotId],
-          ...patch,
-        }
-      })
-      return nextDraftConfig
-    })
-  }
-
   function handleSetSpacing(slot, spacingPreset) {
     setDraftConfig((current) => ({
       ...current,
@@ -4590,9 +4462,6 @@ function FixedLayoutConfigCanvas() {
       <div className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-5 lg:px-6">
         <div className="mb-6">
           <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-foreground sm:text-[32px]">模板配置</h1>
-          <p className="mt-2 text-[14px] leading-7 text-muted-foreground">
-            左侧看移动端模板预览，右侧管理固定图片的顺序、上传和轻量间距预设。
-          </p>
         </div>
 
         {errorMessage ? (
@@ -4612,14 +4481,10 @@ function FixedLayoutConfigCanvas() {
           <div className="grid gap-6 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)]">
             <section className="space-y-4">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[15px] font-medium text-foreground">移动端模板预览</div>
-                  <div className="mt-1 text-[12px] leading-6 text-muted-foreground">左侧始终显示当前草稿效果，宽度固定为 375。</div>
-                </div>
-                <div className="text-[12px] text-muted-foreground">375 预览宽度</div>
+                <div className="text-[15px] font-medium text-foreground">移动端模板预览 · 375 宽度</div>
               </div>
 
-              <FixedLayoutTemplatePreview config={draftConfig} selectedSlot={selectedSlot} />
+              <FixedLayoutTemplatePreview config={draftConfig} />
             </section>
 
             <section className="space-y-5">
@@ -4627,7 +4492,6 @@ function FixedLayoutConfigCanvas() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-[15px] font-medium text-foreground">图片顺序与图片设置</div>
-                    <div className="mt-1 text-[12px] leading-6 text-muted-foreground">左侧实时看草稿效果，点击保存模板后才会同步到正式排版预览、复制微信样式和微信草稿。</div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span
@@ -4660,10 +4524,6 @@ function FixedLayoutConfigCanvas() {
                     </Button>
                   </div>
                 </div>
-
-                <div className="mt-4 rounded-[18px] border border-dashed border-border/70 bg-secondary/10 px-4 py-3 text-[12px] leading-6 text-muted-foreground">
-                  替换图片会先进入当前草稿预览；顺序、间距、删除和文案内容都需要点击“保存模板”后才会全局生效。二维码宽度当前固定为 200px。
-                </div>
               </div>
 
               <div className="space-y-4">
@@ -4672,7 +4532,6 @@ function FixedLayoutConfigCanvas() {
                     isSavingTemplate={isSavingTemplate}
                     key={slotConfig.slot}
                     onDelete={handleDelete}
-                    onMove={handleMove}
                     onPreview={setPreviewAsset}
                     onSelect={setSelectedSlot}
                     onSetSpacing={handleSetSpacing}
@@ -4687,8 +4546,6 @@ function FixedLayoutConfigCanvas() {
               <div className="rounded-[22px] border border-dashed border-border/70 bg-secondary/10 p-4 text-[12px] leading-6 text-muted-foreground">
                 非二维码图片固定按 100% 宽显示。上传格式支持 jpg、png、gif；webp 不再作为模板图片格式。
               </div>
-
-              <FixedLayoutTextRow onChange={handleDraftEndingTextChange} value={draftConfig?.endingText?.content ?? ''} />
             </section>
           </div>
         )}

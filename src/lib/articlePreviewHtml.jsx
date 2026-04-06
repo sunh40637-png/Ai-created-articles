@@ -24,7 +24,7 @@ const PREVIEW_FONT_PRESETS = {
     blockquoteSize: 14,
     endingGuideSize: 15,
     endingSymbolSize: 16,
-    h2Size: 17,
+    h2Size: 18,
     h3Size: 16,
     metaSize: 12,
     tableCellSize: 14,
@@ -36,7 +36,7 @@ const PREVIEW_FONT_PRESETS = {
     blockquoteSize: 15,
     endingGuideSize: 16,
     endingSymbolSize: 17,
-    h2Size: 18,
+    h2Size: 20,
     h3Size: 17,
     metaSize: 13,
     tableCellSize: 15,
@@ -48,7 +48,7 @@ const PREVIEW_FONT_PRESETS = {
     blockquoteSize: 16,
     endingGuideSize: 17,
     endingSymbolSize: 18,
-    h2Size: 19,
+    h2Size: 22,
     h3Size: 18,
     metaSize: 14,
     tableCellSize: 16,
@@ -61,23 +61,6 @@ const TEMPLATE_IMAGE_SPACING_MAP = {
   none: 0,
   small: 16,
 }
-const TEMPLATE_STRUCTURE_BLOCKS = [
-  { id: 'title', label: '文章标题', tint: '#eef2ff', type: 'title' },
-  { id: 'intro', label: '开头正文', tint: '#eff6ff', type: 'body' },
-  { id: 'section-1-title', label: '正文1标题', tint: '#ecfeff', type: 'heading' },
-  { id: 'section-1-body', label: '正文1正文', tint: '#f0fdf4', type: 'body' },
-  { id: 'section-1-image', label: '正文插图1', tint: '#dbeafe', type: 'image' },
-  { id: 'section-2-title', label: '正文2标题', tint: '#fef3c7', type: 'heading' },
-  { id: 'section-2-body', label: '正文2正文', tint: '#fff7ed', type: 'body' },
-  { id: 'section-2-image', label: '正文插图2', tint: '#fde68a', type: 'image' },
-  { id: 'section-3-title', label: '正文3标题', tint: '#fae8ff', type: 'heading' },
-  { id: 'section-3-body', label: '正文3正文', tint: '#fdf2f8', type: 'body' },
-  { id: 'section-3-image', label: '正文插图3', tint: '#fbcfe8', type: 'image' },
-  { id: 'outro-title', label: '结尾标题', tint: '#ede9fe', type: 'heading' },
-  { id: 'outro-body', label: '结尾正文', tint: '#f5f3ff', type: 'body' },
-  { id: 'blessing', label: '祝福语', tint: '#fef2f2', type: 'body' },
-  { id: 'cta', label: '互动引导语', tint: '#f3f4f6', type: 'cta' },
-]
 
 function resolveTemplateImageSpacing(preset = 'medium') {
   return TEMPLATE_IMAGE_SPACING_MAP[preset] ?? TEMPLATE_IMAGE_SPACING_MAP.medium
@@ -1191,103 +1174,6 @@ function buildOrderedFixedImageAnchors(fixedLayoutConfig = null) {
   }
 }
 
-function TemplatePreviewTextBlock({ label = '', tint = '#f3f4f6', type = 'body' }) {
-  const isTitle = type === 'title'
-  const isHeading = type === 'heading'
-  const isCta = type === 'cta'
-  const isImage = type === 'image'
-  const lines = isTitle ? [80, 62] : isHeading ? [46] : isCta ? [54, 40] : [100, 94, 88, 68]
-
-  return (
-    <div
-      style={{
-        backgroundColor: tint,
-        borderRadius: isCta ? '14px' : isImage ? '14px' : '16px',
-        padding: isImage ? '12px 14px 14px' : isTitle ? '18px 16px' : isHeading ? '14px 14px' : isCta ? '14px 16px' : '18px 16px',
-      }}
-    >
-      {label ? (
-        <div
-          style={{
-            color: 'rgba(15,23,42,0.56)',
-            fontSize: '11px',
-            fontWeight: 600,
-            letterSpacing: '0.02em',
-            marginBottom: isImage ? '10px' : '8px',
-          }}
-        >
-          {label}
-        </div>
-      ) : null}
-
-      {isImage ? (
-        <div
-          style={{
-            backgroundColor: 'rgba(15,23,42,0.12)',
-            borderRadius: '12px',
-            height: '96px',
-            width: '100%',
-          }}
-        />
-      ) : (
-        <div style={{ display: 'grid', gap: isTitle ? '10px' : '8px' }}>
-          {lines.map((width, index) => (
-            <div
-              key={`${type}-${index}`}
-              style={{
-                backgroundColor: 'rgba(15,23,42,0.12)',
-                borderRadius: '999px',
-                height: isTitle ? '12px' : isHeading ? '10px' : isCta ? '9px' : '8px',
-                width: `${width}%`,
-              }}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function TemplatePreviewImageBlock({ slotConfig = null, origin = '', selected = false }) {
-  const asset = slotConfig?.asset ?? null
-  const accent = slotConfig?.accent || '#e5e7eb'
-  const spacing = resolveTemplateImageSpacing(slotConfig?.spacingPreset)
-  const isQrSlot = slotConfig?.slot === 'qrImage'
-  const widthStyle = resolveFixedImageWidthStyle(slotConfig)
-
-  return (
-    <div
-      style={{
-        marginTop: `${spacing}px`,
-        textAlign: isQrSlot ? 'center' : 'left',
-      }}
-    >
-      <div
-        style={{
-          display: 'inline-block',
-          ...widthStyle,
-        }}
-      >
-        <FixedOrPlaceholderImage
-          alt={slotConfig?.label || '模板图片'}
-          asset={asset}
-          label=""
-          origin={origin}
-          placeholderStyle={{ backgroundColor: accent }}
-          style={{
-            boxSizing: 'border-box',
-            display: 'block',
-            height: 'auto',
-            minHeight: asset?.path ? undefined : isQrSlot ? '180px' : '192px',
-            objectFit: 'cover',
-            width: '100%',
-          }}
-        />
-      </div>
-    </div>
-  )
-}
-
 function GuideFollowMarker({
   color = '#111111',
   fontSize = '18px',
@@ -1306,76 +1192,6 @@ function GuideFollowMarker({
       }}
     >
       ▽
-    </div>
-  )
-}
-
-function TemplatePreviewFixedImageSlot({ origin = '', selected = false, slotConfig = null }) {
-  if (!slotConfig) {
-    return null
-  }
-
-  return (
-    <>
-      <TemplatePreviewImageBlock origin={origin} selected={selected} slotConfig={slotConfig} />
-      {slotConfig?.slot === 'guideFollow' ? <GuideFollowMarker /> : null}
-    </>
-  )
-}
-
-export function TemplateStructurePreviewArticle({ fixedLayoutConfig = null, origin = '', selectedSlot = '' }) {
-  const { footerSlot, qrSlot, topPrimarySlot, topSecondarySlot } = buildOrderedFixedImageAnchors(fixedLayoutConfig)
-  const articleStructureBlocks = TEMPLATE_STRUCTURE_BLOCKS.filter((block) => block.id !== 'cta')
-
-  return (
-    <div
-      style={{
-        backgroundColor: '#ffffff',
-        boxSizing: 'border-box',
-        color: '#0f172a',
-        fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
-        minHeight: '100%',
-        padding: '16px 16px 40px',
-        width: '100%',
-      }}
-    >
-      <div style={{ margin: '0 auto', maxWidth: `${FIXED_TEMPLATE_MAX_WIDTH}px` }}>
-        <TemplatePreviewFixedImageSlot origin={origin} selected={selectedSlot === topPrimarySlot?.slot} slotConfig={topPrimarySlot} />
-        <TemplatePreviewFixedImageSlot origin={origin} selected={selectedSlot === topSecondarySlot?.slot} slotConfig={topSecondarySlot} />
-
-        <div style={{ display: 'grid', gap: '14px', marginTop: '20px' }}>
-          {articleStructureBlocks.map((block) => (
-            <TemplatePreviewTextBlock key={block.id} label={block.label} tint={block.tint} type={block.type} />
-          ))}
-        </div>
-
-        <div
-          style={{
-            color: '#111111',
-            fontSize: '18px',
-            fontWeight: 700,
-            lineHeight: 1.4,
-            marginTop: '28px',
-            textAlign: 'center',
-          }}
-        >
-          ▽
-        </div>
-
-        <div style={{ marginTop: '16px' }}>
-          <TemplatePreviewTextBlock label="互动引导语" tint="#f8fafc" type="cta" />
-        </div>
-
-        <div style={{ marginTop: '20px' }}>
-          <TemplatePreviewFixedImageSlot origin={origin} selected={selectedSlot === qrSlot?.slot} slotConfig={qrSlot} />
-        </div>
-
-        <div style={{ marginTop: '12px' }}>
-          <TemplatePreviewTextBlock label="二维码提示语" tint="#dcfce7" type="cta" />
-        </div>
-
-        <TemplatePreviewFixedImageSlot origin={origin} selected={selectedSlot === footerSlot?.slot} slotConfig={footerSlot} />
-      </div>
     </div>
   )
 }
