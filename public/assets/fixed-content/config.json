@@ -16,7 +16,7 @@
       "path": "/assets/fixed-content/guideFollow-1775378629747.gif",
       "uploadedAt": "2026-04-05T08:43:49.745Z"
     },
-    "spacingPreset": "none",
+    "spacingPreset": "large",
     "widthPx": null
   },
   "heroGif": {
@@ -29,6 +29,21 @@
     "spacingPreset": "small",
     "widthPx": null
   },
+  "metrics": {
+    "endingGuideGapPx": 16,
+    "endingMetaGapPx": 12,
+    "endingSymbolGapPx": 72,
+    "firstSectionTopGapPx": 72,
+    "guideFollowMarkerGapPx": 12,
+    "guideFollowToBodyGapPx": 72,
+    "qrGuideGapPx": 4,
+    "qrSectionTopGapPx": 8,
+    "sectionAvatarToTitleGapPx": 28,
+    "sectionAvatarToOrderGapPx": 16,
+    "sectionImageBottomGapPx": 72,
+    "sectionOrderToTitleGapPx": 14,
+    "sectionTitleBlockBottomGapPx": 20
+  },
   "qrImage": {
     "asset": {
       "filename": "公众号二维码.jpg",
@@ -38,5 +53,15 @@
     },
     "spacingPreset": "none",
     "widthPx": 200
+  },
+  "sectionAvatar": {
+    "asset": {
+      "filename": "淡黄红褐色做旧古籍古风中医调理微信公众号封面.gif",
+      "mimeType": "image/gif",
+      "path": "/assets/fixed-content/sectionAvatar-1775466642415.gif",
+      "uploadedAt": "2026-04-06T09:10:42.415Z"
+    },
+    "spacingPreset": "medium",
+    "widthPx": null
   }
 }

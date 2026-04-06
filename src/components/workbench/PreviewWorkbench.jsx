@@ -14,11 +14,8 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   analyzeStructuredPreviewDraft,
-  getReadableDraftBodyMarkdown,
   getRenderablePreviewSlots,
   renderArticlePreviewDocument,
-  renderWechatClipboardHtml,
-  renderWechatDraftHtml,
   stripPreviewHeading,
 } from '@/lib/articlePreviewHtml.jsx'
 import {
@@ -26,9 +23,7 @@ import {
   getActiveVersion,
   getSelectedTopic,
   normalizePreviewFontSize,
-  normalizePreviewSurfaceMode,
   previewFontSizeOptions,
-  previewSurfaceModeOptions,
   resolveVersionDisplayTitle,
 } from '@/lib/benchmarkWorkbenchClient.js'
 import { useFixedLayoutConfigState } from '@/lib/fixedLayoutConfigClient.js'
@@ -138,10 +133,6 @@ async function copyHtmlToClipboard(html, plainText) {
   selection?.removeAllRanges()
   document.body.removeChild(tmp)
   return true
-}
-
-function buildPreviewDocumentFromBodyHtml(bodyHtml = '') {
-  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/></head><body style="margin:0;background:#ffffff;">${bodyHtml}</body></html>`
 }
 
 function ArticlePreviewFrame({ className = '', documentHtml, title = '排版预览' }) {
@@ -367,19 +358,11 @@ export default function PreviewWorkbench({
   onShowPageToast,
   onSetPreviewDevice,
   onSetPreviewFontSize,
-  onSetPreviewSurfaceMode,
   onUpdateDraftSync,
   previewFontSize = 'medium',
   session,
 }) {
   const [copyStatus, setCopyStatus] = useState('idle')
-  const [clipboardPreviewState, setClipboardPreviewState] = useState({
-    bodyHtml: '',
-    error: '',
-    key: '',
-    status: 'idle',
-    uploadedImageCount: 0,
-  })
   const [isWechatSyncing, setIsWechatSyncing] = useState(false)
   const [wechatStatus, setWechatStatus] = useState({
     appId: '',
@@ -392,7 +375,6 @@ export default function PreviewWorkbench({
   const { config: fixedLayoutConfig } = useFixedLayoutConfigState()
   const previewSlots = useRenderablePreviewSlots(session, version)
   const previewDevice = session?.layoutReview?.device === 'desktop' || session?.layoutReview?.device === 'pc' ? 'desktop' : 'mobile'
-  const previewSurfaceMode = normalizePreviewSurfaceMode(session?.layoutReview?.surfaceMode)
   const normalizedPreviewFontSize = normalizePreviewFontSize(previewFontSize)
   const draftStructureState = useMemo(
     () => analyzeStructuredPreviewDraft(version?.draftMarkdown ?? '', { requireTitle: true }),
@@ -426,60 +408,12 @@ export default function PreviewWorkbench({
   }, [bodyMarkdown, canRenderStructuredPreview, displayTitle, draftStructureState, fixedLayoutConfig, normalizedPreviewFontSize, previewSlots, topic?.penName, topic?.type, version?.wordCount])
 
   function buildWechatDraftRenderResult() {
-    if (!canRenderStructuredPreview) {
-      return {
-        bodyHtml: '',
-        plainText: '',
-        valid: false,
-      }
+    return {
+      bodyHtml: previewRenderResult.bodyHtml,
+      plainText: previewRenderResult.plainText,
+      valid: previewRenderResult.valid,
     }
-
-    return renderWechatDraftHtml({
-      articleType: topic?.type || '',
-      bodyMarkdown,
-      fixedLayoutConfig,
-      fontSize: normalizedPreviewFontSize,
-      imageSlots: previewSlots,
-      origin: '',
-      penName: topic?.penName || '',
-      structuredContent: draftStructureState,
-      wordCount: version?.wordCount ?? 0,
-    })
   }
-
-  function buildWechatClipboardRenderResult() {
-    if (!canRenderStructuredPreview) {
-      return {
-        bodyHtml: '',
-        plainText: '',
-        valid: false,
-      }
-    }
-
-    return renderWechatClipboardHtml({
-      articleType: topic?.type || '',
-      bodyMarkdown,
-      fixedLayoutConfig,
-      fontSize: normalizedPreviewFontSize,
-      imageSlots: previewSlots,
-      origin: typeof window === 'undefined' ? '' : window.location.origin,
-      penName: topic?.penName || '',
-      structuredContent: draftStructureState,
-      wordCount: version?.wordCount ?? 0,
-    })
-  }
-
-  const wechatClipboardRenderResult = useMemo(() => {
-    if (!canRenderStructuredPreview || previewSurfaceMode !== 'wechat') {
-      return {
-        bodyHtml: '',
-        plainText: '',
-        valid: false,
-      }
-    }
-
-    return buildWechatClipboardRenderResult()
-  }, [bodyMarkdown, canRenderStructuredPreview, draftStructureState, fixedLayoutConfig, normalizedPreviewFontSize, previewSlots, previewSurfaceMode, topic?.penName, topic?.type, version?.wordCount])
 
   const wechatCoverImageSrc =
     getFixedLayoutImageDisplaySlots(fixedLayoutConfig)
@@ -494,88 +428,7 @@ export default function PreviewWorkbench({
     wechatDraftSync,
     wechatStatus,
   })
-  const previewRenderKey = wechatClipboardRenderResult.bodyHtml
-
-  useEffect(() => {
-    if (!canRenderStructuredPreview || !previewRenderKey) {
-      setClipboardPreviewState({
-        bodyHtml: '',
-        error: '',
-        key: '',
-        status: 'idle',
-        uploadedImageCount: 0,
-      })
-      return
-    }
-
-    if (previewSurfaceMode !== 'wechat') {
-      return
-    }
-
-    if (clipboardPreviewState.key === previewRenderKey && clipboardPreviewState.status === 'ready') {
-      return
-    }
-
-    let cancelled = false
-
-    setClipboardPreviewState((current) => ({
-      bodyHtml: current.key === previewRenderKey ? current.bodyHtml : '',
-      error: '',
-      key: previewRenderKey,
-      status: 'loading',
-      uploadedImageCount: current.key === previewRenderKey ? current.uploadedImageCount : 0,
-    }))
-
-    requestWechatClipboardPreparation({
-      bodyHtml: wechatClipboardRenderResult.bodyHtml,
-      plainText: wechatClipboardRenderResult.plainText,
-    })
-      .then((payload) => {
-        if (cancelled) {
-          return
-        }
-
-        setClipboardPreviewState({
-          bodyHtml: payload?.bodyHtml || wechatClipboardRenderResult.bodyHtml,
-          error: '',
-          key: previewRenderKey,
-          status: 'ready',
-          uploadedImageCount: Number(payload?.uploadedImageCount || 0),
-        })
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return
-        }
-
-        setClipboardPreviewState({
-          bodyHtml: '',
-          error: error.message || '准备微信粘贴预览失败',
-          key: previewRenderKey,
-          status: 'error',
-          uploadedImageCount: 0,
-        })
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [canRenderStructuredPreview, clipboardPreviewState.key, clipboardPreviewState.status, previewRenderKey, previewSurfaceMode, wechatClipboardRenderResult.bodyHtml, wechatClipboardRenderResult.plainText])
-
-  const activePreviewDocumentHtml = useMemo(() => {
-    if (previewSurfaceMode === 'wechat' && clipboardPreviewState.status === 'ready' && clipboardPreviewState.bodyHtml) {
-      return buildPreviewDocumentFromBodyHtml(clipboardPreviewState.bodyHtml)
-    }
-
-    if (previewSurfaceMode === 'wechat' && wechatClipboardRenderResult.bodyHtml) {
-      return buildPreviewDocumentFromBodyHtml(wechatClipboardRenderResult.bodyHtml)
-    }
-
-    return previewRenderResult.documentHtml
-  }, [clipboardPreviewState.bodyHtml, clipboardPreviewState.status, previewRenderResult.documentHtml, previewSurfaceMode, wechatClipboardRenderResult.bodyHtml])
-
-  const previewViewportClassName =
-    previewSurfaceMode === 'wechat' ? 'max-w-[578px]' : previewDevice === 'mobile' ? 'max-w-[390px]' : 'max-w-[760px]'
+  const previewViewportClassName = previewDevice === 'mobile' ? 'w-[375px] max-w-full' : 'w-[760px] max-w-full'
 
   useEffect(() => {
     if (!session?.id) {
@@ -633,11 +486,11 @@ export default function PreviewWorkbench({
     if (copyStatus === 'copying') {
       return
     }
-
-    const clipboardRenderResult =
-      previewSurfaceMode === 'wechat' && wechatClipboardRenderResult.bodyHtml
-        ? wechatClipboardRenderResult
-        : buildWechatClipboardRenderResult()
+    const clipboardRenderResult = {
+      bodyHtml: previewRenderResult.bodyHtml,
+      plainText: previewRenderResult.plainText,
+      valid: previewRenderResult.valid,
+    }
 
     if (!clipboardRenderResult.bodyHtml) {
       return
@@ -645,17 +498,10 @@ export default function PreviewWorkbench({
 
     try {
       setCopyStatus('copying')
-      const preparedPayload =
-        clipboardPreviewState.key === previewRenderKey && clipboardPreviewState.status === 'ready'
-          ? {
-              bodyHtml: clipboardPreviewState.bodyHtml,
-              plainText: clipboardRenderResult.plainText,
-              uploadedImageCount: clipboardPreviewState.uploadedImageCount,
-            }
-          : await requestWechatClipboardPreparation({
-              bodyHtml: clipboardRenderResult.bodyHtml,
-              plainText: clipboardRenderResult.plainText,
-            })
+      const preparedPayload = await requestWechatClipboardPreparation({
+        bodyHtml: clipboardRenderResult.bodyHtml,
+        plainText: clipboardRenderResult.plainText,
+      })
 
       await copyHtmlToClipboard(
         preparedPayload.bodyHtml || clipboardRenderResult.bodyHtml,
@@ -804,22 +650,6 @@ export default function PreviewWorkbench({
                 </button>
               ))}
             </div>
-
-            <div className="inline-flex shrink-0 rounded-full bg-secondary/55 p-1">
-              {previewSurfaceModeOptions.map((item) => (
-                <button
-                  className={cn(
-                    'inline-flex items-center rounded-full px-4 py-2 text-[13px] transition-colors',
-                    previewSurfaceMode === item.id ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                  )}
-                  key={item.id}
-                  onClick={() => onSetPreviewSurfaceMode?.(item.id)}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -898,20 +728,9 @@ export default function PreviewWorkbench({
         <div className="flex justify-center">
           <div className={cn('w-full transition-all', previewViewportClassName)}>
             {canRenderStructuredPreview ? (
-              previewSurfaceMode === 'wechat' && clipboardPreviewState.status === 'loading' ? (
-                <div className="rounded-[20px] border border-border/70 bg-white px-5 py-8 text-center text-[13px] text-muted-foreground shadow-[0_8px_24px_rgba(18,20,38,0.06)]">
-                  正在生成微信粘贴预览...
-                </div>
-              ) : previewSurfaceMode === 'wechat' && clipboardPreviewState.status === 'error' ? (
-                <div className="rounded-[20px] border border-red-200 bg-red-50 px-5 py-4 text-red-700">
-                  <div className="text-[14px] font-semibold">微信粘贴预览生成失败</div>
-                  <div className="mt-2 text-[13px] leading-6 text-red-700/90">{clipboardPreviewState.error || '当前复制链路处理失败。'}</div>
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-none border border-border/70 bg-white shadow-[0_8px_24px_rgba(18,20,38,0.06)]">
-                  <ArticlePreviewFrame documentHtml={activePreviewDocumentHtml} />
-                </div>
-              )
+              <div className="overflow-hidden rounded-none border border-border/70 bg-white shadow-[0_8px_24px_rgba(18,20,38,0.06)]">
+                <ArticlePreviewFrame documentHtml={previewRenderResult.documentHtml} />
+              </div>
             ) : (
               <div className="rounded-[20px] border border-red-200 bg-red-50 px-5 py-4 text-red-700">
                 <div className="text-[14px] font-semibold">格式有问题，无法进入排版</div>

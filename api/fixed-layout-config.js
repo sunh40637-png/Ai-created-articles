@@ -18,6 +18,7 @@ export default async function handler(request, response) {
     try {
       const result = await updateFixedLayoutConfig({
         imageSlots: request.body?.imageSlots,
+        metrics: request.body?.metrics,
       })
       response.status(200).json(result)
     } catch (error) {

@@ -44,9 +44,9 @@ function announceFixedLayoutConfigUpdated(config) {
   )
 }
 
-export async function requestFixedLayoutConfigUpdate({ imageSlots } = {}) {
+export async function requestFixedLayoutConfigUpdate({ imageSlots, metrics } = {}) {
   const response = await fetch('/api/fixed-layout-config', {
-    body: JSON.stringify({ imageSlots }),
+    body: JSON.stringify({ imageSlots, metrics }),
     headers: {
       'Content-Type': 'application/json',
     },
@@ -103,6 +103,7 @@ function serializeFixedLayoutConfigForComparison(config) {
         widthPx: Number(slotConfig?.widthPx || 0),
       }
     }),
+    metrics: normalized?.metrics ?? null,
   })
 }
 

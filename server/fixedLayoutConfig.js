@@ -6,6 +6,7 @@ import {
   FIXED_LAYOUT_ALLOWED_MIME_TYPES,
   FIXED_LAYOUT_IMAGE_SLOT_IDS,
   isValidFixedLayoutImageSlot,
+  normalizeFixedLayoutMetrics,
   normalizeFixedLayoutQrWidthPx,
   normalizeFixedLayoutSpacingPreset,
 } from '../shared/fixedLayoutConfig.js'
@@ -76,7 +77,9 @@ function normalizeFixedLayoutConfig(config) {
     footerGif: normalizeImageSlotConfig('footerGif', config?.footerGif),
     guideFollow: normalizeImageSlotConfig('guideFollow', config?.guideFollow),
     heroGif: normalizeImageSlotConfig('heroGif', config?.heroGif),
+    metrics: normalizeFixedLayoutMetrics(config?.metrics),
     qrImage: normalizeImageSlotConfig('qrImage', config?.qrImage),
+    sectionAvatar: normalizeImageSlotConfig('sectionAvatar', config?.sectionAvatar),
   }
 }
 
@@ -141,7 +144,7 @@ export async function writeFixedLayoutConfig(config) {
   return normalizedConfig
 }
 
-export async function updateFixedLayoutConfig({ imageSlots } = {}) {
+export async function updateFixedLayoutConfig({ imageSlots, metrics } = {}) {
   const previousConfig = await readFixedLayoutConfig()
   const nextConfig = cloneConfig(previousConfig)
 
@@ -168,6 +171,10 @@ export async function updateFixedLayoutConfig({ imageSlots } = {}) {
             : null,
       }
     })
+  }
+
+  if (metrics && typeof metrics === 'object') {
+    nextConfig.metrics = normalizeFixedLayoutMetrics(metrics)
   }
 
   const normalizedNextConfig = await writeFixedLayoutConfig(nextConfig)

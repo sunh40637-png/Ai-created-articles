@@ -14,11 +14,6 @@ export const previewFontSizeOptions = [
   { id: 'large', label: '大' },
 ]
 
-export const previewSurfaceModeOptions = [
-  { id: 'preview', label: '当前预览' },
-  { id: 'wechat', label: '微信粘贴' },
-]
-
 export const ARTICLE_LIST_STATUS_META = {
   preview: {
     label: '已确认文字稿',
@@ -53,10 +48,6 @@ export function normalizePreviewFontSize(value) {
   }
 
   return 'medium'
-}
-
-export function normalizePreviewSurfaceMode(value) {
-  return value === 'wechat' ? 'wechat' : 'preview'
 }
 
 export function getSelectedTopic(session) {

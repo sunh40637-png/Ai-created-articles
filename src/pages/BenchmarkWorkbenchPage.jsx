@@ -487,10 +487,6 @@ function normalizePreviewFontSize(value) {
   return 'medium'
 }
 
-function normalizePreviewSurfaceMode(value) {
-  return value === 'wechat' ? 'wechat' : 'preview'
-}
-
 function clampRightPaneWidth(width, containerWidth) {
   const maxWidth = Math.max(RIGHT_PANE_MIN_WIDTH, containerWidth - LEFT_PANE_MIN_WIDTH)
   return Math.min(Math.max(width, RIGHT_PANE_MIN_WIDTH), maxWidth)
@@ -2164,7 +2160,6 @@ function RightWorkbenchShell({
   onSelectVersion,
   onSetPreviewDevice,
   onSetPreviewFontSize,
-  onSetPreviewSurfaceMode,
   onUpdateDraftSync,
   session,
   tabs,
@@ -2214,7 +2209,6 @@ function RightWorkbenchShell({
               onShowPageToast={onShowPageToast}
               onSetPreviewDevice={onSetPreviewDevice}
               onSetPreviewFontSize={onSetPreviewFontSize}
-              onSetPreviewSurfaceMode={onSetPreviewSurfaceMode}
               onUpdateDraftSync={onUpdateDraftSync}
               previewFontSize={previewFontSize}
               session={session}
@@ -2291,7 +2285,7 @@ function RightWorkbenchShell({
   return shellContent
 }
 
-function ArticlePreviewDrawer({ onClose, onCopyTitleSuccess, onSetPreviewDevice, onSetPreviewFontSize, onSetPreviewSurfaceMode, onShowPageToast, open, session }) {
+function ArticlePreviewDrawer({ onClose, onCopyTitleSuccess, onSetPreviewDevice, onSetPreviewFontSize, onShowPageToast, open, session }) {
   const availableTabs = session?.stageId === 'completed' ? ['draft', 'preview'] : ['draft']
   const [activeTab, setActiveTab] = useState(availableTabs[0] ?? 'draft')
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -2445,7 +2439,6 @@ function ArticlePreviewDrawer({ onClose, onCopyTitleSuccess, onSetPreviewDevice,
                   onShowPageToast={onShowPageToast}
                   onSetPreviewDevice={onSetPreviewDevice}
                   onSetPreviewFontSize={onSetPreviewFontSize}
-                  onSetPreviewSurfaceMode={onSetPreviewSurfaceMode}
                   previewFontSize={normalizePreviewFontSize(session?.layoutReview?.fontSize)}
                   session={session}
                 />
@@ -2786,21 +2779,6 @@ export default function BenchmarkWorkbenchPage() {
       layoutReview: {
         ...(current.layoutReview ?? {}),
         fontSize: normalizedFontSize,
-      },
-    }))
-  }
-
-  function handleSetPreviewSurfaceMode(sessionId, nextSurfaceMode) {
-    if (!sessionId) {
-      return
-    }
-
-    const normalizedSurfaceMode = normalizePreviewSurfaceMode(nextSurfaceMode)
-
-    updateSession(sessionId, (current) => ({
-      layoutReview: {
-        ...(current.layoutReview ?? {}),
-        surfaceMode: normalizedSurfaceMode,
       },
     }))
   }
@@ -3871,7 +3849,6 @@ export default function BenchmarkWorkbenchPage() {
                 onShowPageToast={showPageToast}
                 onSetPreviewDevice={(nextDevice) => handleSetPreviewDevice(activeSession.id, nextDevice)}
                 onSetPreviewFontSize={(nextFontSize) => handleSetPreviewFontSize(activeSession.id, nextFontSize)}
-                onSetPreviewSurfaceMode={(nextSurfaceMode) => handleSetPreviewSurfaceMode(activeSession.id, nextSurfaceMode)}
                 onSelectVersion={(versionId) =>
                   updateCurrentSession((current) => {
                     const nextSession = {
@@ -3922,7 +3899,6 @@ export default function BenchmarkWorkbenchPage() {
         onShowPageToast={showPageToast}
         onSetPreviewDevice={(nextDevice) => handleSetPreviewDevice(activeArticleSession?.id, nextDevice)}
         onSetPreviewFontSize={(nextFontSize) => handleSetPreviewFontSize(activeArticleSession?.id, nextFontSize)}
-        onSetPreviewSurfaceMode={(nextSurfaceMode) => handleSetPreviewSurfaceMode(activeArticleSession?.id, nextSurfaceMode)}
         open={activeModule === 'articles' && Boolean(activeArticleSession)}
         session={activeArticleSession}
       />

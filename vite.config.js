@@ -385,6 +385,7 @@ function fixedLayoutConfigDevApi() {
             const body = await readJsonBody(req)
             const result = await updateFixedLayoutConfig({
               imageSlots: body?.imageSlots,
+              metrics: body?.metrics,
             })
 
             res.statusCode = 200

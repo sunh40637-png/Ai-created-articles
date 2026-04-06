@@ -488,6 +488,7 @@ export default function FixedLayoutConfigCanvas() {
     try {
       const nextConfig = await requestFixedLayoutConfigUpdate({
         imageSlots: imageSlotsPayload,
+        metrics: draftConfig?.metrics,
       })
       revokeAllDraftPreviewUrls()
       setConfig(nextConfig)
