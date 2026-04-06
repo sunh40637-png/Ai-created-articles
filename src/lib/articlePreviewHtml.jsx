@@ -15,9 +15,6 @@ export const ARTICLE_PREVIEW_SECTION_COUNT = 3
 export const MISSING_PREVIEW_ASSET_SRC_PREFIX = 'asset-missing://'
 
 const PREVIEW_SOURCE_ACCOUNT_NAME = '煮酒问人生'
-const FIXED_TEMPLATE_MAX_WIDTH = 677
-const FIXED_TEMPLATE_HORIZONTAL_PADDING = 16
-const FIXED_TEMPLATE_INNER_MAX_WIDTH = FIXED_TEMPLATE_MAX_WIDTH - FIXED_TEMPLATE_HORIZONTAL_PADDING * 2
 const SECTION_AVATAR_WIDTH_PX = 50
 const SECTION_TITLE_BADGE_COLOR = '#556B4F'
 const DEFAULT_ENDING_GUIDE_TEXT = '点亮文末“爱心”，愿你往后有光，心里有暖，脚下有路。转发分享，弘扬中华传统文化！'
@@ -1195,9 +1192,17 @@ function FixedTemplateImageBlock({
   const widthStyle = resolveFixedImageWidthStyle(slotConfig)
   const baseWrapperStyle = applyDefaultSpacing
     ? {
+        fontSize: '0',
+        lineHeight: '0',
+        margin: '0',
+        padding: '0',
         textAlign: isQrSlot ? 'center' : 'left',
       }
     : {
+        fontSize: '0',
+        lineHeight: '0',
+        margin: '0',
+        padding: '0',
         textAlign: isQrSlot ? 'center' : 'left',
       }
 
@@ -1270,9 +1275,9 @@ function FixedTemplateArticle({
       <article
         style={{
           boxSizing: 'border-box',
-          margin: '0 auto',
-          maxWidth: `${FIXED_TEMPLATE_MAX_WIDTH}px`,
-          padding: '0 16px 48px',
+          margin: '0',
+          maxWidth: '100%',
+          padding: '0 0 48px',
           width: '100%',
         }}
       >

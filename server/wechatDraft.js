@@ -2,6 +2,7 @@ import path from 'node:path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { CONTENT_SESSION_PERSISTENCE_PATH } from './contentSessionPersistence.js'
 import { resolveWeChatOfficialAccountConfig } from './runtimeConfig.js'
+import { postprocessHtmlForWechatClipboard } from './wechatClipboard.js'
 
 const WECHAT_API_BASE_URL = 'https://api.weixin.qq.com'
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000
@@ -485,7 +486,7 @@ export async function syncSessionToWechatDraft({ article, sessionId } = {}) {
 
   try {
     const accessToken = await getWechatAccessToken()
-    const contentHtml = await replaceWechatImageSourcesInHtml(normalizedArticle.bodyHtml, accessToken)
+    const contentHtml = postprocessHtmlForWechatClipboard(await replaceWechatImageSourcesInHtml(normalizedArticle.bodyHtml, accessToken))
     const thumbMediaId = await uploadWechatCoverMaterial(accessToken, normalizedArticle.coverImageSrc)
     const existingMediaId =
       normalizedArticle.mediaId ||

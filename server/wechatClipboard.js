@@ -281,7 +281,7 @@ function stripPlaceholderDataImages(html = '') {
   return html.replace(/<img\b[^>]*\bsrc="data:[^"]*"[^>]*>/gi, '')
 }
 
-function postprocessHtmlForWechatClipboard(html = '') {
+export function postprocessHtmlForWechatClipboard(html = '') {
   let result = String(html || '')
     .replace(/\sloading="lazy"/gi, '')
     .replace(/<section\b/gi, '<div')
