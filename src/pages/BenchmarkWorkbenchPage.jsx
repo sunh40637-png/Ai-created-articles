@@ -34,10 +34,12 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   buildImageSelectionFromMatchResult,
   buildPreviewSections,
   extractUsedAssetIds,
+  getReadableDraftBodyMarkdown,
   stripPreviewHeading,
 } from '@/lib/articlePreviewHtml.jsx'
 import { cn } from '@/lib/utils'
