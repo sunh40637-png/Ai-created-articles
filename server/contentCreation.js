@@ -1,9 +1,12 @@
 import { chatWithMiniMax } from './minimax.js'
 import {
   CONTENT_TARGET_WORD_COUNT_RANGE,
+  CONTENT_WRITING_WORD_COUNT_RANGE,
+  CONTENT_WORD_COUNT_SECTION_GUIDE,
   DEFAULT_CONTENT_RULE_PROFILE_ID,
   resolveContentRuleProfile,
 } from './contentRuleProfiles.js'
+import { countReadableLength } from '../shared/readableLength.js'
 
 const DEFAULT_MODEL = 'MiniMax-M2.7'
 const CONTENT_ASSISTANT_NAME = '内容创作助手'
@@ -44,6 +47,9 @@ const DRAFT_TEMPLATE_CONTRACT_GUIDE = [
   '- [ENDING] 后必须继续输出 1 个二级标题作为结尾标题，再写结尾正文，最后单独写 1 段祝福语。',
   '- [ENDING] 之后禁止再展开新的主体观点，禁止再插入新的图片占位符。',
   '- 不要在正文里主动输出 ▽、作者/来源、二维码提示、关注引导或底部动图提示，这些都由固定模板统一渲染。',
+  `- 可读正文字数尽量收敛在 ${CONTENT_WRITING_WORD_COUNT_RANGE.min} 到 ${CONTENT_WRITING_WORD_COUNT_RANGE.max} 字，最终必须落在 ${CONTENT_TARGET_WORD_COUNT_RANGE.min} 到 ${CONTENT_TARGET_WORD_COUNT_RANGE.max} 字。`,
+  '- 程序统计字数时，不计一级标题、不计 [IMAGE_1]/[IMAGE_2]/[IMAGE_3]/[ENDING] 占位符、不计 Markdown 符号与空白，只统计可读中文/字母/数字字符。',
+  CONTENT_WORD_COUNT_SECTION_GUIDE,
 ].join('\n')
 
 function buildContentSystemPrompt(ruleProfile) {
@@ -459,13 +465,6 @@ function buildFallbackSummary({ action, note = '' }) {
   return '初稿生成完成，可进入文字稿确认。'
 }
 
-function countReadableLength(content = '') {
-  return content
-    .replace(/[#>*`\-\[\]\(\)\|]/g, '')
-    .replace(/\s+/g, '')
-    .trim().length
-}
-
 function normalizeDraftMarkdown(content = '') {
   return typeof content === 'string' ? content.replace(/\r/g, '').trim() : ''
 }
@@ -733,7 +732,7 @@ function buildQualityCheckSection({ adjustments, draftMarkdown, ruleProfile, top
   const lines = [
     '## 规则校验',
     '',
-    `- 字数估算：约 ${readableLength} 字（目标范围：${CONTENT_TARGET_WORD_COUNT_RANGE.min}~${CONTENT_TARGET_WORD_COUNT_RANGE.max} 字，${withinTargetWordCount ? '当前在范围内' : '当前不在范围内'}）。`,
+    `- 可读正文字数估算：约 ${readableLength} 字（目标范围：${CONTENT_TARGET_WORD_COUNT_RANGE.min}~${CONTENT_TARGET_WORD_COUNT_RANGE.max} 字，${withinTargetWordCount ? '当前在范围内' : '当前不在范围内'}）。`,
     `- 破折号检查：${hasDash ? '仍检测到破折号，建议人工复核。' : '通过。'}`,
     `- AI 腔词检查：${bannedHits.length === 0 ? '未发现明显禁用词。' : `发现 ${bannedHits.join('、')}。`}`,
     `- 固定模板占位符检查：${placeholderCheck.valid ? '通过。' : `未通过：${placeholderCheck.issues.join('；')}`}`,

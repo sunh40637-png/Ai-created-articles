@@ -222,7 +222,21 @@ function buildStructuredSection(order, title = '', bodyMarkdown = '') {
 }
 
 function splitRawPreviewBlocks(markdown = '') {
-  return normalizeMarkdown(markdown)
+  const normalized = normalizeMarkdown(markdown)
+  const markerSeparated = normalized
+    .split('\n')
+    .flatMap((line) => {
+      const trimmed = line.trim()
+
+      if (PLACEHOLDER_MARKERS.includes(trimmed)) {
+        return ['', trimmed, '']
+      }
+
+      return [line]
+    })
+    .join('\n')
+
+  return markerSeparated
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean)

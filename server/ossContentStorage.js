@@ -11,6 +11,7 @@ import {
   resolveLiveContentRuleProfileId,
 } from './contentRuleProfiles.js'
 import { resolveAliyunOssConfig } from './runtimeConfig.js'
+import { countReadableLength } from '../shared/readableLength.js'
 
 const OSS_ROOT_PREFIX = 'content-system'
 const SESSION_INDEX_KEY = `${OSS_ROOT_PREFIX}/index/sessions.json`
@@ -227,13 +228,6 @@ function resolveVersionGeneratedTitle(version) {
 
 function resolveVersionDisplayTitle(session, version) {
   return resolveVersionGeneratedTitle(version) || getSelectedTopic(session)?.title || session?.title || ''
-}
-
-function countReadableLength(value = '') {
-  return String(value)
-    .replace(/[#>*`~\-_[\]()]/g, ' ')
-    .replace(/\s+/g, '')
-    .length
 }
 
 function hasSessionHistory(session) {

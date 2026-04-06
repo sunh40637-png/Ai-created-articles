@@ -11,7 +11,6 @@ import {
   FileText,
   History,
   ImageIcon,
-  ImageUp,
   LibraryBig,
   LayoutTemplate,
   ListFilter,
@@ -27,6 +26,7 @@ import {
   Plus,
   ScrollText,
   Search,
+  Settings2,
   Trash2,
   X,
 } from 'lucide-react'
@@ -36,6 +36,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
+  analyzeStructuredPreviewDraft,
   buildImageSelectionFromMatchResult,
   buildPreviewSections,
   extractUsedAssetIds,
@@ -52,6 +53,7 @@ import {
   TOPIC_LIBRARY_TYPES,
   useBenchmarkStore,
 } from '@/stores/useBenchmarkStore.js'
+import { countReadableLength } from '../../shared/readableLength.js'
 import {
   getFixedLayoutImageDisplaySlots,
 } from '../../shared/fixedLayoutConfig.js'
@@ -126,7 +128,7 @@ const sidebarModules = [
   { id: 'library', label: '选题库', icon: LibraryBig },
   { id: 'articles', label: '文章列表', icon: FileText },
   { id: 'assets', label: '素材库', icon: ImageIcon },
-  { id: 'fixed-layout', label: '模板配置', icon: ImageUp },
+  { id: 'fixed-layout', label: '模板配置', icon: Settings2 },
 ]
 
 const TOPIC_STATUS_META = {
@@ -487,13 +489,6 @@ function normalizePreviewFontSize(value) {
 
 function normalizePreviewSurfaceMode(value) {
   return value === 'wechat' ? 'wechat' : 'preview'
-}
-
-function countReadableLength(content = '') {
-  return content
-    .replace(/[#>*`\-\[\]\(\)\|]/g, '')
-    .replace(/\s+/g, '')
-    .trim().length
 }
 
 function clampRightPaneWidth(width, containerWidth) {

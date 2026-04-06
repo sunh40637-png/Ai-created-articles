@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInitialContentPipeline } from '../server/contentCreation.js'
+import { countReadableLength } from '../shared/readableLength.js'
 import { resolveContentRuleProfile } from '../server/contentRuleProfiles.js'
 import { resolveMiniMaxConfig } from '../server/runtimeConfig.js'
 
@@ -49,13 +50,6 @@ function normalizeProfileArg(value) {
   }
 
   return ['A', 'B']
-}
-
-function countReadableLength(content = '') {
-  return content
-    .replace(/[#>*`\-\[\]\(\)\|]/g, '')
-    .replace(/\s+/g, '')
-    .trim().length
 }
 
 function slugify(value = '') {

@@ -4,8 +4,15 @@ export const CONTENT_TARGET_WORD_COUNT_RANGE = Object.freeze({
   max: 1500,
   min: 1200,
 })
+export const CONTENT_WRITING_WORD_COUNT_RANGE = Object.freeze({
+  max: 1420,
+  min: 1280,
+})
+export const CONTENT_WORD_COUNT_SECTION_GUIDE =
+  '- 分段字数预算参考：开头 120~180 字；正文1 260~320 字；正文2 260~320 字；正文3 260~320 字；结尾 160~200 字；祝福语 10~30 字。'
 
 const CONTENT_TARGET_WORD_COUNT_LINE = `- 总字数控制在 ${CONTENT_TARGET_WORD_COUNT_RANGE.min} 到 ${CONTENT_TARGET_WORD_COUNT_RANGE.max} 字。`
+const CONTENT_WRITING_WORD_COUNT_LINE = `- 正文尽量收敛在 ${CONTENT_WRITING_WORD_COUNT_RANGE.min} 到 ${CONTENT_WRITING_WORD_COUNT_RANGE.max} 字。`
 
 const FORBIDDEN_AI_PHRASES = [
   '总的来说',
@@ -99,7 +106,9 @@ const PROFILE_A = {
       '- 三个主体段至少要出现两个不同的人物或案例，不能全部围绕同一个人。',
       '- 主体段开头方式建议有变化，可在古文/俗语开段、故事开段、场景/论述开段之间组合；审核报告需记录实际使用情况，但这项不单独影响判定。',
       '- 正文必须严格遵守固定 Markdown 骨架：一级标题、开头正文、3 个主体段、[IMAGE_1]/[IMAGE_2]/[IMAGE_3]、[ENDING]、结尾标题、结尾正文、祝福语。',
+      CONTENT_WRITING_WORD_COUNT_LINE,
       CONTENT_TARGET_WORD_COUNT_LINE,
+      CONTENT_WORD_COUNT_SECTION_GUIDE,
     ].join('\n'),
     B型: [
       'B型执行重点：',
@@ -109,7 +118,9 @@ const PROFILE_A = {
       '- 三个主体段至少涉及两个不同姓名的人物或案例，不能三点都围绕同一个人。',
       '- 三个主体段的开头方式建议至少出现两种不同变体；审核报告需记录实际使用情况，但这项不单独影响判定。',
       '- 正文必须严格遵守固定 Markdown 骨架：一级标题、开头正文、3 个主体段、[IMAGE_1]/[IMAGE_2]/[IMAGE_3]、[ENDING]、结尾标题、结尾正文、祝福语。',
+      CONTENT_WRITING_WORD_COUNT_LINE,
       CONTENT_TARGET_WORD_COUNT_LINE,
+      CONTENT_WORD_COUNT_SECTION_GUIDE,
     ].join('\n'),
     C型: [
       'C型执行重点：',
@@ -118,7 +129,9 @@ const PROFILE_A = {
       '- 三层道理至少涉及两个不同的人物或案例，不能三层都围绕同一个人。',
       '- 主体段开头方式建议保持变化，可在古文/俗语开段、故事开段、场景/论述开段之间组合；审核报告需记录实际使用情况，但这项不单独影响判定。',
       '- 正文必须严格遵守固定 Markdown 骨架：一级标题、开头正文、3 个主体段、[IMAGE_1]/[IMAGE_2]/[IMAGE_3]、[ENDING]、结尾标题、结尾正文、祝福语。',
+      CONTENT_WRITING_WORD_COUNT_LINE,
       CONTENT_TARGET_WORD_COUNT_LINE,
+      CONTENT_WORD_COUNT_SECTION_GUIDE,
     ].join('\n'),
   },
   typeFallbackNote: '未识别文章类型时，默认按给定标题和笔名风格写出最贴近规范的文章。',
