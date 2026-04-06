@@ -1145,16 +1145,15 @@ function buildPreviewContentParts(bodyMarkdown = '') {
   }
 }
 
-function buildPreviewPlainText({ bodyMarkdown = '', fixedLayoutConfig = null, penName = '' }) {
+function buildPreviewPlainText({ bodyMarkdown = '', penName = '' }) {
   const { introMarkdown, sections, endingMarkdown, blessingMarkdown } = buildPreviewContentParts(bodyMarkdown)
-  const guideText = fixedLayoutConfig?.endingText?.content?.trim() || DEFAULT_ENDING_GUIDE_TEXT
   const parts = [
     stripMarkdownToPlainText(introMarkdown),
     ...sections.map((section) => stripMarkdownToPlainText(section.markdown)),
     stripMarkdownToPlainText(endingMarkdown),
     stripMarkdownToPlainText(blessingMarkdown),
     '▽',
-    guideText,
+    DEFAULT_ENDING_GUIDE_TEXT,
     `作者：${penName?.trim() || '未署名'}`,
     `来源：${PREVIEW_SOURCE_ACCOUNT_NAME}`,
     '▲ 长按识别二维码 关注我们',
@@ -1372,7 +1371,6 @@ function FixedTemplateArticle({
       }
     )
   })
-  const endingGuideText = fixedLayoutConfig?.endingText?.content?.trim() || DEFAULT_ENDING_GUIDE_TEXT
   const qrGap = Math.max(8, Math.round(resolveTemplateImageSpacing(qrSlot?.spacingPreset) / 3))
 
   return (
@@ -1455,7 +1453,7 @@ function FixedTemplateArticle({
             margin: '16px 0 0',
           }}
         >
-          {endingGuideText}
+          {DEFAULT_ENDING_GUIDE_TEXT}
         </p>
 
         <div
@@ -1544,7 +1542,6 @@ function WechatClipboardArticle({
       }
     )
   })
-  const endingGuideText = fixedLayoutConfig?.endingText?.content?.trim() || DEFAULT_ENDING_GUIDE_TEXT
   const qrGap = Math.max(8, Math.round(resolveTemplateImageSpacing(qrSlot?.spacingPreset) / 3))
   const qrImageSrc = resolveRenderableAssetPath(qrSlot?.asset, origin) || buildPlaceholderImageDataUri(FIXED_LAYOUT_SLOT_META.qrImage.label)
 
@@ -1631,7 +1628,7 @@ function WechatClipboardArticle({
           wordBreak: 'break-word',
         }}
       >
-        {endingGuideText}
+        {DEFAULT_ENDING_GUIDE_TEXT}
       </p>
 
       <p
@@ -1750,7 +1747,6 @@ export function renderArticlePreviewDocument({
     documentHtml: `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/></head><body style="margin:0;background:#ffffff;">${bodyHtml}</body></html>`,
     plainText: buildPreviewPlainText({
       bodyMarkdown,
-      fixedLayoutConfig,
       penName,
     }),
     valid: true,
@@ -1790,7 +1786,6 @@ export function renderWechatClipboardHtml({
     bodyHtml,
     plainText: buildPreviewPlainText({
       bodyMarkdown,
-      fixedLayoutConfig,
       penName,
     }),
     valid: true,

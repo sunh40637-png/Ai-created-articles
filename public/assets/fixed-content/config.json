@@ -1,8 +1,4 @@
 {
-  "endingText": {
-    "content": "",
-    "updatedAt": "2026-04-05T15:54:03.232Z"
-  },
   "footerGif": {
     "asset": {
       "filename": "黑红色微信公众号几何立体方块点击关注动态在看提示简约新媒体分享中文动态在看提示 (1).gif",
@@ -10,7 +6,6 @@
       "path": "/assets/fixed-content/footerGif-1775402608639.gif",
       "uploadedAt": "2026-04-05T15:23:28.637Z"
     },
-    "displayOrder": 4,
     "spacingPreset": "medium",
     "widthPx": null
   },
@@ -21,7 +16,6 @@
       "path": "/assets/fixed-content/guideFollow-1775378629747.gif",
       "uploadedAt": "2026-04-05T08:43:49.745Z"
     },
-    "displayOrder": 2,
     "spacingPreset": "none",
     "widthPx": null
   },
@@ -32,7 +26,6 @@
       "path": "/assets/fixed-content/heroGif-1775404427279.gif",
       "uploadedAt": "2026-04-05T15:53:47.278Z"
     },
-    "displayOrder": 1,
     "spacingPreset": "small",
     "widthPx": null
   },
@@ -43,7 +36,6 @@
       "path": "/assets/fixed-content/qrImage-1775061484257.jpg",
       "uploadedAt": "2026-04-01T16:38:04.257Z"
     },
-    "displayOrder": 3,
     "spacingPreset": "none",
     "widthPx": 200
   }

@@ -4,14 +4,10 @@ import {
   createEmptyFixedLayoutImageSlotConfig,
   createEmptyFixedLayoutConfig,
   FIXED_LAYOUT_ALLOWED_MIME_TYPES,
-  FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH,
   FIXED_LAYOUT_IMAGE_SLOT_IDS,
   isValidFixedLayoutImageSlot,
-  normalizeFixedLayoutDisplayOrder,
-  normalizeFixedLayoutImageOrdering,
   normalizeFixedLayoutQrWidthPx,
   normalizeFixedLayoutSpacingPreset,
-  normalizeFixedLayoutTextContent,
 } from '../shared/fixedLayoutConfig.js'
 
 export const FIXED_LAYOUT_ASSETS_DIR = path.resolve(process.cwd(), 'public/assets/fixed-content')
@@ -70,28 +66,18 @@ function normalizeImageSlotConfig(slot, value) {
   return {
     ...fallback,
     asset: normalizeAssetRecord(value?.asset),
-    displayOrder: normalizeFixedLayoutDisplayOrder(slot, value?.displayOrder),
     spacingPreset: normalizeFixedLayoutSpacingPreset(value?.spacingPreset),
     widthPx: slot === 'qrImage' ? normalizeFixedLayoutQrWidthPx(value?.widthPx) : null,
   }
 }
 
 function normalizeFixedLayoutConfig(config) {
-  const fallback = createEmptyFixedLayoutConfig()
-
-  return normalizeFixedLayoutImageOrdering({
-    endingText: {
-      content: normalizeFixedLayoutTextContent(config?.endingText?.content ?? fallback.endingText.content),
-      updatedAt:
-        typeof config?.endingText?.updatedAt === 'string' && config.endingText.updatedAt.trim()
-          ? config.endingText.updatedAt.trim()
-          : null,
-    },
+  return {
     footerGif: normalizeImageSlotConfig('footerGif', config?.footerGif),
     guideFollow: normalizeImageSlotConfig('guideFollow', config?.guideFollow),
     heroGif: normalizeImageSlotConfig('heroGif', config?.heroGif),
     qrImage: normalizeImageSlotConfig('qrImage', config?.qrImage),
-  })
+  }
 }
 
 async function ensureFixedLayoutDir() {
@@ -155,22 +141,9 @@ export async function writeFixedLayoutConfig(config) {
   return normalizedConfig
 }
 
-export async function updateFixedLayoutConfig({ endingText, imageSlots } = {}) {
+export async function updateFixedLayoutConfig({ imageSlots } = {}) {
   const previousConfig = await readFixedLayoutConfig()
   const nextConfig = cloneConfig(previousConfig)
-
-  if (typeof endingText === 'string') {
-    const content = normalizeFixedLayoutTextContent(endingText)
-
-    if (content.length > FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH) {
-      throw createFixedLayoutConfigError(`固定文案请控制在 ${FIXED_LAYOUT_ENDING_TEXT_MAX_LENGTH} 字以内。`)
-    }
-
-    nextConfig.endingText = {
-      content,
-      updatedAt: new Date().toISOString(),
-    }
-  }
 
   if (imageSlots && typeof imageSlots === 'object') {
     FIXED_LAYOUT_IMAGE_SLOT_IDS.forEach((slot) => {
@@ -188,7 +161,6 @@ export async function updateFixedLayoutConfig({ endingText, imageSlots } = {}) {
           Object.prototype.hasOwnProperty.call(slotPatch, 'asset')
             ? normalizeAssetRecord(slotPatch?.asset)
             : currentSlotConfig?.asset ?? null,
-        displayOrder: normalizeFixedLayoutDisplayOrder(slot, slotPatch?.displayOrder ?? currentSlotConfig?.displayOrder),
         spacingPreset: normalizeFixedLayoutSpacingPreset(slotPatch?.spacingPreset ?? currentSlotConfig?.spacingPreset),
         widthPx:
           slot === 'qrImage'

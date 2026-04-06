@@ -384,7 +384,6 @@ function fixedLayoutConfigDevApi() {
           if (req.method === 'PATCH' && pathname === '/') {
             const body = await readJsonBody(req)
             const result = await updateFixedLayoutConfig({
-              endingText: body?.endingText,
               imageSlots: body?.imageSlots,
             })
 

@@ -17,7 +17,6 @@ export default async function handler(request, response) {
   if (request.method === 'PATCH') {
     try {
       const result = await updateFixedLayoutConfig({
-        endingText: request.body?.endingText,
         imageSlots: request.body?.imageSlots,
       })
       response.status(200).json(result)
