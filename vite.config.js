@@ -18,6 +18,13 @@ import {
   readPersistedContentSessionPayload,
   writePersistedContentSessionPayload,
 } from './server/contentSessionPersistence.js'
+import { generateShortContent } from './server/shortContentGeneration.js'
+import {
+  deletePersistedShortContentPayload,
+  readPersistedShortContentPayload,
+  readShortContentPersistenceMeta,
+  writePersistedShortContentPayload,
+} from './server/shortContentSessionPersistence.js'
 import { parseRequestFormData } from './server/httpFormData.js'
 import {
   deleteFixedLayoutAsset,
@@ -506,6 +513,124 @@ function contentSessionsDevApi() {
   }
 }
 
+function shortContentDevApi(env) {
+  return {
+    name: 'short-content-dev-api',
+    configureServer(server) {
+      async function readJsonBody(req) {
+        const chunks = []
+
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+
+        return chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+      }
+
+      server.middlewares.use('/api/short-content/generate', async (req, res, next) => {
+        if (req.method !== 'POST') {
+          next()
+          return
+        }
+
+        try {
+          const body = await readJsonBody(req)
+          const result = await generateShortContent({
+            apiKey: env.MINIMAX_API_KEY,
+            existingContents: body?.existingContents ?? [],
+            model: body?.model || env.MINIMAX_MODEL,
+          })
+
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(result))
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error.message || '短文生成失败',
+              details: error.payload ?? null,
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
+function shortContentSessionsDevApi() {
+  return {
+    name: 'short-content-sessions-dev-api',
+    configureServer(server) {
+      async function readJsonBody(req) {
+        const chunks = []
+
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+
+        return chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+      }
+
+      server.middlewares.use('/api/short-content-sessions', async (req, res, next) => {
+        try {
+          if (req.method === 'GET' || req.method === 'HEAD') {
+            const payload = await readPersistedShortContentPayload()
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                ...(payload ?? { item: null, name: 'short-content-conversations-v1', updatedAt: null }),
+                meta: readShortContentPersistenceMeta(),
+              }),
+            )
+            return
+          }
+
+          if (req.method === 'PUT') {
+            const body = await readJsonBody(req)
+            const payload = await writePersistedShortContentPayload({
+              item: body?.item ?? null,
+              name: body?.name ?? 'short-content-conversations-v1',
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                ...payload,
+                meta: readShortContentPersistenceMeta(),
+              }),
+            )
+            return
+          }
+
+          if (req.method === 'DELETE') {
+            const payload = await deletePersistedShortContentPayload()
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(payload))
+            return
+          }
+
+          next()
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error.message || '短文本地历史记录请求失败',
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
 function wechatDraftDevApi() {
   return {
     name: 'wechat-draft-dev-api',
@@ -774,6 +899,8 @@ export default defineConfig(({ mode }) => {
       libraryAssetsDevApi(),
       fixedLayoutConfigDevApi(),
       contentSessionsDevApi(),
+      shortContentDevApi(runtimeEnv),
+      shortContentSessionsDevApi(),
       wechatDraftDevApi(),
       benchmarkPipelineDevApi(runtimeEnv),
     ],

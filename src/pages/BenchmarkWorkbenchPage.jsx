@@ -63,6 +63,7 @@ const ArticlesModuleCanvas = lazy(() => import('@/components/articles/ArticlesMo
 const AssetsModuleCanvas = lazy(() => import('@/components/assets/AssetsModuleCanvas.jsx'))
 const FixedLayoutConfigCanvas = lazy(() => import('@/components/fixed-layout/FixedLayoutConfigCanvas.jsx'))
 const PreviewWorkbench = lazy(() => import('@/components/workbench/PreviewWorkbench.jsx'))
+const ShortContentWorkspace = lazy(() => import('@/components/short-content/ShortContentWorkspace.jsx'))
 
 const reasoningModel = 'MiniMax-M2.7 深度模式'
 const highspeedModel = 'MiniMax-M2.7 标准模式'
@@ -125,6 +126,7 @@ const workbenchTabs = [
 ]
 
 const sidebarModules = [
+  { id: 'short-content', label: '短文生成', icon: MessageSquareText },
   { id: 'library', label: '选题库', icon: LibraryBig },
   { id: 'articles', label: '文章列表', icon: FileText },
   { id: 'assets', label: '素材库', icon: ImageIcon },
@@ -3643,23 +3645,25 @@ export default function BenchmarkWorkbenchPage() {
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
-        <div className="flex h-[76px] shrink-0 items-center justify-end bg-white px-6">
-          {isContentModule && !shouldRenderHero ? (
-            <button
-              aria-label={activeSession?.isWorkbenchOpen ? '收起右侧工作区' : '展开右侧工作区'}
-              className="inline-flex h-11 min-w-11 items-center justify-center rounded-2xl border border-border/80 bg-white px-3 text-muted-foreground transition-colors hover:text-foreground"
-              disabled={!hasWorkbenchOutputs}
-              onClick={handleToggleWorkbench}
-              type="button"
-            >
-              {activeSession?.isWorkbenchOpen ? (
-                <PanelRightClose className={cn(!hasWorkbenchOutputs && 'opacity-35')} size={18} strokeWidth={1.9} />
-              ) : (
-                <PanelRightOpen className={cn(!hasWorkbenchOutputs && 'opacity-35')} size={18} strokeWidth={1.9} />
-              )}
-            </button>
-          ) : null}
-        </div>
+        {activeModule !== 'short-content' ? (
+          <div className="flex h-[76px] shrink-0 items-center justify-end bg-white px-6">
+            {isContentModule && !shouldRenderHero ? (
+              <button
+                aria-label={activeSession?.isWorkbenchOpen ? '收起右侧工作区' : '展开右侧工作区'}
+                className="inline-flex h-11 min-w-11 items-center justify-center rounded-2xl border border-border/80 bg-white px-3 text-muted-foreground transition-colors hover:text-foreground"
+                disabled={!hasWorkbenchOutputs}
+                onClick={handleToggleWorkbench}
+                type="button"
+              >
+                {activeSession?.isWorkbenchOpen ? (
+                  <PanelRightClose className={cn(!hasWorkbenchOutputs && 'opacity-35')} size={18} strokeWidth={1.9} />
+                ) : (
+                  <PanelRightOpen className={cn(!hasWorkbenchOutputs && 'opacity-35')} size={18} strokeWidth={1.9} />
+                )}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <div ref={splitContainerRef} className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           <div
@@ -3669,7 +3673,20 @@ export default function BenchmarkWorkbenchPage() {
               width: showWorkbench ? `calc(100% - ${rightPaneWidth}px)` : '100%',
             }}
           >
-            {!isContentModule ? (
+            {activeModule === 'short-content' ? (
+              <Suspense
+                fallback={
+                  <div className="flex min-h-0 flex-1 items-center justify-center bg-white px-6">
+                    <div className="inline-flex items-center gap-2 text-[14px] text-muted-foreground">
+                      <LoaderCircle className="animate-spin" size={16} />
+                      正在加载短文工作区
+                    </div>
+                  </div>
+                }
+              >
+                <ShortContentWorkspace onShowPageToast={showPageToast} />
+              </Suspense>
+            ) : !isContentModule ? (
               activeModule === 'library' ? (
                 <Suspense
                   fallback={
