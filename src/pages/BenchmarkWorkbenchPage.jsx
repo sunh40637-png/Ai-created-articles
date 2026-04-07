@@ -1815,7 +1815,7 @@ function SessionSidebar({
 }) {
   if (isCollapsed) {
     return (
-      <aside className="flex h-full w-[68px] shrink-0 flex-col items-center bg-transparent px-1.5 py-2.5">
+      <aside className="flex h-full w-[58px] shrink-0 flex-col items-center bg-transparent px-1 py-2.5">
         <div className="flex w-full justify-center">
           <button
             aria-label="展开导航"
@@ -1869,8 +1869,8 @@ function SessionSidebar({
   }
 
   return (
-    <aside className="flex h-full w-[240px] shrink-0 flex-col bg-transparent px-2 py-2.5">
-      <div className="flex items-center justify-between gap-2">
+    <aside className="flex h-full w-[224px] shrink-0 flex-col bg-transparent px-1.5 py-2.5">
+      <div className="flex items-center justify-between gap-1.5">
         <SidebarBrand />
         <button
           aria-label="收起导航"
