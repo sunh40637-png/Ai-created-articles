@@ -185,7 +185,7 @@ function parsePlaceholderDraft(markdown = '') {
 
 function readPreviewSectionHeading(markdown = '') {
   const normalized = stripTemplateMarkers(markdown)
-  const match = normalized.match(/^##\s+(.+?)(?:\n|$)/)
+  const match = normalized.match(/^#{2,3}\s+(.+?)(?:\n|$)/)
 
   if (!match) {
     return null
@@ -261,7 +261,7 @@ function buildPreviewBlockMeta(markdown = '') {
       index,
       isDivider: isPreviewDividerBlock(rawBlock),
       isEndingMarker: rawBlock.trim() === '[ENDING]',
-      isHeading: /^##\s+/.test(cleanBlock),
+      isHeading: /^#{2,3}\s+/.test(cleanBlock),
       isTemplateMarker: isPreviewTemplateMarkerBlock(rawBlock),
       raw: rawBlock,
     }
