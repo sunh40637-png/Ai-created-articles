@@ -623,7 +623,7 @@ export default function PreviewWorkbench({
                 <button
                   className={cn(
                     'inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] transition-colors',
-                    previewDevice === item.id ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                    previewDevice === item.id ? 'bg-white text-foreground' : 'text-muted-foreground hover:text-foreground',
                   )}
                   key={item.id}
                   onClick={() => onSetPreviewDevice?.(item.id)}
@@ -640,7 +640,7 @@ export default function PreviewWorkbench({
                 <button
                   className={cn(
                     'inline-flex items-center rounded-full px-4 py-2 text-[13px] transition-colors',
-                    normalizedPreviewFontSize === item.id ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                    normalizedPreviewFontSize === item.id ? 'bg-white text-foreground' : 'text-muted-foreground hover:text-foreground',
                   )}
                   key={item.id}
                   onClick={() => onSetPreviewFontSize?.(item.id)}
@@ -675,7 +675,7 @@ export default function PreviewWorkbench({
               <TooltipTrigger asChild>
                 <span
                   className={cn(
-                    'inline-flex size-10 items-center justify-center rounded-full border shadow-sm',
+                    'inline-flex size-10 items-center justify-center rounded-full border',
                     syncIndicatorMeta.toneClassName,
                   )}
                 >
@@ -711,7 +711,7 @@ export default function PreviewWorkbench({
           </div>
         </div>
 
-        <div className="rounded-[22px] border border-border/70 bg-white px-5 py-4 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
+        <div className="rounded-[var(--radius-card)] border border-border/60 bg-white px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 text-[18px] font-semibold leading-[1.55] text-foreground">{displayTitle || '未命名标题'}</div>
             <Tooltip>
@@ -728,11 +728,11 @@ export default function PreviewWorkbench({
         <div className="flex justify-center">
           <div className={cn('w-full transition-all', previewViewportClassName)}>
             {canRenderStructuredPreview ? (
-              <div className="overflow-hidden rounded-none border border-border/70 bg-white shadow-[0_8px_24px_rgba(18,20,38,0.06)]">
+              <div className="overflow-hidden rounded-none border border-border/60 bg-white">
                 <ArticlePreviewFrame documentHtml={previewRenderResult.documentHtml} />
               </div>
             ) : (
-              <div className="rounded-[20px] border border-red-200 bg-red-50 px-5 py-4 text-red-700">
+              <div className="rounded-[var(--radius-panel)] border border-red-200 bg-red-50 px-5 py-4 text-red-700">
                 <div className="text-[14px] font-semibold">格式有问题，无法进入排版</div>
                 <div className="mt-2 text-[13px] leading-6 text-red-700/90">
                   {draftStructureState.issues.length > 0

@@ -1,6 +1,19 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  RiAddLine,
+  RiArticleLine,
+  RiBookOpenLine,
+  RiDeleteBinLine,
+  RiHistoryLine,
+  RiImageLine,
+  RiLayoutGridLine,
+  RiMenuFoldLine,
+  RiMenuUnfoldLine,
+  RiQuillPenLine,
+  RiSettings3Line,
+} from '@remixicon/react'
+import {
   ArrowDown,
   ArrowUp,
   Check,
@@ -10,24 +23,16 @@ import {
   Copy,
   FileText,
   History,
-  ImageIcon,
-  LibraryBig,
   LayoutTemplate,
   ListFilter,
   LoaderCircle,
   Maximize2,
-  MessageSquareText,
   Minimize2,
-  PanelLeftClose,
-  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   Paperclip,
-  Plus,
   ScrollText,
   Search,
-  Settings2,
-  Trash2,
   X,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
@@ -126,11 +131,11 @@ const workbenchTabs = [
 ]
 
 const sidebarModules = [
-  { id: 'short-content', label: '短文生成', icon: MessageSquareText },
-  { id: 'library', label: '选题库', icon: LibraryBig },
-  { id: 'articles', label: '文章列表', icon: FileText },
-  { id: 'assets', label: '素材库', icon: ImageIcon },
-  { id: 'fixed-layout', label: '模板配置', icon: Settings2 },
+  { id: 'short-content', label: '短文生成', icon: RiQuillPenLine },
+  { id: 'library', label: '选题库', icon: RiBookOpenLine },
+  { id: 'articles', label: '文章列表', icon: RiArticleLine },
+  { id: 'assets', label: '素材库', icon: RiImageLine },
+  { id: 'fixed-layout', label: '模板配置', icon: RiLayoutGridLine },
 ]
 
 const TOPIC_STATUS_META = {
@@ -221,7 +226,7 @@ const draftMarkdownComponents = {
   img: ({ node, alt = '', src = '', ...props }) => (
     <img
       alt={alt}
-      className="mt-8 block w-full rounded-[24px] border border-border/50 object-cover shadow-[0_16px_48px_rgba(15,23,42,0.06)]"
+      className="mt-8 block w-full rounded-[24px] border border-border/50 object-cover"
       loading="lazy"
       src={src}
       {...props}
@@ -1188,7 +1193,7 @@ function ThinkingToggle({ checked, onChange }) {
         <span
           className={cn(
             'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-            checked ? 'bg-[#171b22]' : 'bg-secondary',
+            checked ? 'bg-[#7C5CFC]' : 'bg-secondary',
           )}
         >
           <span
@@ -1205,7 +1210,7 @@ function ThinkingToggle({ checked, onChange }) {
           <span className="cursor-default text-[12px] text-foreground">深度思考</span>
         </TooltipTrigger>
         <TooltipContent
-          className="max-w-[260px] items-start rounded-xl bg-[#171b22] px-3 py-2 text-[12px] leading-5 text-white"
+          className="max-w-[260px] items-start rounded-xl bg-[#2D1B69] px-3 py-2 text-[12px] leading-5 text-white"
           side="top"
           sideOffset={8}
         >
@@ -1262,7 +1267,7 @@ function QuickMessageMenu({ disabled = false, onSelect }) {
 
       {!disabled ? (
         <div className="pointer-events-none absolute bottom-full right-0 z-30 mb-2 w-[296px] opacity-0 transition-all duration-150 group-hover/quick:pointer-events-auto group-hover/quick:opacity-100">
-          <div className="rounded-2xl border border-border/80 bg-white p-2 shadow-[0_14px_32px_rgba(15,23,42,0.06)]">
+          <div className="rounded-[var(--radius-card)] border border-border/70 bg-white p-2">
             <div className="space-y-1.5">
               {quickMessageItems.map((item) => (
                 <QuickMessageItem
@@ -1295,16 +1300,17 @@ function SearchField({ onChange, value }) {
   )
 }
 
-function PlaceholderAvatar({ compact = false }) {
+function SidebarBrand({ compact = false }) {
   return (
-    <div
+    <span
       className={cn(
-        'relative overflow-hidden rounded-full border border-white/80 bg-white shadow-[0_10px_22px_rgba(15,23,42,0.08)]',
-        compact ? 'h-11 w-11' : 'h-12 w-12',
+        'font-semibold tracking-[0.18em] text-primary',
+        compact ? 'pl-[0.18em] text-[14px]' : 'text-[16px]',
       )}
+      style={{ fontFamily: 'Orbitron, Geist Variable, sans-serif' }}
     >
-      <img alt="内容创作头像" className="h-full w-full object-cover" src="/sidebar-avatar.png" />
-    </div>
+      {compact ? 'C' : 'CREATE'}
+    </span>
   )
 }
 
@@ -1314,10 +1320,10 @@ function SidebarRailButton({ children, label, onClick, popup, selected = false, 
       <button
         aria-label={label}
         className={cn(
-          'inline-flex h-11 w-11 items-center justify-center rounded-[14px] border transition-all',
+          'inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-control)] border transition-colors',
           selected
-            ? 'border-border/80 bg-white text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.04)]'
-            : 'border-transparent bg-transparent text-muted-foreground hover:border-border/70 hover:bg-white hover:text-foreground',
+            ? 'border-primary/24 bg-primary/[0.08] text-primary'
+            : 'border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-white hover:text-foreground',
         )}
         onClick={onClick}
         type={type}
@@ -1331,13 +1337,13 @@ function SidebarRailButton({ children, label, onClick, popup, selected = false, 
 
 function HistoryHoverCard({ activeSessionId, onSelectSession, sessions }) {
   return (
-    <div className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-40 w-[280px] -translate-y-1/2 rounded-[18px] border border-border/80 bg-white p-4 opacity-0 shadow-[0_24px_60px_rgba(15,23,42,0.14)] transition-all duration-150 group-hover/history-card:pointer-events-auto group-hover/history-card:opacity-100">
+    <div className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-40 w-[280px] -translate-y-1/2 rounded-[var(--radius-control)] border border-border/70 bg-white p-4 opacity-0 transition-all duration-150 group-hover/history-card:pointer-events-auto group-hover/history-card:opacity-100">
       <div className="relative">
         <span className="absolute left-[-15px] top-[-18px] h-[calc(100%+36px)] w-5" aria-hidden="true" />
         <span className="absolute left-[-15px] top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 rounded-[3px] border-l border-t border-border/80 bg-white" />
         <div className="text-[12px] font-medium tracking-[0.08em] text-muted-foreground">历史记录</div>
         {sessions.length === 0 ? (
-          <div className="mt-4 rounded-[16px] border border-border/70 bg-secondary/20 px-4 py-10 text-center text-[14px] text-muted-foreground">
+          <div className="mt-4 rounded-[var(--radius-control)] border border-border/70 bg-secondary/20 px-4 py-10 text-center text-[14px] text-muted-foreground">
             暂无历史对话
           </div>
         ) : (
@@ -1345,7 +1351,7 @@ function HistoryHoverCard({ activeSessionId, onSelectSession, sessions }) {
             {sessions.slice(0, 8).map((session) => (
               <button
                 className={cn(
-                  'flex w-full items-center justify-between rounded-[14px] px-3 py-2.5 text-left text-[14px] transition-colors',
+                  'flex w-full items-center justify-between rounded-[var(--radius-control)] px-3 py-1.5 text-left text-[13px] transition-colors',
                   session.id === activeSessionId ? 'bg-secondary text-foreground' : 'text-foreground/84 hover:bg-secondary/35',
                 )}
                 key={session.id}
@@ -1366,14 +1372,16 @@ function SidebarExpandedItem({ icon: Icon, label, onClick, selected = false }) {
   return (
     <button
       className={cn(
-        'flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left transition-colors',
-        selected ? 'bg-white text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.05)]' : 'text-foreground/82 hover:bg-white/80',
+        'flex w-full items-center gap-2.5 rounded-[var(--radius-control)] border px-3 py-1.5 text-left transition-colors',
+        selected
+          ? 'border-primary/24 bg-primary/[0.08] text-primary'
+          : 'border-transparent text-foreground/82 hover:border-border/80 hover:bg-white',
       )}
       onClick={onClick}
       type="button"
     >
-      <Icon className={cn(selected ? 'text-foreground' : 'text-muted-foreground')} size={20} strokeWidth={1.9} />
-      <span className="text-[14px] font-medium">{label}</span>
+      <Icon className={cn('size-[17px]', selected ? 'text-primary' : 'text-muted-foreground')} />
+      <span className="text-[13px] font-medium">{label}</span>
     </button>
   )
 }
@@ -1384,10 +1392,10 @@ function TopicCard({ disabled = false, isSelected, onSelect, topic, topicStatus 
   return (
     <button
       className={cn(
-        'w-full rounded-[24px] border px-5 py-5 text-left transition-all',
+        'w-full rounded-[var(--radius-panel)] border px-5 py-5 text-left transition-colors',
         isSelected
-          ? 'border-primary/30 bg-primary/5 shadow-[0_10px_30px_rgba(14,159,110,0.08)]'
-          : 'border-border/70 bg-white hover:border-foreground/15 hover:bg-secondary/25',
+          ? 'border-primary/30 bg-primary/[0.05]'
+          : 'border-border/70 bg-white hover:border-primary/22',
         disabled && 'cursor-not-allowed opacity-65',
       )}
       disabled={disabled}
@@ -1460,7 +1468,7 @@ function WorkflowTimeline({ flow }) {
             <span
               className={cn(
                 'absolute left-0 top-1.5 inline-flex size-[18px] items-center justify-center rounded-full border bg-white',
-                isRunning && 'border-primary/25 text-primary shadow-[0_0_0_4px_rgba(14,159,110,0.08)]',
+                isRunning && 'border-primary/25 text-primary',
                 isDone && 'border-foreground/10 text-foreground',
                 isSkipped && 'border-border/80 text-muted-foreground',
                 isFailed && 'border-red-200 text-red-600',
@@ -1565,10 +1573,8 @@ function TopicStageCard({
   }
 
   return (
-    <div className="rounded-[30px] border border-border/70 bg-white p-5 shadow-[0_24px_50px_rgba(15,23,42,0.04)]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-[22px] font-semibold text-foreground">选题确认</h3>
-
+    <div className="w-full">
+      <div className="flex flex-wrap items-center justify-center gap-3 sm:justify-end">
         <div className="relative" ref={filterPopoverRef}>
           <button
             className={cn(
@@ -1584,7 +1590,7 @@ function TopicStageCard({
             type="button"
           >
             <ListFilter size={14} />
-            <span>筛选</span>
+            <span>筛选选题</span>
             {filterTypes.length > 0 ? (
               <>
                 <span className="rounded-full bg-white/14 px-1.5 py-0.5 text-[11px] leading-none text-white">
@@ -1603,7 +1609,7 @@ function TopicStageCard({
           </button>
 
           {isFilterOpen ? (
-            <div className="absolute right-0 top-[calc(100%+10px)] z-30 w-[300px] rounded-[22px] border border-border/80 bg-white p-4 shadow-[0_24px_60px_rgba(15,23,42,0.12)]">
+            <div className="absolute right-0 top-[calc(100%+10px)] z-30 w-[300px] rounded-[var(--radius-card)] border border-border/70 bg-white p-4">
               <div className="text-[14px] font-medium text-foreground">筛选预设选题</div>
               <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
                 根据文章类型筛选当前预设选题，最多选择 3 个不同类型。
@@ -1651,9 +1657,9 @@ function TopicStageCard({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 xl:grid-cols-2">
+      <div className="mt-6 grid gap-3 xl:grid-cols-2">
         {recommendations.length === 0 ? (
-          <div className="col-span-full rounded-[24px] border border-dashed border-border/80 bg-secondary/15 px-5 py-14 text-center text-[14px] text-muted-foreground">
+          <div className="col-span-full rounded-[var(--radius-panel)] border border-dashed border-border/80 bg-secondary/15 px-5 py-14 text-center text-[14px] text-muted-foreground">
             当前筛选条件下暂无预设选题，换一个类型再试试。
           </div>
         ) : (
@@ -1716,12 +1722,12 @@ function DraftStageCard({ activeVersion, onProceedWithoutChanges, onOpenTab, onR
   }
 
   return (
-    <div className="rounded-[28px] border border-border/70 bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.04)]">
+    <div className="rounded-[var(--radius-panel)] border border-border/60 bg-white p-5">
       <div className="max-w-[640px]">
         <h3 className="text-[22px] font-semibold text-foreground">文字稿确认</h3>
       </div>
 
-      <div className="mt-6 rounded-[24px] border border-border/70 bg-secondary/35 px-4 py-5 sm:px-5">
+      <div className="mt-6 rounded-[var(--radius-panel)] border border-border/70 bg-secondary/35 px-4 py-5 sm:px-5">
         <div className="flex flex-col gap-5">
           <div>
             <p className="text-[15px] font-medium text-foreground">右侧已更新当前版本</p>
@@ -1729,7 +1735,7 @@ function DraftStageCard({ activeVersion, onProceedWithoutChanges, onOpenTab, onR
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button className="rounded-full bg-[#171b22] px-5 text-white hover:bg-black" onClick={onProceedWithoutChanges} type="button">
+            <Button className="rounded-full bg-gradient-to-r from-[#7C5CFC] to-[#9B7FFF] px-5 text-white" onClick={onProceedWithoutChanges} type="button">
               无需修改
             </Button>
             <Button className="rounded-full" onClick={onRewriteAll} type="button" variant="outline">
@@ -1744,12 +1750,12 @@ function DraftStageCard({ activeVersion, onProceedWithoutChanges, onOpenTab, onR
 
 function PreviewStageCard({ onConfirm, onOpenTab }) {
   return (
-    <div className="rounded-[28px] border border-border/70 bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.04)]">
+    <div className="rounded-[var(--radius-panel)] border border-border/60 bg-white p-5">
       <div className="max-w-[640px]">
         <h3 className="text-[22px] font-semibold text-foreground">排版效果确认</h3>
       </div>
 
-      <div className="mt-6 rounded-[24px] border border-border/70 bg-secondary/35 px-4 py-5 sm:px-5">
+      <div className="mt-6 rounded-[var(--radius-panel)] border border-border/70 bg-secondary/35 px-4 py-5 sm:px-5">
         <div className="flex flex-col gap-5">
           <div>
             <p className="text-[15px] font-medium text-foreground">右侧已更新排版预览</p>
@@ -1757,7 +1763,7 @@ function PreviewStageCard({ onConfirm, onOpenTab }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button className="rounded-full bg-[#171b22] px-5 text-white hover:bg-black" onClick={onConfirm} type="button">
+            <Button className="rounded-full bg-gradient-to-r from-[#7C5CFC] to-[#9B7FFF] px-5 text-white" onClick={onConfirm} type="button">
               确认排版
             </Button>
             <Button className="rounded-full" onClick={() => onOpenTab('preview')} type="button" variant="outline">
@@ -1772,7 +1778,7 @@ function PreviewStageCard({ onConfirm, onOpenTab }) {
 
 function CompletedStageCard({ onOpenTab }) {
   return (
-    <div className="rounded-[28px] border border-border/70 bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.04)]">
+    <div className="rounded-[var(--radius-panel)] border border-border/60 bg-white p-5">
       <div className="flex items-center gap-2 text-[12px] font-medium tracking-[0.08em] text-muted-foreground">
         当前版本已完成
         <CheckCircle2 className="text-primary" size={14} />
@@ -1809,21 +1815,21 @@ function SessionSidebar({
 }) {
   if (isCollapsed) {
     return (
-      <aside className="relative flex h-full w-[88px] shrink-0 flex-col items-center border-r border-border/70 bg-[#f5f5f5] px-3 py-4">
+      <aside className="flex h-full w-[68px] shrink-0 flex-col items-center bg-transparent px-1.5 py-2.5">
         <div className="flex w-full justify-center">
           <button
             aria-label="展开导航"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-border/70 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.05)] transition-colors hover:border-foreground/15 hover:bg-secondary/45"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-control)] border border-border/80 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:text-foreground"
             onClick={onToggleCollapsed}
             type="button"
           >
-            <PanelLeftOpen size={18} strokeWidth={1.9} />
+            <RiMenuUnfoldLine className="size-[18px]" />
           </button>
         </div>
 
-        <div className="mt-7 flex w-full flex-col items-center gap-2">
+        <div className="mt-4 flex w-full flex-col items-center gap-0.5">
           <SidebarRailButton label="新建" onClick={onCreateSession} selected={activeModule === 'content'}>
-            <Plus size={20} strokeWidth={1.9} />
+            <RiAddLine className="size-[18px]" />
           </SidebarRailButton>
 
           {sidebarModules.map((module) => (
@@ -1833,14 +1839,14 @@ function SessionSidebar({
               onClick={() => onChangeModule(module.id)}
               selected={activeModule === module.id}
             >
-              <module.icon size={20} strokeWidth={1.9} />
+              <module.icon className="size-[18px]" />
             </SidebarRailButton>
           ))}
         </div>
 
-        <div className="mt-6 h-px w-10 rounded-full bg-border/70" />
+        <div className="mt-4 h-px w-8 rounded-full bg-border/70" />
 
-        <div className="mt-4">
+        <div className="mt-3">
           <div className="group/history-card relative">
             <span className="absolute left-full top-[-18px] h-[84px] w-5" aria-hidden="true" />
             <SidebarRailButton
@@ -1854,7 +1860,7 @@ function SessionSidebar({
                 />
               }
             >
-              <History size={20} strokeWidth={1.9} />
+              <RiHistoryLine className="size-[18px]" />
             </SidebarRailButton>
           </div>
         </div>
@@ -1863,27 +1869,21 @@ function SessionSidebar({
   }
 
   return (
-    <aside className="flex h-full w-[320px] shrink-0 flex-col border-r border-border/70 bg-[#f5f5f5] px-4 py-5">
-      <div className="flex items-center gap-3">
+    <aside className="flex h-full w-[240px] shrink-0 flex-col bg-transparent px-2 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <SidebarBrand />
         <button
           aria-label="收起导航"
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-border/70 bg-white text-muted-foreground shadow-[0_8px_18px_rgba(15,23,42,0.05)] transition-colors hover:border-foreground/15 hover:bg-secondary/45 hover:text-foreground"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-border/80 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:text-foreground"
           onClick={onToggleCollapsed}
           type="button"
         >
-          <PanelLeftClose size={18} strokeWidth={1.9} />
+          <RiMenuFoldLine className="size-[18px]" />
         </button>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-            <PlaceholderAvatar />
-            <div className="truncate text-[14px] font-medium text-foreground">内容创作</div>
-          </div>
-        </div>
       </div>
 
-      <div className="mt-8 space-y-1.5">
-        <SidebarExpandedItem icon={Plus} label="新建" onClick={onCreateSession} selected={activeModule === 'content'} />
+      <div className="mt-4 space-y-0.5">
+        <SidebarExpandedItem icon={RiAddLine} label="新建" onClick={onCreateSession} selected={activeModule === 'content'} />
         {sidebarModules.map((module) => (
           <SidebarExpandedItem
             icon={module.icon}
@@ -1895,11 +1895,14 @@ function SessionSidebar({
         ))}
       </div>
 
-      <div className="mt-8 text-[12px] font-medium tracking-[0.08em] text-muted-foreground">AI 对话历史</div>
+      <div className="mt-5 flex items-center justify-between">
+        <div className="text-[12px] font-medium tracking-[0.08em] text-muted-foreground">AI 对话历史</div>
+        <RiSettings3Line className="size-[15px] text-muted-foreground" />
+      </div>
 
       <div className="benchmark-scroll-hidden mt-3 min-h-0 flex-1 overflow-y-auto pb-4">
         {sessions.length === 0 ? (
-          <div className="rounded-[16px] border border-border/70 bg-white px-4 py-10 text-center text-[14px] text-muted-foreground shadow-[0_8px_18px_rgba(15,23,42,0.04)]">
+          <div className="rounded-[var(--radius-control)] border border-border/70 bg-white px-4 py-10 text-center text-[14px] text-muted-foreground">
             暂无历史对话
           </div>
         ) : (
@@ -1907,16 +1910,16 @@ function SessionSidebar({
             {sessions.map((session) => (
               <div
                 className={cn(
-                  'group/session flex items-center gap-2 rounded-[14px] border px-3 py-2.5 transition-colors',
+                  'group/session flex items-center gap-2 rounded-[var(--radius-control)] border px-3 py-1.5 transition-colors',
                   session.id === activeSessionId
-                    ? 'border-border/80 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.04)]'
+                    ? 'border-border/80 bg-white'
                     : 'border-transparent bg-transparent hover:border-border/70 hover:bg-white/75',
                 )}
                 key={session.id}
               >
                 <button
                   className={cn(
-                    'min-w-0 flex-1 text-left text-[14px] transition-colors',
+                    'min-w-0 flex-1 text-left text-[13px] leading-5 transition-colors',
                     session.id === activeSessionId ? 'text-foreground' : 'text-foreground/78 group-hover/session:text-foreground',
                   )}
                   onClick={() => onSelectSession(session.id)}
@@ -1928,14 +1931,14 @@ function SessionSidebar({
 
                 <button
                   aria-label={`删除 ${session.title}`}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-all hover:bg-secondary hover:text-foreground group-hover/session:opacity-100"
+                  className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-all hover:bg-secondary hover:text-foreground group-hover/session:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation()
                     onDeleteSession(session)
                   }}
                   type="button"
                 >
-                  <Trash2 size={14} />
+                  <RiDeleteBinLine className="size-[15px]" />
                 </button>
               </div>
             ))}
@@ -1958,7 +1961,7 @@ function DeleteSessionDialog({ onClose, onConfirm, open, sessionTitle }) {
       role="presentation"
     >
       <div
-        className="w-full max-w-[460px] overflow-hidden rounded-[26px] border border-white/80 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.16)]"
+        className="w-full max-w-[460px] overflow-hidden rounded-[var(--radius-panel)] border border-white/80 bg-white"
         onClick={(event) => event.stopPropagation()}
         role="presentation"
       >
@@ -1972,7 +1975,7 @@ function DeleteSessionDialog({ onClose, onConfirm, open, sessionTitle }) {
             </p>
           </div>
           <button
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-white text-muted-foreground shadow-sm transition-all hover:-translate-y-px hover:border-foreground/15 hover:bg-slate-50 hover:text-foreground"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:bg-slate-50 hover:text-foreground"
             onClick={onClose}
             type="button"
           >
@@ -1982,7 +1985,7 @@ function DeleteSessionDialog({ onClose, onConfirm, open, sessionTitle }) {
 
         <div className="flex flex-col-reverse gap-3 px-6 pb-6 pt-6 sm:flex-row sm:justify-end">
           <Button
-            className="h-11 rounded-xl border border-border/70 bg-white px-5 shadow-sm transition-all hover:-translate-y-px hover:border-foreground/15 hover:bg-slate-50 hover:text-foreground"
+            className="h-11 rounded-xl border border-border/70 bg-white px-5 transition-colors hover:border-foreground/15 hover:bg-slate-50 hover:text-foreground"
             onClick={onClose}
             type="button"
             variant="outline"
@@ -1990,7 +1993,7 @@ function DeleteSessionDialog({ onClose, onConfirm, open, sessionTitle }) {
             取消
           </Button>
           <Button
-            className="h-11 rounded-xl bg-[#171b22] px-5 text-white shadow-none transition-all hover:-translate-y-px hover:bg-black"
+            className="h-11 rounded-xl bg-gradient-to-r from-[#7C5CFC] to-[#9B7FFF] px-5 text-white"
             onClick={onConfirm}
             type="button"
           >
@@ -2025,7 +2028,7 @@ function MessageBubble({ copiedMessageId, message, onCopy }) {
         className={cn(
           'text-[15px] leading-[1.7] text-foreground sm:text-[16px]',
           hasWorkflow && 'max-w-[720px]',
-          isUser && 'ml-auto w-fit max-w-full rounded-[24px] bg-secondary/65 px-6 py-5 text-left font-medium',
+          isUser && 'ml-auto w-fit max-w-full rounded-[var(--radius-panel)] bg-secondary/65 px-6 py-5 text-left font-medium',
         )}
       >
         {isAssistant ? renderMarkdownBlock(message.content) : message.content}
@@ -2120,8 +2123,8 @@ function VersionsWorkbench({ activeVersionId, onSelectVersion, versions }) {
         .map((version) => (
           <div
             className={cn(
-              'rounded-[26px] border p-5 transition-colors',
-              version.id === activeVersionId ? 'border-primary/20 bg-primary/5' : 'border-border/70 bg-white',
+              'rounded-[var(--radius-panel)] border p-5 transition-colors',
+              version.id === activeVersionId ? 'border-primary/20 bg-primary/5' : 'border-border/60 bg-white',
             )}
             key={version.id}
           >
@@ -2234,7 +2237,7 @@ function RightWorkbenchShell({
     <aside
       className={cn(
         'flex min-h-0 flex-col overflow-hidden bg-white',
-        isFullscreen ? 'fixed inset-0 z-50 rounded-none border-none' : 'h-full rounded-tl-[30px] border-l border-t border-border/70',
+        isFullscreen ? 'fixed inset-0 z-50 rounded-none border-none' : 'h-full rounded-tl-[20px] border-l border-t border-border/60',
       )}
     >
       <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
@@ -2354,7 +2357,7 @@ function ArticlePreviewDrawer({ onClose, onCopyTitleSuccess, onSetPreviewDevice,
     <div className="fixed inset-0 z-50 flex justify-end overscroll-none bg-slate-950/18 backdrop-blur-[6px]" onClick={onClose} role="presentation">
       <aside
         className={cn(
-          'flex h-full w-full flex-col overflow-hidden overscroll-contain bg-white shadow-[-20px_0_60px_rgba(15,23,42,0.14)]',
+          'flex h-full w-full flex-col overflow-hidden overscroll-contain bg-white',
           isFullscreen ? 'sm:w-full' : 'sm:w-[80vw]',
         )}
         onClick={(event) => event.stopPropagation()}
@@ -3629,7 +3632,7 @@ export default function BenchmarkWorkbenchPage() {
   }
 
   return (
-    <section className="flex h-screen min-h-0 overflow-hidden bg-white">
+    <section className="flex h-screen min-h-0 gap-3 overflow-hidden bg-[#edf1f5] p-3">
       <SessionSidebar
         activeModule={activeModule}
         activeSessionId={currentSessionId}
@@ -3644,7 +3647,7 @@ export default function BenchmarkWorkbenchPage() {
         sessions={historySessions}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-shell)] border border-border/70 bg-white">
         {activeModule !== 'short-content' ? (
           <div className="flex h-[76px] shrink-0 items-center justify-end bg-white px-6">
             {isContentModule && !shouldRenderHero ? (
@@ -3744,10 +3747,10 @@ export default function BenchmarkWorkbenchPage() {
               <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto">
                 <div className="mx-auto flex w-full max-w-[1240px] flex-col items-center px-6 py-8 sm:px-8 lg:px-12">
                   <div className="max-w-[880px] text-center">
-                    <h1 className="text-[34px] font-semibold tracking-[-0.03em] text-foreground sm:text-[42px]">
+                    <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-foreground sm:text-[32px]">
                       开始内容创作
                     </h1>
-                    <p className="mx-auto mt-3 max-w-[820px] text-[15px] leading-7 text-muted-foreground">
+                    <p className="mx-auto mt-3 max-w-[720px] text-[14px] leading-6 text-muted-foreground">
                       系统会优先从未进入创作的选题里随机加载 6 个预设选题。你也可以按类型筛选后翻页查看更多选题。
                     </p>
                   </div>
@@ -3804,7 +3807,7 @@ export default function BenchmarkWorkbenchPage() {
 
                 <footer className="shrink-0 bg-white pb-3 pt-1 sm:pb-5">
                   <form className="mx-auto w-full max-w-[1120px]" onSubmit={handleSubmit}>
-                    <div className="rounded-[24px] border border-border/80 bg-white px-4 py-3">
+                    <div className="rounded-[var(--radius-panel)] border border-border/80 bg-white px-4 py-3">
                       <Textarea
                         className="benchmark-scroll-hidden max-h-[68px] min-h-[58px] resize-none border-0 bg-transparent px-1 py-2 text-[15px] leading-[1.5] shadow-none focus-visible:border-0 focus-visible:ring-0 sm:text-[15px]"
                         disabled={composerDisabled}
@@ -3827,7 +3830,7 @@ export default function BenchmarkWorkbenchPage() {
                             {activeSession?.deepThinkingEnabled ? reasoningModel : highspeedModel}
                           </div>
                           <Button
-                            className="size-10 rounded-full bg-[#171b22] text-white shadow-none hover:bg-black"
+                            className="size-10 rounded-full bg-gradient-to-br from-[#7C5CFC] to-[#9B7FFF] text-white"
                             disabled={!canSend}
                             size="icon-lg"
                             type="submit"
@@ -3855,7 +3858,7 @@ export default function BenchmarkWorkbenchPage() {
                 type="button"
               >
                 <span className="absolute bottom-0 left-1/2 top-8 w-px -translate-x-1/2 bg-border/80 transition-colors group-hover:bg-foreground/35" />
-                <span className="absolute left-1/2 top-1/2 h-10 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border/80 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.05)] transition-colors group-hover:border-foreground/20">
+                <span className="absolute left-1/2 top-1/2 h-10 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border/80 bg-white transition-colors group-hover:border-foreground/20">
                   <span className="absolute inset-x-[3px] top-1/2 h-4 -translate-y-1/2 rounded-full bg-secondary/90" />
                 </span>
               </button>
@@ -3924,7 +3927,7 @@ export default function BenchmarkWorkbenchPage() {
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[80] flex justify-center px-4">
           <div
             className={cn(
-              'inline-flex max-w-[520px] items-center gap-2 rounded-full bg-white px-4 py-2 shadow-[0_12px_36px_rgba(16,24,40,0.12)]',
+              'inline-flex max-w-[520px] items-center gap-2 rounded-full bg-white px-4 py-2',
               pageToast.tone === 'error' ? 'border border-red-200/80' : 'border border-emerald-200/80',
             )}
           >

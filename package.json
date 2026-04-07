@@ -13,6 +13,7 @@
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",
     "@fontsource/orbitron": "^5.2.8",
+    "@remixicon/react": "^4.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.554.0",

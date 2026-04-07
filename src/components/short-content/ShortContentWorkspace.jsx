@@ -132,7 +132,7 @@ function ConversationGroup({ activeConversationId, items, label, onSelectConvers
       <div className="mb-2 px-2 text-[11px] font-medium tracking-[0.08em] text-muted-foreground">{label}</div>
 
       {items.length === 0 ? (
-        <div className="rounded-[16px] border border-dashed border-border/80 bg-white/70 px-4 py-4 text-[13px] text-muted-foreground">
+        <div className="rounded-[var(--radius-card)] border border-dashed border-border/80 bg-white/70 px-4 py-4 text-[13px] text-muted-foreground">
           暂无{label}
         </div>
       ) : (
@@ -144,7 +144,7 @@ function ConversationGroup({ activeConversationId, items, label, onSelectConvers
             return (
               <button
                 className={cn(
-                  'w-full rounded-[16px] border px-4 py-3 text-left transition-colors',
+                  'w-full rounded-[var(--radius-card)] border px-4 py-3 text-left transition-colors',
                   isActive
                     ? 'border-border bg-white'
                     : 'border-transparent bg-white/70 hover:border-border/80 hover:bg-white',
@@ -351,7 +351,7 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
         <aside className="flex w-full shrink-0 flex-row items-center gap-3 border-b border-border/70 bg-[#f5f5f5] px-3 py-4 lg:w-[84px] lg:flex-col lg:border-b-0 lg:border-r">
           <button
             aria-label="展开对话列表"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-border/70 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:bg-secondary/45 hover:text-foreground"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] border border-border/70 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:bg-secondary/45 hover:text-foreground"
             onClick={() => setConversationPaneCollapsed(false)}
             type="button"
           >
@@ -359,7 +359,7 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
           </button>
           <button
             aria-label="新建短文对话"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-border/70 bg-[#07c160] text-white transition-transform hover:scale-[1.02] hover:bg-[#06ad56]"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] border border-border/70 bg-[#07c160] text-white transition-transform hover:scale-[1.02] hover:bg-[#06ad56]"
             onClick={handleCreateConversation}
             type="button"
           >
@@ -371,7 +371,7 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
           <div className="flex items-center gap-3">
             <button
               aria-label="收起对话列表"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-border/70 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:bg-secondary/45 hover:text-foreground"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-border/70 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:bg-secondary/45 hover:text-foreground"
               onClick={() => setConversationPaneCollapsed(true)}
               type="button"
             >
@@ -385,7 +385,7 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
 
             <button
               aria-label="新建短文对话"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-[#07c160]/25 bg-[#07c160] text-white transition-transform hover:scale-[1.02] hover:bg-[#06ad56]"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-[#07c160]/25 bg-[#07c160] text-white transition-transform hover:scale-[1.02] hover:bg-[#06ad56]"
               onClick={handleCreateConversation}
               type="button"
             >
@@ -412,7 +412,7 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#ededed]">
         <div className="mx-auto flex min-h-0 w-full max-w-[1120px] flex-1 flex-col px-4 py-4 sm:px-6">
-          <div className="flex min-h-0 flex-1 flex-col rounded-[28px] border border-border/70 bg-white">
+          <div className="flex min-h-0 flex-1 flex-col rounded-[var(--radius-shell)] border border-border/70 bg-white">
             {activeConversation?.versions.length > 0 ? (
               <div className="border-b border-border/70 px-4 py-4 sm:px-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -484,7 +484,7 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {activeConversation?.versions.length === 0 ? (
                 <div className="flex h-full min-h-[480px] flex-col items-center justify-center px-6 text-center">
-                  <div className="inline-flex h-16 w-16 items-center justify-center rounded-[22px] bg-[#07c160]/10 text-[#07c160]">
+                  <div className="inline-flex h-16 w-16 items-center justify-center rounded-[var(--radius-panel)] bg-[#07c160]/10 text-[#07c160]">
                     {isGenerating ? <LoaderCircle className="animate-spin" size={30} /> : <MessageSquareText size={30} />}
                   </div>
 
@@ -503,7 +503,7 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
                   </Button>
 
                   {activeConversation?.generationStatus === 'error' && activeConversation.generationError ? (
-                    <div className="mt-4 max-w-[560px] rounded-[18px] border border-red-200/80 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+                    <div className="mt-4 max-w-[560px] rounded-[var(--radius-panel)] border border-red-200/80 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
                       {activeConversation.generationError}
                     </div>
                   ) : null}
@@ -511,7 +511,7 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
               ) : (
                 <div className="mx-auto flex w-full max-w-[760px] flex-col px-5 py-6 sm:px-8 sm:py-8">
                   {activeConversation?.generationStatus === 'error' && activeConversation.generationError ? (
-                    <div className="mb-5 rounded-[18px] border border-red-200/80 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+                    <div className="mb-5 rounded-[var(--radius-panel)] border border-red-200/80 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
                       {activeConversation.generationError}
                     </div>
                   ) : null}
@@ -533,7 +533,7 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
                     </div>
                   </div>
 
-                  <article className="rounded-[28px] border border-border/70 bg-[#fffdf9] px-5 py-6 sm:px-8 sm:py-8">
+                  <article className="rounded-[var(--radius-shell)] border border-border/70 bg-[#fffdf9] px-5 py-6 sm:px-8 sm:py-8">
                     {paragraphs.map((paragraph, index) => (
                       <p
                         className="mt-6 text-[16px] leading-[2.1] tracking-[0.01em] text-foreground first:mt-0 sm:text-[17px]"
