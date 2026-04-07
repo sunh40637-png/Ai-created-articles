@@ -255,7 +255,7 @@ function FixedLayoutImageLightbox({ asset, onClose }) {
             src={assetSrc}
           />
         ) : (
-          <div className="flex min-h-[320px] w-full max-w-[960px] items-center justify-center rounded-[18px] border border-white/10 bg-white/6 px-6 text-center text-[15px] text-white/68">
+          <div className="flex min-h-[320px] w-full max-w-[960px] items-center justify-center rounded-[16px] border border-white/10 bg-white/6 px-6 text-center text-[15px] text-white/68">
             图片已移除
           </div>
         )}
@@ -323,7 +323,7 @@ function FixedLayoutImageSlotCard({
   return (
     <article
       className={cn(
-        'rounded-[22px] border border-border/70 bg-white p-4 transition-all',
+        'rounded-[18px] border border-border/70 bg-white p-4 transition-all',
         selected ? 'bg-secondary/10 shadow-[0_16px_28px_rgba(15,23,42,0.08)]' : '',
       )}
     >
@@ -339,7 +339,7 @@ function FixedLayoutImageSlotCard({
 
       <div className="mt-4 flex items-start gap-4">
         <button
-          className="group relative inline-flex h-[92px] w-[132px] shrink-0 items-center justify-center overflow-hidden rounded-[12px] border border-border/70 bg-secondary/20"
+          className="group relative inline-flex h-[92px] w-[132px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-border/70 bg-secondary/20"
           disabled={!hasAsset}
           onClick={() =>
             hasAsset &&
@@ -371,7 +371,7 @@ function FixedLayoutImageSlotCard({
               {FIXED_LAYOUT_SPACING_PRESETS.map((preset) => (
                 <button
                   className={cn(
-                    'shrink-0 rounded-[12px] border border-border/70 px-3 py-1.5 text-[12px] transition-colors',
+                    'shrink-0 rounded-[10px] border border-border/70 px-3 py-1.5 text-[12px] transition-colors',
                     slotConfig.spacingPreset === preset.id
                       ? 'bg-secondary text-foreground'
                       : 'bg-white text-muted-foreground hover:text-foreground',
@@ -393,7 +393,7 @@ function FixedLayoutImageSlotCard({
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <input accept={FIXED_LAYOUT_FILE_ACCEPT} className="hidden" onChange={handleFileChange} ref={fileInputRef} type="file" />
         <Button
-          className="rounded-[12px]"
+          className="rounded-[10px]"
           disabled={isSavingTemplate || isUploading}
           onClick={() => fileInputRef.current?.click()}
           size="sm"
@@ -405,7 +405,7 @@ function FixedLayoutImageSlotCard({
         </Button>
         {hasAsset ? (
           <Button
-            className="rounded-[12px]"
+            className="rounded-[10px]"
             disabled={isSavingTemplate || isUploading}
             onClick={() => onDelete(slot, slotConfig.label)}
             size="sm"
@@ -580,7 +580,7 @@ export default function FixedLayoutConfigCanvas() {
         </div>
 
         {errorMessage ? (
-          <div className="mb-5 rounded-[16px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+          <div className="mb-5 rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
             {errorMessage}
           </div>
         ) : null}
@@ -603,7 +603,7 @@ export default function FixedLayoutConfigCanvas() {
             </section>
 
             <section className="space-y-5">
-              <div className="rounded-[22px] border border-border/70 bg-white p-5">
+              <div className="rounded-[18px] border border-border/70 bg-white p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-[15px] font-medium text-foreground">图片顺序与图片设置</div>
@@ -658,7 +658,7 @@ export default function FixedLayoutConfigCanvas() {
                 ))}
               </div>
 
-              <div className="rounded-[22px] border border-dashed border-border/70 bg-secondary/10 p-4 text-[12px] leading-6 text-muted-foreground">
+              <div className="rounded-[18px] border border-dashed border-border/70 bg-secondary/10 p-4 text-[12px] leading-6 text-muted-foreground">
                 非二维码图片固定按 100% 宽显示。上传格式支持 jpg、png、gif；webp 不再作为模板图片格式。
               </div>
             </section>

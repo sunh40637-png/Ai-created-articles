@@ -24,7 +24,7 @@ function TopicLibraryCard({ topic, topicStatus = 'pending' }) {
   const topicStatusMeta = getTopicStatusMeta(topicStatus)
 
   return (
-    <article className="rounded-[24px] border border-border/70 bg-white px-5 py-5 transition-all hover:border-foreground/15 hover:bg-secondary/25">
+    <article className="rounded-[20px] border border-border/70 bg-white px-5 py-5 transition-all hover:border-foreground/15 hover:bg-secondary/25">
       <div className="min-w-0">
         <div className="text-[15px] font-semibold leading-[1.55] text-foreground">{topic.title}</div>
         <p className="mt-2 text-[13px] leading-6 text-muted-foreground">{topic.reason}</p>

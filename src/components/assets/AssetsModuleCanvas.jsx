@@ -87,7 +87,7 @@ function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savi
   }
 
   return (
-    <article className="overflow-hidden rounded-[26px] border border-border/70 bg-white shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
+    <article className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
       <LibraryAssetThumbnail asset={asset} onPreview={onPreview} />
 
       <div className="p-4 sm:p-5">
@@ -312,11 +312,11 @@ function LibraryAssetLightbox({ activeAssetId, assets, onClose, onSelectAssetId 
         {activeAsset.path ? (
           <img
             alt={activeAsset.scene}
-            className="max-h-full max-w-[calc(100vw-140px)] rounded-[18px] object-contain"
+            className="max-h-full max-w-[calc(100vw-140px)] rounded-[16px] object-contain"
             src={activeAsset.path}
           />
         ) : (
-          <div className="flex min-h-[320px] w-full max-w-[960px] items-center justify-center rounded-[18px] border border-white/10 bg-white/6 px-6 text-center text-[15px] text-white/68">
+          <div className="flex min-h-[320px] w-full max-w-[960px] items-center justify-center rounded-[16px] border border-white/10 bg-white/6 px-6 text-center text-[15px] text-white/68">
             图片已移除
           </div>
         )}
@@ -452,7 +452,7 @@ export default function AssetsModuleCanvas() {
           </div>
         </div>
 
-        <div className="mt-6 rounded-[26px] border border-border/70 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:p-5">
+        <div className="mt-6 rounded-[22px] border border-border/70 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:p-5">
           <div className="flex items-center gap-2 text-[13px] font-medium text-foreground">
             <ListFilter size={16} />
             筛选与排序
@@ -517,21 +517,21 @@ export default function AssetsModuleCanvas() {
         </div>
 
         {errorMessage ? (
-          <div className="mt-4 rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+          <div className="mt-4 rounded-[16px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
             {errorMessage}
           </div>
         ) : null}
 
         <div className="mt-6 flex-1">
           {isLoading ? (
-            <div className="flex min-h-[360px] items-center justify-center rounded-[28px] border border-border/70 bg-white">
+            <div className="flex min-h-[360px] items-center justify-center rounded-[24px] border border-border/70 bg-white">
               <div className="flex items-center gap-2 text-[14px] text-muted-foreground">
                 <LoaderCircle className="animate-spin" size={16} />
                 正在读取素材库
               </div>
             </div>
           ) : items.length === 0 ? (
-            <div className="flex min-h-[360px] items-center justify-center rounded-[28px] border border-dashed border-border/80 bg-secondary/20">
+            <div className="flex min-h-[360px] items-center justify-center rounded-[24px] border border-dashed border-border/80 bg-secondary/20">
               <div className="max-w-[420px] text-center">
                 <div className="text-[16px] font-medium text-foreground">{hasActiveFilters ? '当前筛选下暂无素材' : '暂无素材'}</div>
                 <p className="mt-2 text-[14px] leading-6 text-muted-foreground">

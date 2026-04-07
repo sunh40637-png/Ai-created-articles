@@ -5,9 +5,6 @@ import {
   ChevronRight,
   Copy,
   LoaderCircle,
-  MessageSquareText,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   Sparkles,
 } from 'lucide-react'
@@ -129,10 +126,15 @@ async function copyPlainText(text = '') {
 function ConversationGroup({ activeConversationId, items, label, onSelectConversation }) {
   return (
     <section>
-      <div className="mb-2 px-2 text-[11px] font-medium tracking-[0.08em] text-muted-foreground">{label}</div>
+      <div className="mb-2 flex items-center justify-between px-1">
+        <div className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground">{label}</div>
+        <div className="text-[11px] font-medium tabular-nums text-muted-foreground">
+          {items.length}
+        </div>
+      </div>
 
       {items.length === 0 ? (
-        <div className="rounded-[var(--radius-card)] border border-dashed border-border/80 bg-white/70 px-4 py-4 text-[13px] text-muted-foreground">
+        <div className="rounded-[var(--radius-card)] border border-dashed border-border/75 bg-secondary/20 px-4 py-4 text-[13px] text-muted-foreground">
           暂无{label}
         </div>
       ) : (
@@ -146,8 +148,8 @@ function ConversationGroup({ activeConversationId, items, label, onSelectConvers
                 className={cn(
                   'w-full rounded-[var(--radius-card)] border px-4 py-3 text-left transition-colors',
                   isActive
-                    ? 'border-border bg-white'
-                    : 'border-transparent bg-white/70 hover:border-border/80 hover:bg-white',
+                    ? 'border-primary/20 bg-primary/[0.06]'
+                    : 'border-transparent bg-secondary/25 hover:border-border/80 hover:bg-white',
                 )}
                 key={conversation.id}
                 onClick={() => onSelectConversation(conversation.id)}
@@ -184,11 +186,9 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
   const conversations = useShortContentStore((state) => state.conversations)
   const createConversation = useShortContentStore((state) => state.createConversation)
   const hydrateFromPersistedSnapshot = useShortContentStore((state) => state.hydrateFromPersistedSnapshot)
-  const isConversationPaneCollapsed = useShortContentStore((state) => state.isConversationPaneCollapsed)
   const setActiveConversationId = useShortContentStore((state) => state.setActiveConversationId)
   const setActiveVersionId = useShortContentStore((state) => state.setActiveVersionId)
   const setConversationGenerationState = useShortContentStore((state) => state.setConversationGenerationState)
-  const setConversationPaneCollapsed = useShortContentStore((state) => state.setConversationPaneCollapsed)
   const setConversationPublishStatus = useShortContentStore((state) => state.setConversationPublishStatus)
 
   const [copiedVersionId, setCopiedVersionId] = useState(null)
@@ -339,61 +339,180 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
   function handleCreateConversation() {
     const nextConversationId = createConversation()
     setActiveConversationId(nextConversationId)
-    setConversationPaneCollapsed(false)
   }
 
   const copyLabel = copiedVersionId === activeVersion?.id ? '已复制' : '复制'
   const isGenerating = activeConversation?.generationStatus === 'generating'
+  const activeVersionOrdinal =
+    activeConversation && activeVersion
+      ? activeConversation.versions.findIndex((version) => version.id === activeVersion.id) + 1
+      : 0
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#ededed] lg:flex-row">
-      {isConversationPaneCollapsed ? (
-        <aside className="flex w-full shrink-0 flex-row items-center gap-3 border-b border-border/70 bg-[#f5f5f5] px-3 py-4 lg:w-[84px] lg:flex-col lg:border-b-0 lg:border-r">
-          <button
-            aria-label="展开对话列表"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] border border-border/70 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:bg-secondary/45 hover:text-foreground"
-            onClick={() => setConversationPaneCollapsed(false)}
-            type="button"
-          >
-            <PanelLeftOpen size={18} strokeWidth={1.9} />
-          </button>
-          <button
-            aria-label="新建短文对话"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] border border-border/70 bg-[#07c160] text-white transition-transform hover:scale-[1.02] hover:bg-[#06ad56]"
+    <div className="flex min-h-0 min-w-0 flex-1 p-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-shell)] border border-border/70 bg-white lg:flex-row">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {activeConversation?.versions.length > 0 ? (
+            <div className="border-b border-border/70 px-4 py-4 sm:px-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
+                  {activeConversation.versions.map((version, index) => {
+                    const isActive = version.id === activeVersion?.id
+
+                    return (
+                      <button
+                        className={cn(
+                          'inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors',
+                          isActive
+                            ? 'border-primary/22 bg-primary/[0.08] text-primary'
+                            : 'border-border/80 bg-white text-muted-foreground hover:text-foreground',
+                        )}
+                        key={version.id}
+                        onClick={() => setActiveVersionId(activeConversation.id, version.id)}
+                        type="button"
+                      >
+                        版本 {index + 1}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-[#f5f6fb] p-1 pl-3">
+                    <span className="text-[12px] font-medium text-muted-foreground">是否已发布</span>
+                    <button
+                      className={cn(
+                        'rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors',
+                        activeConversation.publishStatus === 'default'
+                          ? 'bg-white text-foreground shadow-sm'
+                          : 'text-muted-foreground',
+                      )}
+                      onClick={() => setConversationPublishStatus(activeConversation.id, 'default')}
+                      type="button"
+                    >
+                      默认
+                    </button>
+                    <button
+                      className={cn(
+                        'rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors',
+                        activeConversation.publishStatus === 'published'
+                          ? 'bg-white text-primary shadow-sm'
+                          : 'text-muted-foreground',
+                      )}
+                      onClick={() => setConversationPublishStatus(activeConversation.id, 'published')}
+                      type="button"
+                    >
+                      已发布
+                    </button>
+                  </div>
+
+                  <Button className="rounded-full" onClick={handleCopy} size="sm" type="button" variant="outline">
+                    {copiedVersionId === activeVersion?.id ? <Check size={14} /> : <Copy size={14} />}
+                    {copyLabel}
+                  </Button>
+
+                  <Button
+                    className="rounded-full bg-gradient-to-r from-[#7C5CFC] to-[#9B7FFF] text-white hover:brightness-[0.98]"
+                    onClick={handleGenerateConversation}
+                    size="sm"
+                    type="button"
+                  >
+                    {isGenerating ? <LoaderCircle className="animate-spin" size={14} /> : <Sparkles size={14} />}
+                    重新生成
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {activeConversation?.versions.length === 0 ? (
+              <div className="flex h-full min-h-[480px] flex-col items-center justify-center px-6 text-center">
+                <h2 className="text-[28px] font-semibold tracking-[-0.03em] text-foreground">生成纯文字内容</h2>
+                <p className="mt-3 max-w-[420px] text-[15px] leading-7 text-muted-foreground">
+                  点击生成，快速得到一版可直接发布的纯文字内容。
+                </p>
+
+                <Button
+                  className="mt-8 h-12 rounded-full bg-gradient-to-r from-[#7C5CFC] to-[#9B7FFF] px-6 text-[14px] text-white hover:brightness-[0.98]"
+                  onClick={handleGenerateConversation}
+                  type="button"
+                >
+                  {isGenerating ? <LoaderCircle className="animate-spin" size={16} /> : <Sparkles size={16} />}
+                  {isGenerating ? '生成中...' : '生成纯文字内容'}
+                </Button>
+
+                {activeConversation?.generationStatus === 'error' && activeConversation.generationError ? (
+                  <div className="mt-4 max-w-[560px] rounded-[var(--radius-panel)] border border-red-200/80 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+                    {activeConversation.generationError}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="mx-auto flex w-full max-w-[760px] flex-col px-5 py-6 sm:px-8 sm:py-8">
+                {activeConversation?.generationStatus === 'error' && activeConversation.generationError ? (
+                  <div className="mb-5 rounded-[var(--radius-panel)] border border-red-200/80 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+                    {activeConversation.generationError}
+                  </div>
+                ) : null}
+
+                <div className="mb-6 flex flex-wrap items-center justify-between gap-2.5 text-[13px] text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        'rounded-full border px-3 py-1.5 text-[12px]',
+                        activeConversation.publishStatus === 'published'
+                          ? 'border-primary/20 bg-primary/[0.08] text-primary'
+                          : 'border-border/70 bg-white text-muted-foreground',
+                      )}
+                    >
+                      {activeConversation.publishStatus === 'published' ? '已发布会话' : '默认会话'}
+                    </span>
+                    <span className="rounded-full border border-border/70 bg-white px-3 py-1.5 text-[12px] text-muted-foreground">
+                      {paragraphs.length} 段正文
+                    </span>
+                  </div>
+
+                  <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-white px-3 py-1.5 text-[12px] text-muted-foreground">
+                    {activeConversation.versions.length > 1 ? (
+                      <>
+                        <ChevronLeft size={14} />
+                        <span>第 {Math.max(activeVersionOrdinal, 1)} 版</span>
+                        <ChevronRight size={14} />
+                      </>
+                    ) : (
+                      <span>第 1 版</span>
+                    )}
+                  </div>
+                </div>
+
+                <article className="px-1">
+                  {paragraphs.map((paragraph, index) => (
+                    <p
+                      className="mt-6 text-[16px] leading-[2.1] tracking-[0.01em] text-foreground first:mt-0 sm:text-[17px]"
+                      key={`${activeVersion?.id ?? 'content'}-${index}`}
+                    >
+                      {paragraph}
+                    </p>
+                  ))}
+                </article>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <aside className="flex w-full shrink-0 flex-col border-t border-border/70 bg-transparent px-3 py-3.5 lg:w-[296px] lg:border-l lg:border-t-0">
+          <Button
+            className="h-11 w-full justify-start rounded-[var(--radius-control)] border border-border/70 bg-white px-4 text-[13px] font-medium text-foreground shadow-none transition-colors hover:border-foreground/15 hover:bg-secondary/25"
             onClick={handleCreateConversation}
             type="button"
+            variant="outline"
           >
-            <Plus size={18} strokeWidth={2} />
-          </button>
-        </aside>
-      ) : (
-        <aside className="flex w-full shrink-0 flex-col border-b border-border/70 bg-[#f5f5f5] px-4 py-4 lg:w-[320px] lg:border-b-0 lg:border-r">
-          <div className="flex items-center gap-3">
-            <button
-              aria-label="收起对话列表"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-border/70 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:bg-secondary/45 hover:text-foreground"
-              onClick={() => setConversationPaneCollapsed(true)}
-              type="button"
-            >
-              <PanelLeftClose size={18} strokeWidth={1.9} />
-            </button>
+            <Plus size={16} strokeWidth={2} />
+            新建对话
+          </Button>
 
-            <div className="min-w-0 flex-1">
-              <div className="text-[15px] font-semibold text-foreground">短文生成</div>
-              <div className="text-[12px] text-muted-foreground">D 型纯文字短合集</div>
-            </div>
-
-            <button
-              aria-label="新建短文对话"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-[#07c160]/25 bg-[#07c160] text-white transition-transform hover:scale-[1.02] hover:bg-[#06ad56]"
-              onClick={handleCreateConversation}
-              type="button"
-            >
-              <Plus size={18} strokeWidth={2} />
-            </button>
-          </div>
-
-          <div className="mt-6 min-h-0 flex-1 space-y-5 overflow-y-auto pb-2">
+          <div className="mt-5 min-h-0 flex-1 space-y-5 overflow-y-auto pb-1">
             <ConversationGroup
               activeConversationId={activeConversationId}
               items={defaultConversations}
@@ -408,147 +527,7 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
             />
           </div>
         </aside>
-      )}
-
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#ededed]">
-        <div className="mx-auto flex min-h-0 w-full max-w-[1120px] flex-1 flex-col px-4 py-4 sm:px-6">
-          <div className="flex min-h-0 flex-1 flex-col rounded-[var(--radius-shell)] border border-border/70 bg-white">
-            {activeConversation?.versions.length > 0 ? (
-              <div className="border-b border-border/70 px-4 py-4 sm:px-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
-                    {activeConversation.versions.map((version, index) => {
-                      const isActive = version.id === activeVersion?.id
-
-                      return (
-                        <button
-                          className={cn(
-                            'inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors',
-                            isActive
-                              ? 'border-[#07c160]/30 bg-[#07c160]/10 text-[#0b7a43]'
-                              : 'border-border/80 bg-white text-muted-foreground hover:text-foreground',
-                          )}
-                          key={version.id}
-                          onClick={() => setActiveVersionId(activeConversation.id, version.id)}
-                          type="button"
-                        >
-                          版本 {index + 1}
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-secondary/55 p-1 pl-3">
-                      <span className="text-[12px] font-medium text-muted-foreground">是否已发布</span>
-                      <button
-                        className={cn(
-                          'rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors',
-                          activeConversation.publishStatus === 'default'
-                            ? 'bg-white text-foreground'
-                            : 'text-muted-foreground',
-                        )}
-                        onClick={() => setConversationPublishStatus(activeConversation.id, 'default')}
-                        type="button"
-                      >
-                        默认
-                      </button>
-                      <button
-                        className={cn(
-                          'rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors',
-                          activeConversation.publishStatus === 'published'
-                            ? 'bg-white text-foreground'
-                            : 'text-muted-foreground',
-                        )}
-                        onClick={() => setConversationPublishStatus(activeConversation.id, 'published')}
-                        type="button"
-                      >
-                        已发布
-                      </button>
-                    </div>
-
-                    <Button onClick={handleCopy} size="sm" type="button" variant="outline">
-                      {copiedVersionId === activeVersion?.id ? <Check size={14} /> : <Copy size={14} />}
-                      {copyLabel}
-                    </Button>
-
-                    <Button onClick={handleGenerateConversation} size="sm" type="button" variant="secondary">
-                      {isGenerating ? <LoaderCircle className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                      重新生成
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {activeConversation?.versions.length === 0 ? (
-                <div className="flex h-full min-h-[480px] flex-col items-center justify-center px-6 text-center">
-                  <div className="inline-flex h-16 w-16 items-center justify-center rounded-[var(--radius-panel)] bg-[#07c160]/10 text-[#07c160]">
-                    {isGenerating ? <LoaderCircle className="animate-spin" size={30} /> : <MessageSquareText size={30} />}
-                  </div>
-
-                  <h2 className="mt-6 text-[28px] font-semibold tracking-[-0.03em] text-foreground">生成纯文字内容</h2>
-                  <p className="mt-3 max-w-[520px] text-[15px] leading-7 text-muted-foreground">
-                    按 D 型纯文字短合集规则一键生成，适合直接复制发布。新建会话后，这里会保持空白，直到你点击生成。
-                  </p>
-
-                  <Button
-                    className="mt-8 h-12 rounded-full px-6 text-[14px]"
-                    onClick={handleGenerateConversation}
-                    type="button"
-                  >
-                    {isGenerating ? <LoaderCircle className="animate-spin" size={16} /> : <Sparkles size={16} />}
-                    {isGenerating ? '生成中...' : '生成纯文字内容'}
-                  </Button>
-
-                  {activeConversation?.generationStatus === 'error' && activeConversation.generationError ? (
-                    <div className="mt-4 max-w-[560px] rounded-[var(--radius-panel)] border border-red-200/80 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
-                      {activeConversation.generationError}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="mx-auto flex w-full max-w-[760px] flex-col px-5 py-6 sm:px-8 sm:py-8">
-                  {activeConversation?.generationStatus === 'error' && activeConversation.generationError ? (
-                    <div className="mb-5 rounded-[var(--radius-panel)] border border-red-200/80 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
-                      {activeConversation.generationError}
-                    </div>
-                  ) : null}
-
-                  <div className="mb-6 flex items-center justify-between text-[13px] text-muted-foreground">
-                    <div>
-                      {activeConversation.publishStatus === 'published' ? '当前会话已标记为已发布' : '当前会话处于默认状态'}
-                    </div>
-                    <div className="inline-flex items-center gap-2">
-                      {activeConversation.versions.length > 1 ? (
-                        <>
-                          <ChevronLeft size={14} />
-                          <span>{activeConversation.versions.findIndex((version) => version.id === activeVersion?.id) + 1}</span>
-                          <ChevronRight size={14} />
-                        </>
-                      ) : (
-                        <span>第 1 版</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <article className="rounded-[var(--radius-shell)] border border-border/70 bg-[#fffdf9] px-5 py-6 sm:px-8 sm:py-8">
-                    {paragraphs.map((paragraph, index) => (
-                      <p
-                        className="mt-6 text-[16px] leading-[2.1] tracking-[0.01em] text-foreground first:mt-0 sm:text-[17px]"
-                        key={`${activeVersion?.id ?? 'content'}-${index}`}
-                      >
-                        {paragraph}
-                      </p>
-                    ))}
-                  </article>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
+      </div>
     </div>
   )
 }

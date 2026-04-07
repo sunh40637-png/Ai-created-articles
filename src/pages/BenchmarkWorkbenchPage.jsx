@@ -11,7 +11,6 @@ import {
   RiMenuFoldLine,
   RiMenuUnfoldLine,
   RiQuillPenLine,
-  RiSettings3Line,
 } from '@remixicon/react'
 import {
   ArrowDown,
@@ -27,6 +26,7 @@ import {
   ListFilter,
   LoaderCircle,
   Maximize2,
+  MessageSquareText,
   Minimize2,
   PanelRightClose,
   PanelRightOpen,
@@ -55,7 +55,7 @@ import {
   getTopicById,
   getTopicStatusMap,
   getTopicRecommendationPageCount,
-  TOPIC_LIBRARY_TYPES,
+  TOPIC_LIBRARY_PEN_NAMES,
   useBenchmarkStore,
 } from '@/stores/useBenchmarkStore.js'
 import { countReadableLength } from '../../shared/readableLength.js'
@@ -141,15 +141,15 @@ const sidebarModules = [
 const TOPIC_STATUS_META = {
   completed: {
     label: '已创作',
-    className: 'border border-emerald-200/80 bg-emerald-50 text-emerald-700',
+    className: 'border border-emerald-200/80 bg-white text-emerald-700',
   },
   'in-progress': {
     label: '创作中',
-    className: 'border border-amber-200/80 bg-amber-50 text-amber-700',
+    className: 'border border-amber-200/80 bg-white text-amber-700',
   },
   pending: {
     label: '待创作',
-    className: 'bg-secondary text-muted-foreground',
+    className: 'border border-border/70 bg-white text-muted-foreground',
   },
 }
 
@@ -204,13 +204,13 @@ const draftMarkdownComponents = {
   strong: ({ node, ...props }) => <strong className="font-semibold text-foreground" {...props} />,
   blockquote: ({ node, ...props }) => (
     <blockquote
-      className="mt-8 rounded-[24px] border border-slate-200/70 bg-slate-50/70 px-5 py-4 text-[15px] leading-[1.92] text-foreground/74 sm:px-6 sm:text-[16px]"
+      className="mt-8 rounded-[20px] border border-slate-200/70 bg-slate-50/70 px-5 py-4 text-[15px] leading-[1.92] text-foreground/74 sm:px-6 sm:text-[16px]"
       {...props}
     />
   ),
   hr: ({ node, ...props }) => <hr className="my-10 border-0 border-t border-border/70" {...props} />,
   table: ({ node, ...props }) => (
-    <div className="my-8 overflow-x-auto rounded-[24px] border border-border/70 bg-white">
+    <div className="my-8 overflow-x-auto rounded-[20px] border border-border/70 bg-white">
       <table className="min-w-[720px] w-full border-collapse text-left" {...props} />
     </div>
   ),
@@ -226,7 +226,7 @@ const draftMarkdownComponents = {
   img: ({ node, alt = '', src = '', ...props }) => (
     <img
       alt={alt}
-      className="mt-8 block w-full rounded-[24px] border border-border/50 object-cover"
+      className="mt-8 block w-full rounded-[20px] border border-border/50 object-cover"
       loading="lazy"
       src={src}
       {...props}
@@ -250,13 +250,13 @@ const reportMarkdownComponents = {
   strong: ({ node, ...props }) => <strong className="font-semibold text-foreground" {...props} />,
   blockquote: ({ node, ...props }) => (
     <blockquote
-      className="mt-6 rounded-[20px] border border-emerald-200/70 bg-emerald-50/70 px-5 py-4 text-[14px] leading-[1.8] text-emerald-900/80"
+      className="mt-6 rounded-[16px] border border-emerald-200/70 bg-emerald-50/70 px-5 py-4 text-[14px] leading-[1.8] text-emerald-900/80"
       {...props}
     />
   ),
   hr: () => null,
   table: ({ node, ...props }) => (
-    <div className="my-8 overflow-x-auto rounded-[24px] border border-border/70 bg-white">
+    <div className="my-8 overflow-x-auto rounded-[20px] border border-border/70 bg-white">
       <table className="min-w-[760px] w-full border-collapse text-left" {...props} />
     </div>
   ),
@@ -1292,7 +1292,7 @@ function SearchField({ onChange, value }) {
       <input
         className="h-11 w-full rounded-2xl border border-border/75 bg-white pl-10 pr-4 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-foreground/15 focus:border-foreground/20"
         onChange={(event) => onChange(event.target.value)}
-        placeholder="搜索文章标题"
+        placeholder="搜索消息标题"
         type="search"
         value={value}
       />
@@ -1320,7 +1320,7 @@ function SidebarRailButton({ children, label, onClick, popup, selected = false, 
       <button
         aria-label={label}
         className={cn(
-          'inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-control)] border transition-colors',
+          'inline-flex h-6 w-6 items-center justify-center rounded-[8px] border transition-colors',
           selected
             ? 'border-primary/24 bg-primary/[0.08] text-primary'
             : 'border-transparent bg-transparent text-muted-foreground hover:border-border/80 hover:bg-white hover:text-foreground',
@@ -1415,8 +1415,8 @@ function TopicCard({ disabled = false, isSelected, onSelect, topic, topicStatus 
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <span className={cn('rounded-full px-2.5 py-1 text-[11px]', topicStatusMeta.className)}>{topicStatusMeta.label}</span>
-        <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.penName}</span>
-        <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{topic.theme}</span>
+        <span className="rounded-full border border-border/70 bg-white px-2.5 py-1 text-[11px] text-muted-foreground">{topic.penName}</span>
+        <span className="rounded-full border border-border/70 bg-white px-2.5 py-1 text-[11px] text-muted-foreground">{topic.theme}</span>
       </div>
     </button>
   )
@@ -1521,12 +1521,7 @@ function TopicStageCard({
   topicStatusById,
 }) {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [draftFilterTypes, setDraftFilterTypes] = useState(filterTypes)
   const filterPopoverRef = useRef(null)
-
-  useEffect(() => {
-    setDraftFilterTypes(filterTypes)
-  }, [filterTypes])
 
   useEffect(() => {
     if (!isFilterOpen) {
@@ -1546,28 +1541,13 @@ function TopicStageCard({
     }
   }, [isFilterOpen])
 
-  function handleToggleDraftType(type) {
-    setDraftFilterTypes((current) => {
-      if (current.includes(type)) {
-        return current.filter((item) => item !== type)
-      }
-
-      if (current.length >= 3) {
-        return current
-      }
-
-      return [...current, type]
-    })
-  }
-
-  function handleConfirmFilters() {
-    onApplyFilters(draftFilterTypes)
+  function handleSelectAuthorFilter(penName) {
+    onApplyFilters([penName])
     setIsFilterOpen(false)
   }
 
   function handleClearButtonClick(event) {
     event.stopPropagation()
-    setDraftFilterTypes([])
     onClearFilters()
     setIsFilterOpen(false)
   }
@@ -1575,29 +1555,33 @@ function TopicStageCard({
   return (
     <div className="w-full">
       <div className="flex flex-wrap items-center justify-center gap-3 sm:justify-end">
-        <div className="relative" ref={filterPopoverRef}>
+        <div
+          className="relative"
+          onMouseEnter={() => setIsFilterOpen(true)}
+          onMouseLeave={() => setIsFilterOpen(false)}
+          ref={filterPopoverRef}
+        >
           <button
             className={cn(
               'inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] transition-colors',
               filterTypes.length > 0
-                ? 'border-foreground/20 bg-foreground text-white'
+                ? 'border-primary/22 bg-white text-foreground hover:border-primary/30'
                 : 'border-border/75 bg-white text-foreground hover:border-foreground/15',
             )}
             onClick={() => {
-              setDraftFilterTypes(filterTypes)
               setIsFilterOpen((current) => !current)
             }}
             type="button"
           >
             <ListFilter size={14} />
-            <span>筛选选题</span>
+            <span>筛选署名</span>
             {filterTypes.length > 0 ? (
               <>
-                <span className="rounded-full bg-white/14 px-1.5 py-0.5 text-[11px] leading-none text-white">
-                  {filterTypes.length}
+                <span className="rounded-full border border-primary/18 bg-primary/[0.1] px-2 py-0.5 text-[11px] leading-none text-primary">
+                  {filterTypes[0]}
                 </span>
                 <span
-                  className="inline-flex size-4 items-center justify-center rounded-full bg-white/12 text-white/88 transition-colors hover:bg-white/18"
+                  className="inline-flex size-4 items-center justify-center rounded-full bg-primary/[0.08] text-primary/82 transition-colors hover:bg-primary/[0.14]"
                   onClick={handleClearButtonClick}
                   role="button"
                   tabIndex={0}
@@ -1609,48 +1593,44 @@ function TopicStageCard({
           </button>
 
           {isFilterOpen ? (
-            <div className="absolute right-0 top-[calc(100%+10px)] z-30 w-[300px] rounded-[var(--radius-card)] border border-border/70 bg-white p-4">
-              <div className="text-[14px] font-medium text-foreground">筛选预设选题</div>
-              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
-                根据文章类型筛选当前预设选题，最多选择 3 个不同类型。
-              </p>
+            <div className="absolute right-0 top-full z-30 w-[300px] pt-2.5">
+              <div className="rounded-[var(--radius-card)] border border-border/70 bg-white p-4">
+                <div className="text-[14px] font-medium text-foreground">按作者署名筛选</div>
+                <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
+                  鼠标悬停时可以直接切换当前预设选题的作者署名。
+                </p>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {TOPIC_LIBRARY_TYPES.map((type) => {
-                  const selected = draftFilterTypes.includes(type)
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {TOPIC_LIBRARY_PEN_NAMES.map((penName) => {
+                    const selected = filterTypes.includes(penName)
 
-                  return (
-                    <button
-                      className={cn(
-                        'rounded-full border px-3 py-1.5 text-[12px] transition-colors',
-                        selected
-                          ? 'border-foreground/15 bg-foreground text-white'
-                          : 'border-border/70 bg-white text-foreground hover:border-foreground/15 hover:bg-secondary/25',
-                      )}
-                      key={type}
-                      onClick={() => handleToggleDraftType(type)}
-                      type="button"
-                    >
-                      {type}
-                    </button>
-                  )
-                })}
-              </div>
+                    return (
+                      <button
+                        className={cn(
+                          'rounded-full border px-3 py-1.5 text-[12px] transition-colors',
+                          selected
+                            ? 'border-primary/20 bg-primary/[0.08] text-primary'
+                            : 'border-border/70 bg-white text-foreground hover:border-primary/18 hover:bg-primary/[0.04]',
+                        )}
+                        key={penName}
+                        onClick={() => handleSelectAuthorFilter(penName)}
+                        type="button"
+                      >
+                        {penName}
+                      </button>
+                    )
+                  })}
+                </div>
 
-              <div className="mt-5 flex items-center justify-between gap-3">
-                <button
-                  className="text-[12px] text-muted-foreground transition-colors hover:text-foreground"
-                  onClick={() => {
-                    setDraftFilterTypes([])
-                    setIsFilterOpen(false)
-                  }}
-                  type="button"
-                >
-                  清空选择
-                </button>
-                <Button className="rounded-full" onClick={handleConfirmFilters} size="sm" type="button">
-                  确定
-                </Button>
+                <div className="mt-5 flex items-center justify-start">
+                  <button
+                    className="text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={handleClearButtonClick}
+                    type="button"
+                  >
+                    清空选择
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}
@@ -1660,7 +1640,7 @@ function TopicStageCard({
       <div className="mt-6 grid gap-3 xl:grid-cols-2">
         {recommendations.length === 0 ? (
           <div className="col-span-full rounded-[var(--radius-panel)] border border-dashed border-border/80 bg-secondary/15 px-5 py-14 text-center text-[14px] text-muted-foreground">
-            当前筛选条件下暂无预设选题，换一个类型再试试。
+            当前筛选条件下暂无预设选题，换一个作者署名再试试。
           </div>
         ) : (
           recommendations.map((topic) => (
@@ -1814,58 +1794,7 @@ function SessionSidebar({
   sessions,
 }) {
   if (isCollapsed) {
-    return (
-      <aside className="flex h-full w-[58px] shrink-0 flex-col items-center bg-transparent px-1 py-2.5">
-        <div className="flex w-full justify-center">
-          <button
-            aria-label="展开导航"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-control)] border border-border/80 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:text-foreground"
-            onClick={onToggleCollapsed}
-            type="button"
-          >
-            <RiMenuUnfoldLine className="size-[18px]" />
-          </button>
-        </div>
-
-        <div className="mt-4 flex w-full flex-col items-center gap-0.5">
-          <SidebarRailButton label="新建" onClick={onCreateSession} selected={activeModule === 'content'}>
-            <RiAddLine className="size-[18px]" />
-          </SidebarRailButton>
-
-          {sidebarModules.map((module) => (
-            <SidebarRailButton
-              key={module.id}
-              label={module.label}
-              onClick={() => onChangeModule(module.id)}
-              selected={activeModule === module.id}
-            >
-              <module.icon className="size-[18px]" />
-            </SidebarRailButton>
-          ))}
-        </div>
-
-        <div className="mt-4 h-px w-8 rounded-full bg-border/70" />
-
-        <div className="mt-3">
-          <div className="group/history-card relative">
-            <span className="absolute left-full top-[-18px] h-[84px] w-5" aria-hidden="true" />
-            <SidebarRailButton
-              label="AI 对话历史"
-              onClick={() => onChangeModule('content')}
-              popup={
-                <HistoryHoverCard
-                  activeSessionId={activeSessionId}
-                  onSelectSession={onSelectSession}
-                  sessions={sessions}
-                />
-              }
-            >
-              <RiHistoryLine className="size-[18px]" />
-            </SidebarRailButton>
-          </div>
-        </div>
-      </aside>
-    )
+    return null
   }
 
   return (
@@ -1895,22 +1824,24 @@ function SessionSidebar({
         ))}
       </div>
 
-      <div className="mt-5 flex items-center justify-between">
-        <div className="text-[12px] font-medium tracking-[0.08em] text-muted-foreground">AI 对话历史</div>
-        <RiSettings3Line className="size-[15px] text-muted-foreground" />
+      <div className="mt-5 flex items-center justify-between gap-3">
+        <div className="text-[12px] font-medium tracking-[0.08em] text-muted-foreground">消息列表</div>
+        <div className="inline-flex min-w-6 items-center justify-center rounded-full border border-border/70 bg-white px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+          {sessions.length}
+        </div>
       </div>
 
       <div className="benchmark-scroll-hidden mt-3 min-h-0 flex-1 overflow-y-auto pb-4">
         {sessions.length === 0 ? (
           <div className="rounded-[var(--radius-control)] border border-border/70 bg-white px-4 py-10 text-center text-[14px] text-muted-foreground">
-            暂无历史对话
+            暂无消息
           </div>
         ) : (
           <div className="space-y-0">
             {sessions.map((session) => (
               <div
                 className={cn(
-                  'group/session flex items-center gap-2 rounded-[var(--radius-control)] border px-3 py-1.5 transition-colors',
+                  'group/session relative flex items-center rounded-[var(--radius-control)] border px-3 py-1.5 transition-colors',
                   session.id === activeSessionId
                     ? 'border-border/80 bg-white'
                     : 'border-transparent bg-transparent hover:border-border/70 hover:bg-white/75',
@@ -1919,7 +1850,7 @@ function SessionSidebar({
               >
                 <button
                   className={cn(
-                    'min-w-0 flex-1 text-left text-[13px] leading-5 transition-colors',
+                    'min-w-0 flex-1 pr-0 text-left text-[13px] leading-5 transition-[padding-right,color] duration-150 group-hover/session:pr-9',
                     session.id === activeSessionId ? 'text-foreground' : 'text-foreground/78 group-hover/session:text-foreground',
                   )}
                   onClick={() => onSelectSession(session.id)}
@@ -1931,7 +1862,7 @@ function SessionSidebar({
 
                 <button
                   aria-label={`删除 ${session.title}`}
-                  className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-all hover:bg-secondary hover:text-foreground group-hover/session:opacity-100"
+                  className="pointer-events-none absolute right-1.5 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-all duration-150 hover:bg-secondary hover:text-foreground group-hover/session:pointer-events-auto group-hover/session:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation()
                     onDeleteSession(session)
@@ -1968,10 +1899,10 @@ function DeleteSessionDialog({ onClose, onConfirm, open, sessionTitle }) {
         <div className="flex items-start justify-between gap-5 px-6 pb-0 pt-6">
           <div className="space-y-2">
             <h2 className="text-[24px] font-semibold leading-[1.2] tracking-[-0.02em] text-foreground">
-              删除这篇文章？
+              删除这条消息？
             </h2>
             <p className="text-[14px] leading-[1.7] text-muted-foreground">
-              《{sessionTitle}》会从本地历史记录里彻底删除，这个操作不能撤销。
+              《{sessionTitle}》会从消息列表里彻底删除，这个操作不能撤销。
             </p>
           </div>
           <button
@@ -3098,7 +3029,7 @@ export default function BenchmarkWorkbenchPage() {
       return
     }
 
-    const normalizedFilterTypes = Array.from(new Set(nextFilterTypes)).slice(0, 3)
+    const normalizedFilterTypes = Array.from(new Set(nextFilterTypes)).slice(0, 1)
     const nextRecommendations = createTopicRecommendations({
       filterTypes: normalizedFilterTypes,
       pageIndex: 0,
@@ -3617,7 +3548,7 @@ export default function BenchmarkWorkbenchPage() {
     }
 
     if (currentStageId === 'topic') {
-      return '先在上方确认推荐选题，或通过筛选切换当前显示的选题类型'
+      return '先在上方确认推荐选题，或通过筛选切换当前显示的作者署名'
     }
 
     if (currentStageId === 'draft') {
@@ -3647,7 +3578,18 @@ export default function BenchmarkWorkbenchPage() {
         sessions={historySessions}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-shell)] border border-border/70 bg-white">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-shell)] border border-border/70 bg-white">
+        {isSidebarCollapsed ? (
+          <button
+            aria-label="展开导航"
+            className="absolute left-3 top-3 z-40 inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-control)] border border-border/80 bg-white text-muted-foreground transition-colors hover:border-foreground/15 hover:text-foreground"
+            onClick={handleToggleSidebarCollapsed}
+            type="button"
+          >
+            <RiMenuUnfoldLine className="size-[17px]" />
+          </button>
+        ) : null}
+
         {activeModule !== 'short-content' ? (
           <div className="flex h-[76px] shrink-0 items-center justify-end bg-white px-6">
             {isContentModule && !shouldRenderHero ? (
@@ -3751,7 +3693,7 @@ export default function BenchmarkWorkbenchPage() {
                       开始内容创作
                     </h1>
                     <p className="mx-auto mt-3 max-w-[720px] text-[14px] leading-6 text-muted-foreground">
-                      系统会优先从未进入创作的选题里随机加载 6 个预设选题。你也可以按类型筛选后翻页查看更多选题。
+                      系统会优先从未进入创作的选题里随机加载 6 个预设选题。你也可以按作者署名筛选后翻页查看更多选题。
                     </p>
                   </div>
 

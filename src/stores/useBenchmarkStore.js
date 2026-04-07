@@ -9,7 +9,7 @@ const TOPIC_STATUS_PRIORITY = {
   completed: 2,
 }
 
-export const TOPIC_LIBRARY_TYPES = ['A型', 'B型', 'C型']
+export const TOPIC_LIBRARY_PEN_NAMES = ['芷若', '明远']
 
 const TOPIC_REASON_BY_THEME = {
   做人处世智慧: {
@@ -376,7 +376,7 @@ function normalizeTopicFilterTypes(filterTypes = []) {
     return []
   }
 
-  return Array.from(new Set(filterTypes.filter((type) => TOPIC_LIBRARY_TYPES.includes(type)))).slice(0, 3)
+  return Array.from(new Set(filterTypes.filter((penName) => TOPIC_LIBRARY_PEN_NAMES.includes(penName)))).slice(0, 1)
 }
 
 export function getTopicById(topicId) {
@@ -447,7 +447,7 @@ export function getFilteredTopicLibrary(filterTypes = [], options = {}) {
   const filteredTopics =
     normalizedTypes.length === 0
       ? CONTENT_TOPIC_LIBRARY
-      : CONTENT_TOPIC_LIBRARY.filter((topic) => normalizedTypes.includes(topic.type))
+      : CONTENT_TOPIC_LIBRARY.filter((topic) => normalizedTypes.includes(topic.penName))
 
   if (excludedTopicIds.size === 0) {
     return filteredTopics
@@ -488,7 +488,7 @@ function createInitialMessages() {
       id: createId('assistant'),
       role: 'assistant',
       content:
-        '我先从选题库里随机准备了 6 个推荐选题。你可以直接选择，也可以通过筛选切换不同类型。',
+        '我先从选题库里随机准备了 6 个推荐选题。你可以直接选择，也可以通过筛选切换不同作者署名。',
       createdAt: new Date().toISOString(),
     },
   ]

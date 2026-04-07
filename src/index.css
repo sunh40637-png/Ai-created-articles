@@ -39,7 +39,7 @@
   --chart-3: #6b7280;
   --chart-4: #d1d5db;
   --chart-5: #d4ccff;
-  --radius: 0.625rem;
+  --radius: 0.5625rem;
   --sidebar: #ffffff;
   --sidebar-foreground: #1c242e;
   --sidebar-primary: #7C5CFC;
@@ -56,10 +56,10 @@
   --solo-blue: #60A5FA;
   --solo-green: #34D399;
   --solo-orange: #FB923C;
-  --radius-shell: 22px;
-  --radius-panel: 18px;
-  --radius-card: 14px;
-  --radius-control: 11px;
+  --radius-shell: 20px;
+  --radius-panel: 16px;
+  --radius-card: 12px;
+  --radius-control: 10px;
   --solo-card-shadow: none;
   --solo-card-shadow-hover: none;
   --solo-sidebar-gradient: linear-gradient(180deg, #7C5CFC 0%, #60A5FA 50%, transparent 100%);
@@ -100,10 +100,10 @@
 
   --solo-purple: #9B7FFF;
   --solo-purple-light: #B8A4FF;
-  --radius-shell: 22px;
-  --radius-panel: 18px;
-  --radius-card: 14px;
-  --radius-control: 11px;
+  --radius-shell: 20px;
+  --radius-panel: 16px;
+  --radius-card: 12px;
+  --radius-control: 10px;
   --solo-card-shadow: none;
   --solo-card-shadow-hover: none;
   --solo-sidebar-gradient: linear-gradient(180deg, #9B7FFF 0%, #60A5FA 50%, transparent 100%);
