@@ -12,6 +12,7 @@ import {
   generateContentDraft,
   runInitialContentPipeline,
 } from './server/contentCreation.js'
+import { generateArticleTitle } from './server/articleTitleGeneration.js'
 import {
   deletePersistedContentSessionPayloadFromLocal,
   readContentSessionPersistenceMeta,
@@ -41,8 +42,15 @@ import {
   updateLibraryAsset,
 } from './server/libraryAssets.js'
 import { saveLlmConfig } from './server/llm/config.js'
+import { DEFAULT_MINIMAX_MODEL } from './server/llm/constants.js'
 import { chatWithLlm } from './server/llm/index.js'
-import { normalizeLlmProfile, resolveActiveLlmProfile, resolveDoubaoAsrConfig, resolveLlmConfig } from './server/runtimeConfig.js'
+import {
+  normalizeLlmProfile,
+  resolveActiveLlmProfile,
+  resolveDoubaoAsrConfig,
+  resolveLlmConfig,
+  resolveMiniMaxConfig,
+} from './server/runtimeConfig.js'
 import { generateTopicRecommendations } from './server/topicRecommendations.js'
 import { prepareWechatClipboardHtml } from './server/wechatClipboard.js'
 import { readWechatDraftStatus, syncSessionToWechatDraft } from './server/wechatDraft.js'
@@ -271,6 +279,61 @@ function topicRecommendationDevApi() {
           res.end(
             JSON.stringify({
               error: error.message || '推荐选题生成失败',
+              details: error.payload ?? null,
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
+function articleTitleDevApi() {
+  return {
+    name: 'article-title-dev-api',
+    configureServer(server) {
+      async function readJsonBody(req) {
+        const chunks = []
+
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+
+        return chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+      }
+
+      server.middlewares.use('/api/article-title', async (req, res, next) => {
+        if (req.method !== 'POST') {
+          next()
+          return
+        }
+
+        try {
+          const body = await readJsonBody(req)
+          const minimaxProfile = resolveMiniMaxConfig({
+            model: DEFAULT_MINIMAX_MODEL,
+          })
+          const result = await generateArticleTitle({
+            apiKey: minimaxProfile.apiKey,
+            articleBodyMarkdown: body?.articleBodyMarkdown || '',
+            articleTitle: body?.articleTitle || '',
+            baseUrl: minimaxProfile.baseUrl,
+            model: minimaxProfile.model,
+            provider: minimaxProfile.provider,
+            sessionId: body?.sessionId || '',
+            theme: body?.theme || '',
+            type: body?.type || '',
+          })
+
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(result))
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error.message || '标题生成失败',
               details: error.payload ?? null,
             }),
           )
@@ -1056,6 +1119,7 @@ export default defineConfig(({ mode }) => {
       benchmarkChatDevApi(),
       contentCreationDevApi(),
       topicRecommendationDevApi(),
+      articleTitleDevApi(),
       libraryAssetsDevApi(),
       fixedLayoutConfigDevApi(),
       contentSessionsDevApi(),

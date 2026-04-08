@@ -565,6 +565,30 @@ export function getContentSessionActivityTimestamp(session) {
   return timestamps.reduce((latest, current) => (current > latest ? current : latest), 0)
 }
 
+export function getContentSessionRecordedTimestamp(session) {
+  if (!isPersistableContentSession(session)) {
+    return 0
+  }
+
+  const versions = Array.isArray(session?.draftReview?.versions) ? session.draftReview.versions : []
+  const messages = Array.isArray(session?.messages) ? session.messages : []
+  const timestamps = [
+    ...versions.map((version) => toSessionTimestamp(version?.createdAt)).filter(Boolean),
+    ...messages
+      .map((message, index) => (hasMeaningfulAssistantMessage(message, index) ? toSessionTimestamp(message?.createdAt) : 0))
+      .filter(Boolean),
+    toSessionTimestamp(session?.processingFlow?.createdAt),
+    toSessionTimestamp(session?.lastFlowSummary?.createdAt || session?.lastFlowSummary?.completedAt),
+    toSessionTimestamp(session?.draftSync?.lastSyncedAt),
+  ].filter(Boolean)
+
+  if (timestamps.length === 0) {
+    return toSessionTimestamp(session?.createdAt)
+  }
+
+  return timestamps.reduce((earliest, current) => (current < earliest ? current : earliest), timestamps[0])
+}
+
 export function getPersistableContentSessions(sessions = []) {
   return (Array.isArray(sessions) ? sessions : [])
     .filter(isPersistableContentSession)
@@ -586,6 +610,7 @@ function createSession(index = 1, options = {}) {
     updatedAt: now,
     draft: '',
     deepThinkingEnabled: true,
+    publishStatus: 'default',
     stageId: 'topic',
     isWorkbenchOpen: false,
     activeWorkbenchTab: 'draft',
@@ -690,6 +715,7 @@ function ensureSessionsShape(state) {
           : fallbackSession.title,
       draft: typeof session?.draft === 'string' ? session.draft : '',
       deepThinkingEnabled: session?.deepThinkingEnabled ?? true,
+      publishStatus: session?.publishStatus === 'published' ? 'published' : 'default',
       isWorkbenchOpen: Boolean(session?.isWorkbenchOpen),
       activeWorkbenchTab: normalizedWorkbenchTab,
       stageId: normalizedStageId,

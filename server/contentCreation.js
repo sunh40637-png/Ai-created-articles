@@ -6,6 +6,7 @@ import {
   DEFAULT_CONTENT_RULE_PROFILE_ID,
   resolveContentRuleProfile,
 } from './contentRuleProfiles.js'
+import { appendContentLlmTelemetryEvent } from './contentLlmTelemetry.js'
 import { countReadableLength } from '../shared/readableLength.js'
 
 const DEFAULT_MODEL = 'glm-5.1'
@@ -272,52 +273,63 @@ async function requestContentGeneration({
   topic,
 }) {
   const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
+  const systemPrompt = buildContentSystemPrompt(ruleProfile)
+  const userPrompt = buildContentUserPrompt({
+    action,
+    compact: false,
+    deepThinkingEnabled,
+    note,
+    ruleProfile,
+    supplement,
+    topic,
+  })
 
-  return chatWithLlm({
+  return executeContentLlmRequest({
+    action,
     apiKey,
     assistantName: CONTENT_ASSISTANT_NAME,
     model,
     responseFormat: 'json_object',
-    systemPrompt: buildContentSystemPrompt(ruleProfile),
+    stage: action === 'revise' ? 'revise' : 'direct',
+    systemPrompt,
     temperature: deepThinkingEnabled ? 0.35 : 0.2,
     thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     timeoutMs: 300000,
+    topic,
     messages: [
       {
         role: 'user',
-        content: buildContentUserPrompt({
-          action,
-          compact: false,
-          deepThinkingEnabled,
-          note,
-          ruleProfile,
-          supplement,
-          topic,
-        }),
+        content: userPrompt,
       },
     ],
   })
 }
 
 async function requestStructuredContentStage({
+  action = 'initial',
   apiKey,
   assistantName = CONTENT_ASSISTANT_NAME,
   model,
+  stage = 'draft',
   thinkingType = 'disabled',
   systemPrompt,
   temperature,
   timeoutMs = 300000,
+  topic,
   userPrompt,
 }) {
-  return chatWithLlm({
+  return executeContentLlmRequest({
+    action,
     apiKey,
     assistantName,
     model,
     responseFormat: 'json_object',
+    stage,
     systemPrompt,
     temperature,
     thinkingType,
     timeoutMs,
+    topic,
     messages: [
       {
         role: 'user',
@@ -350,6 +362,177 @@ function normalizeTextContent(content) {
   }
 
   return ''
+}
+
+function truncateTelemetryText(value, maxLength = 320) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  const trimmed = value.trim()
+
+  if (!trimmed || trimmed.length <= maxLength) {
+    return trimmed
+  }
+
+  return `${trimmed.slice(0, maxLength)}...`
+}
+
+function serializeTelemetryPayload(value) {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  try {
+    return JSON.stringify(value ?? null)
+  } catch {
+    return '[unserializable payload]'
+  }
+}
+
+function readRequestMeta(result) {
+  const requestMeta = result?._requestMeta && typeof result._requestMeta === 'object' ? result._requestMeta : {}
+  return {
+    baseUrl: typeof requestMeta.baseUrl === 'string' ? requestMeta.baseUrl : '',
+    provider: typeof requestMeta.provider === 'string' ? requestMeta.provider : '',
+    requestIdHeader: typeof requestMeta.requestIdHeader === 'string' ? requestMeta.requestIdHeader : '',
+    responseId:
+      typeof requestMeta.responseId === 'string' && requestMeta.responseId.trim()
+        ? requestMeta.responseId.trim()
+        : typeof result?.id === 'string'
+          ? result.id.trim()
+          : '',
+    statusCode: Number.isFinite(requestMeta.statusCode) ? requestMeta.statusCode : null,
+  }
+}
+
+function buildTopicTelemetry(topic) {
+  if (!topic || typeof topic !== 'object') {
+    return null
+  }
+
+  return {
+    penName: typeof topic.penName === 'string' ? topic.penName : '',
+    title: typeof topic.title === 'string' ? topic.title : '',
+    type: typeof topic.type === 'string' ? topic.type : '',
+  }
+}
+
+async function appendContentStageTelemetry(entry) {
+  try {
+    await appendContentLlmTelemetryEvent(entry)
+  } catch {
+    return null
+  }
+
+  return entry
+}
+
+function createContentTelemetryId() {
+  return `content-llm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+async function executeContentLlmRequest({
+  action = 'initial',
+  apiKey,
+  assistantName = CONTENT_ASSISTANT_NAME,
+  messages = [],
+  model,
+  responseFormat = 'json_object',
+  stage = 'direct',
+  systemPrompt = '',
+  temperature = 0.2,
+  thinkingType = 'disabled',
+  timeoutMs = 300000,
+  topic,
+}) {
+  const requestStartedAt = Date.now()
+  const startedAtIso = new Date(requestStartedAt).toISOString()
+  const telemetryId = createContentTelemetryId()
+
+  try {
+    const result = await chatWithLlm({
+      apiKey,
+      assistantName,
+      messages,
+      model,
+      responseFormat,
+      systemPrompt,
+      temperature,
+      thinkingType,
+      timeoutMs,
+    })
+    const requestFinishedAt = Date.now()
+    const requestMeta = readRequestMeta(result)
+    const telemetry = await appendContentStageTelemetry({
+      action,
+      elapsedMs: Math.max(0, requestFinishedAt - requestStartedAt),
+      finishedAt: new Date(requestFinishedAt).toISOString(),
+      id: telemetryId,
+      messageCount: Array.isArray(messages) ? messages.length : 0,
+      model: typeof result?.model === 'string' && result.model.trim() ? result.model.trim() : model,
+      provider: requestMeta.provider,
+      requestIdHeader: requestMeta.requestIdHeader,
+      responseChars: normalizeTextContent(result?.choices?.[0]?.message?.content).length,
+      responseId: requestMeta.responseId,
+      stage,
+      startedAt: startedAtIso,
+      status: 'success',
+      statusCode: requestMeta.statusCode,
+      systemPromptChars: systemPrompt.length,
+      temperature,
+      thinkingType,
+      timeoutMs,
+      topic: buildTopicTelemetry(topic),
+      usage: result?.usage ?? null,
+      userPromptChars: Array.isArray(messages)
+        ? messages.reduce((total, message) => total + normalizeTextContent(message?.content).length, 0)
+        : 0,
+      url: requestMeta.baseUrl,
+    })
+
+    return {
+      ...result,
+      llmTelemetry: telemetry,
+    }
+  } catch (error) {
+    const requestFinishedAt = Date.now()
+    const telemetry = await appendContentStageTelemetry({
+      action,
+      elapsedMs: Math.max(0, requestFinishedAt - requestStartedAt),
+      errorMessage: truncateTelemetryText(error?.message || '内容创作请求失败'),
+      errorPayload: truncateTelemetryText(serializeTelemetryPayload(error?.payload)),
+      errorStatus: Number.isFinite(error?.status) ? error.status : null,
+      finishedAt: new Date(requestFinishedAt).toISOString(),
+      id: telemetryId,
+      messageCount: Array.isArray(messages) ? messages.length : 0,
+      model,
+      provider: '',
+      requestIdHeader: '',
+      responseChars: 0,
+      responseId: '',
+      stage,
+      startedAt: startedAtIso,
+      status: 'error',
+      statusCode: null,
+      systemPromptChars: systemPrompt.length,
+      temperature,
+      thinkingType,
+      timeoutMs,
+      topic: buildTopicTelemetry(topic),
+      usage: null,
+      userPromptChars: Array.isArray(messages)
+        ? messages.reduce((total, message) => total + normalizeTextContent(message?.content).length, 0)
+        : 0,
+      url: '',
+    })
+
+    if (telemetry) {
+      error.llmTelemetry = [telemetry]
+    }
+
+    throw error
+  }
 }
 
 function stripCodeFence(content) {
@@ -935,11 +1118,14 @@ async function requestDraftGenerationStage({
 }) {
   const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
   const result = await requestStructuredContentStage({
+    action: 'initial',
     apiKey,
     model,
+    stage: 'draft',
     thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     systemPrompt: buildDraftGenerationSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.35 : 0.2,
+    topic,
     userPrompt: buildDraftGenerationUserPrompt({
       deepThinkingEnabled,
       ruleProfile,
@@ -952,6 +1138,7 @@ async function requestDraftGenerationStage({
 
   return {
     draftMarkdown: readStringField(parsed, 'draftMarkdown', rawContent),
+    llmTelemetry: result?.llmTelemetry ?? null,
     model: result?.model ?? model,
     rawContent,
     summary: readStringField(parsed, 'summary', '正文初稿生成完成。'),
@@ -970,11 +1157,14 @@ async function requestDraftAuditStage({
 }) {
   const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
   const result = await requestStructuredContentStage({
+    action: 'initial',
     apiKey,
     model,
+    stage: 'audit',
     thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     systemPrompt: buildDraftAuditSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.2 : 0.1,
+    topic,
     userPrompt: buildDraftAuditUserPrompt({
       deepThinkingEnabled,
       draftMarkdown,
@@ -989,6 +1179,7 @@ async function requestDraftAuditStage({
   return {
     decision: normalizeRevisionDecision(parsed?.decision, 'pass'),
     model: result?.model ?? model,
+    llmTelemetry: result?.llmTelemetry ?? null,
     rawContent,
     reportMarkdown: readStringField(
       parsed,
@@ -1014,11 +1205,14 @@ async function requestDraftRevisionStage({
 }) {
   const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
   const result = await requestStructuredContentStage({
+    action: 'initial',
     apiKey,
     model,
+    stage: 'revision',
     thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     systemPrompt: buildDraftRevisionSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.32 : 0.18,
+    topic,
     userPrompt: buildDraftRevisionUserPrompt({
       decision,
       deepThinkingEnabled,
@@ -1035,6 +1229,7 @@ async function requestDraftRevisionStage({
   return {
     draftMarkdown: readStringField(parsed, 'draftMarkdown', draftMarkdown),
     generatedTitle: readGeneratedTitle(parsed, topic),
+    llmTelemetry: result?.llmTelemetry ?? null,
     model: result?.model ?? model,
     rawContent,
     reportMarkdown: readStringField(parsed, 'reportMarkdown', reportMarkdown),
@@ -1056,6 +1251,7 @@ export async function runInitialContentPipeline({
   const startedAt = Date.now()
   const stepCount = 8
   let steps = createPipelineSteps(stepCount, startedAt)
+  const stageTelemetry = []
   const stageUsages = []
   const stagePayloads = {}
   const pushProgress = () => {
@@ -1083,6 +1279,9 @@ export async function runInitialContentPipeline({
     topic,
   })
   stageUsages.push({ stage: 'draft', usage: generationStage.usage ?? null })
+  if (generationStage.llmTelemetry) {
+    stageTelemetry.push(generationStage.llmTelemetry)
+  }
   stagePayloads.generation = generationStage.rawContent
 
   const initialDraft = sanitizeDraftMarkdown(generationStage.draftMarkdown, topic)
@@ -1101,6 +1300,9 @@ export async function runInitialContentPipeline({
     topic,
   })
   stageUsages.push({ stage: 'audit', usage: auditStage.usage ?? null })
+  if (auditStage.llmTelemetry) {
+    stageTelemetry.push(auditStage.llmTelemetry)
+  }
   stagePayloads.audit = auditStage.rawContent
 
   advance(4)
@@ -1129,6 +1331,9 @@ export async function runInitialContentPipeline({
       topic,
     })
     stageUsages.push({ stage: 'revision', usage: revisionStage.usage ?? null })
+    if (revisionStage.llmTelemetry) {
+      stageTelemetry.push(revisionStage.llmTelemetry)
+    }
     stagePayloads.revision = revisionStage.rawContent
 
     finalDraft = sanitizeDraftMarkdown(revisionStage.draftMarkdown, topic)
@@ -1183,6 +1388,8 @@ export async function runInitialContentPipeline({
           : finalSummary || generationStage.summary || '首版稿件已经准备完成。'
     ).trim(),
     generatedTitle: finalGeneratedTitle || buildFallbackGeneratedTitle(topic),
+    llmTelemetry: stageTelemetry,
+    provider: stageTelemetry[0]?.provider || '',
     usage: stageUsages,
   }
 }
@@ -1242,7 +1449,9 @@ export async function generateContentDraft({
 
   return {
     draftMarkdown: sanitized.draftMarkdown,
+    llmTelemetry: result?.llmTelemetry ? [result.llmTelemetry] : [],
     model: result?.model ?? model,
+    provider: result?.llmTelemetry?.provider || '',
     rawContent,
     reportMarkdown: `${reportMarkdown}\n\n${
       placeholderCheck.valid

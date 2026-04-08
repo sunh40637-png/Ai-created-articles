@@ -5,6 +5,8 @@ import {
   DEFAULT_LLM_PROFILE_ID,
   DEFAULT_LLM_PROFILE_NAME,
   DEFAULT_LLM_PROVIDER,
+  DEFAULT_MINIMAX_BASE_URL,
+  DEFAULT_MINIMAX_MODEL,
   LLM_CONFIG_PERSISTENCE_PATH,
   MINIMAX_PROVIDER,
   OPENAI_COMPATIBLE_PROVIDER,
@@ -201,7 +203,15 @@ function normalizeLlmProvider(value) {
 }
 
 function buildDefaultModelForProvider(provider) {
-  return provider === DEFAULT_LLM_PROVIDER ? DEFAULT_GLM_MODEL : ''
+  if (provider === DEFAULT_LLM_PROVIDER) {
+    return DEFAULT_GLM_MODEL
+  }
+
+  if (provider === MINIMAX_PROVIDER) {
+    return DEFAULT_MINIMAX_MODEL
+  }
+
+  return ''
 }
 
 function buildDefaultNameForProvider(provider, model) {
@@ -486,7 +496,44 @@ export function resolveActiveLlmProfile(overrides = {}) {
 }
 
 export function resolveMiniMaxConfig(overrides = {}) {
-  return resolveActiveLlmProfile(overrides)
+  const llmConfig = resolveLlmConfig()
+  const dotEnvConfig = readDotEnvConfig()
+  const sharedConfig = readSharedRuntimeConfig()
+  const minimaxProfile = llmConfig.profiles.find((profile) => profile.enabled && profile.provider === MINIMAX_PROVIDER) || null
+  const fallbackModel =
+    normalizeTrimmedString(process.env.MINIMAX_MODEL) ||
+    normalizeTrimmedString(dotEnvConfig.MINIMAX_MODEL) ||
+    normalizeTrimmedString(sharedConfig.minimax.model) ||
+    DEFAULT_MINIMAX_MODEL
+  const fallbackBaseUrl =
+    normalizeBaseUrl(process.env.MINIMAX_BASE_URL) ||
+    normalizeBaseUrl(dotEnvConfig.MINIMAX_BASE_URL) ||
+    normalizeBaseUrl(sharedConfig.minimax.baseUrl) ||
+    DEFAULT_MINIMAX_BASE_URL
+  const fallbackProfile = normalizeLlmProfile(
+    {
+      apiKey:
+        normalizeTrimmedString(process.env.MINIMAX_API_KEY) ||
+        normalizeTrimmedString(dotEnvConfig.MINIMAX_API_KEY) ||
+        normalizeTrimmedString(sharedConfig.minimax.apiKey),
+      baseUrl: fallbackBaseUrl,
+      enabled: true,
+      id: 'minimax-default',
+      model: fallbackModel,
+      name: buildDefaultNameForProvider(MINIMAX_PROVIDER, fallbackModel),
+      provider: MINIMAX_PROVIDER,
+    },
+    0,
+  )
+  const resolved = minimaxProfile || fallbackProfile
+
+  return {
+    ...resolved,
+    apiKey: normalizeTrimmedString(overrides.apiKey) || resolved.apiKey,
+    baseUrl: normalizeBaseUrl(overrides.baseUrl || '') || resolved.baseUrl || DEFAULT_MINIMAX_BASE_URL,
+    model: normalizeTrimmedString(overrides.model) || resolved.model || DEFAULT_MINIMAX_MODEL,
+    provider: MINIMAX_PROVIDER,
+  }
 }
 
 export function resolveGlmConfig(overrides = {}) {

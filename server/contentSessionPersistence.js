@@ -7,6 +7,7 @@ import {
   readContentSessionPayloadFromOss,
   writeContentSessionPayloadToOss,
 } from './ossContentStorage.js'
+import { CONTENT_LLM_TELEMETRY_PATH } from './contentLlmTelemetry.js'
 
 export const CONTENT_SESSION_PERSISTENCE_DIR = path.resolve(process.cwd(), '.local-data')
 export const CONTENT_SESSION_PERSISTENCE_PATH = path.join(CONTENT_SESSION_PERSISTENCE_DIR, 'content-creation-sessions.json')
@@ -26,6 +27,13 @@ function normalizePersistedContentSessionPayload(payload) {
 function toTimestamp(value) {
   const timestamp = new Date(value || 0).getTime()
   return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+function getPersistedSessionStateLatestTimestamp(item = null) {
+  const sessions = Array.isArray(item?.state?.sessions) ? item.state.sessions : []
+  const sessionTimestamps = sessions.map((session) => toTimestamp(session?.updatedAt)).filter(Boolean)
+  const activeSessionTimestamp = toTimestamp(item?.state?.updatedAt)
+  return [activeSessionTimestamp, ...sessionTimestamps].reduce((latest, current) => (current > latest ? current : latest), 0)
 }
 
 function pickNewerPayload(left, right) {
@@ -65,6 +73,14 @@ export async function writePersistedContentSessionPayloadToLocal({ item, name = 
   }
 
   await ensureContentSessionPersistenceDir()
+
+  const existingPayload = await readPersistedContentSessionPayloadFromLocal().catch(() => null)
+  const existingLatestTimestamp = getPersistedSessionStateLatestTimestamp(existingPayload?.item)
+  const incomingLatestTimestamp = getPersistedSessionStateLatestTimestamp(item)
+
+  if (existingPayload && existingLatestTimestamp > incomingLatestTimestamp) {
+    return existingPayload
+  }
 
   const payload = {
     item,
@@ -135,6 +151,7 @@ export async function deletePersistedContentSessionPayload() {
 export function readContentSessionPersistenceMeta() {
   return {
     cloud: getAliyunOssPublicConfig(),
+    llmTelemetryPath: CONTENT_LLM_TELEMETRY_PATH,
     localPath: CONTENT_SESSION_PERSISTENCE_PATH,
   }
 }

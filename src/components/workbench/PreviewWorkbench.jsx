@@ -157,6 +157,8 @@ function ArticlePreviewFrame({ className = '', documentHtml, title = '排版预�
         return
       }
 
+      let animationFrameId = 0
+
       const updateHeight = () => {
         const nextHeight = Math.max(
           frameDocument.body?.scrollHeight ?? 0,
@@ -166,7 +168,18 @@ function ArticlePreviewFrame({ className = '', documentHtml, title = '排版预�
           0,
         )
 
-        setFrameHeight(nextHeight)
+        setFrameHeight((current) => (current === nextHeight ? current : nextHeight))
+      }
+
+      const scheduleHeightUpdate = () => {
+        if (animationFrameId) {
+          window.cancelAnimationFrame(animationFrameId)
+        }
+
+        animationFrameId = window.requestAnimationFrame(() => {
+          animationFrameId = 0
+          updateHeight()
+        })
       }
 
       updateHeight()
@@ -174,7 +187,7 @@ function ArticlePreviewFrame({ className = '', documentHtml, title = '排版预�
       const resizeObserver =
         typeof ResizeObserver === 'function'
           ? new ResizeObserver(() => {
-              updateHeight()
+              scheduleHeightUpdate()
             })
           : null
 
@@ -190,21 +203,24 @@ function ArticlePreviewFrame({ className = '', documentHtml, title = '排版预�
 
       const frameImages = Array.from(frameDocument.images ?? [])
       frameImages.forEach((image) => {
-        image.addEventListener('error', updateHeight)
-        image.addEventListener('load', updateHeight)
+        image.addEventListener('error', scheduleHeightUpdate)
+        image.addEventListener('load', scheduleHeightUpdate)
       })
 
       const timerId = window.setTimeout(() => {
-        updateHeight()
+        scheduleHeightUpdate()
       }, 60)
 
       cleanupAttachedResources = () => {
         resizeObserver?.disconnect()
+        if (animationFrameId) {
+          window.cancelAnimationFrame(animationFrameId)
+        }
         window.clearTimeout(timerId)
 
         frameImages.forEach((image) => {
-          image.removeEventListener('error', updateHeight)
-          image.removeEventListener('load', updateHeight)
+          image.removeEventListener('error', scheduleHeightUpdate)
+          image.removeEventListener('load', scheduleHeightUpdate)
         })
       }
     }

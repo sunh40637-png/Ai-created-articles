@@ -1,6 +1,8 @@
 import path from 'node:path'
 
 export const DEFAULT_GLM_MODEL = 'glm-5.1'
+export const DEFAULT_MINIMAX_BASE_URL = 'https://api.minimaxi.com/v1'
+export const DEFAULT_MINIMAX_MODEL = 'MiniMax-M2.7'
 export const DEFAULT_LLM_PROVIDER = 'glm'
 export const DEEPSEEK_PROVIDER = 'deepseek'
 export const DEFAULT_LLM_PROFILE_ID = 'glm-main'

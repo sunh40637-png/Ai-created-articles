@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Eye,
   FileText,
   History,
   LayoutTemplate,
@@ -34,6 +35,7 @@ import {
   Paperclip,
   ScrollText,
   Search,
+  Type,
   X,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
@@ -52,6 +54,7 @@ import {
 import { cn } from '@/lib/utils'
 import {
   createPersistableBenchmarkState,
+  getContentSessionRecordedTimestamp,
   createTopicRecommendations,
   getContentSessionActivityTimestamp,
   getTopicById,
@@ -69,6 +72,7 @@ import {
 
 const LibraryModuleCanvas = lazy(() => import('@/components/library/LibraryModuleCanvas.jsx'))
 const ArticlesModuleCanvas = lazy(() => import('@/components/articles/ArticlesModuleCanvas.jsx'))
+const ArticleTitleModuleCanvas = lazy(() => import('@/components/article-title/ArticleTitleModuleCanvas.jsx'))
 const AssetsModuleCanvas = lazy(() => import('@/components/assets/AssetsModuleCanvas.jsx'))
 const FixedLayoutConfigCanvas = lazy(() => import('@/components/fixed-layout/FixedLayoutConfigCanvas.jsx'))
 const PreviewWorkbench = lazy(() => import('@/components/workbench/PreviewWorkbench.jsx'))
@@ -141,6 +145,7 @@ const sidebarModules = [
   { id: 'articles', label: '文章列表', icon: RiArticleLine },
   { id: 'assets', label: '素材库', icon: RiImageLine },
   { id: 'fixed-layout', label: '模板配置', icon: RiLayoutGridLine },
+  { id: 'article-title', label: '文章标题', icon: Type },
   { id: 'settings', label: '系统设置', icon: RiSettings3Line },
 ]
 
@@ -623,6 +628,48 @@ function createArticleListEntries(sessions = []) {
     .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
 }
 
+function markdownToPlainText(markdown = '') {
+  return String(markdown)
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/!\[[^\]]*\]\(([^)]+)\)/g, '')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/^([-*_]){3,}$/gm, '')
+    .replace(/^\s*[-+*]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/[*_~`|]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function createArticleTitleEntries(sessions = []) {
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    return []
+  }
+
+  return sessions
+    .filter((session) => session?.stageId === 'completed' && session?.publishStatus !== 'published')
+    .map((session) => {
+      const topic = getSelectedTopic(session)
+      const version = getActiveVersion(session)
+      const bodyMarkdown = getReadableDraftBodyMarkdown(version?.draftMarkdown ?? '')
+      const bodyPlainText = markdownToPlainText(bodyMarkdown)
+
+      return {
+        bodyMarkdown,
+        bodyPlainText,
+        excerpt: bodyPlainText.length > 240 ? `${bodyPlainText.slice(0, 240).trim()}...` : bodyPlainText,
+        id: session.id,
+        theme: topic?.theme || '未设置母题',
+        title: resolveVersionDisplayTitle(session, version) || session?.title || '未命名文章',
+        type: topic?.type || '',
+        updatedAt: session?.updatedAt || session?.createdAt || '',
+      }
+    })
+    .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
+}
+
 function hasSessionHistory(session) {
   return isPersistableContentSession(session)
 }
@@ -727,9 +774,12 @@ function buildDraftVersion({ note = '', supplement = '', topic, versionNumber })
     draftMarkdown,
     generatedTitle: buildFallbackGeneratedTitle(topic),
     label: `V${versionNumber}`,
+    llmTelemetry: [],
     note: note.trim(),
+    provider: '',
     reportMarkdown,
     summary: note.trim() ? `根据“${note.trim()}”完成重写。` : '初稿生成完成，可进入文字稿确认。',
+    usedModel: '',
     wordCount: countReadableLength(draftMarkdown),
   }
 }
@@ -746,8 +796,11 @@ function buildVersionFromGeneratedResult({ generated, note = '', supplement = ''
     ...fallbackVersion,
     draftMarkdown: generated?.draftMarkdown?.trim() || fallbackVersion.draftMarkdown,
     generatedTitle: readLooseTitle(generated?.generatedTitle) || fallbackVersion.generatedTitle,
+    llmTelemetry: Array.isArray(generated?.llmTelemetry) ? generated.llmTelemetry : fallbackVersion.llmTelemetry,
     reportMarkdown: generated?.reportMarkdown?.trim() || fallbackVersion.reportMarkdown,
+    provider: typeof generated?.provider === 'string' ? generated.provider : fallbackVersion.provider,
     summary: generated?.summary?.trim() || fallbackVersion.summary,
+    usedModel: typeof generated?.model === 'string' ? generated.model : fallbackVersion.usedModel,
     wordCount: countReadableLength(generated?.draftMarkdown?.trim() || fallbackVersion.draftMarkdown),
   }
 }
@@ -966,6 +1019,35 @@ async function requestLibraryAssetUsage({ assetIds = [], usedAt } = {}) {
 
   return payload
 }
+
+async function requestGeneratedArticleTitle({
+  articleBodyMarkdown = '',
+  articleTitle = '',
+  sessionId = '',
+  theme = '',
+  type = '',
+} = {}) {
+  const response = await fetch('/api/article-title', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      articleBodyMarkdown,
+      articleTitle,
+      sessionId,
+      theme,
+      type,
+    }),
+  })
+  const payload = await readJsonResponse(response, '标题生成接口返回异常，请稍后重试。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '标题生成失败')
+  }
+
+  return payload
+}
 async function requestPersistedContentSessions() {
   const response = await fetch('/api/content-sessions')
   const payload = await readJsonResponse(response, '本地历史记录接口返回异常，请刷新页面后重试。')
@@ -1002,6 +1084,10 @@ function buildPersistedContentSessionItem(state) {
     state: createPersistableBenchmarkState(state),
     version: CONTENT_SESSION_STORAGE_VERSION,
   }
+}
+
+async function persistCurrentContentSessionsSnapshot() {
+  return requestPersistedContentSessionsUpdate(buildPersistedContentSessionItem(useBenchmarkStore.getState()))
 }
 
 function buildTemplateMatchSections(previewSections) {
@@ -1711,7 +1797,7 @@ function DraftStageCard({ activeVersion, onProceedWithoutChanges, onOpenTab, onR
 
           <div className="flex flex-wrap items-center gap-3">
             <Button className="rounded-full bg-gradient-to-r from-[#7C5CFC] to-[#9B7FFF] px-5 text-white" onClick={onProceedWithoutChanges} type="button">
-              无需修改
+              进入排版
             </Button>
             <Button className="rounded-full" onClick={onRewriteAll} type="button" variant="outline">
               整篇重写
@@ -1786,6 +1872,7 @@ function SessionSidebar({
   onCreateSession,
   onDeleteSession,
   onOpenSettings,
+  onTogglePublished,
   onSelectSession,
   onToggleCollapsed,
   sessions,
@@ -1838,7 +1925,7 @@ function SessionSidebar({
             {sessions.map((session) => (
               <div
                 className={cn(
-                  'group/session grid grid-cols-[minmax(0,1fr)_28px] items-center gap-1 rounded-[var(--radius-control)] border px-2.5 py-1 transition-colors',
+                  'group/session grid grid-cols-[minmax(0,1fr)_28px_28px] items-center gap-1 rounded-[var(--radius-control)] border px-2.5 py-1 transition-colors',
                   session.id === activeSessionId
                     ? 'border-border/80 bg-white'
                     : 'border-transparent bg-transparent hover:border-border/70 hover:bg-white/75',
@@ -1854,7 +1941,31 @@ function SessionSidebar({
                   title={session.title}
                   type="button"
                 >
-                  <span className="block truncate">{session.title}</span>
+                  <span
+                    className={cn(
+                      'block truncate',
+                      session.publishStatus === 'published' && 'text-muted-foreground line-through decoration-muted-foreground/60',
+                    )}
+                  >
+                    {session.title}
+                  </span>
+                </button>
+
+                <button
+                  aria-label={session.publishStatus === 'published' ? `取消标记已发布：${session.title}` : `标记已发布：${session.title}`}
+                  className={cn(
+                    'inline-flex size-7 items-center justify-center rounded-full transition-all duration-150 hover:bg-secondary hover:text-foreground',
+                    session.publishStatus === 'published'
+                      ? 'text-primary opacity-100'
+                      : 'text-muted-foreground opacity-0 group-hover/session:opacity-100 focus-visible:opacity-100',
+                  )}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onTogglePublished(session)
+                  }}
+                  type="button"
+                >
+                  <Eye className="size-[15px]" />
                 </button>
 
                 <button
@@ -2404,6 +2515,12 @@ export default function BenchmarkWorkbenchPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeModule, setActiveModule] = useState('content')
   const [articlePreviewSessionId, setArticlePreviewSessionId] = useState(null)
+  const [articleTitleCheckedAt, setArticleTitleCheckedAt] = useState(null)
+  const [articleTitleCheckedEntries, setArticleTitleCheckedEntries] = useState([])
+  const [articleTitleGeneratingSessionId, setArticleTitleGeneratingSessionId] = useState(null)
+  const [articleTitleResultsBySessionId, setArticleTitleResultsBySessionId] = useState({})
+  const [articleTitleSelectedSessionId, setArticleTitleSelectedSessionId] = useState(null)
+  const [hasCheckedArticleTitles, setHasCheckedArticleTitles] = useState(false)
   const [sessionPendingDelete, setSessionPendingDelete] = useState(null)
   const [copiedMessageId, setCopiedMessageId] = useState(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -2436,10 +2553,10 @@ export default function BenchmarkWorkbenchPage() {
         return session.title.toLowerCase().includes(normalizedQuery)
       })
       .sort((left, right) => {
-        const activityGap = getContentSessionActivityTimestamp(right) - getContentSessionActivityTimestamp(left)
+        const recordedGap = getContentSessionRecordedTimestamp(right) - getContentSessionRecordedTimestamp(left)
 
-        if (activityGap !== 0) {
-          return activityGap
+        if (recordedGap !== 0) {
+          return recordedGap
         }
 
         return new Date(right?.createdAt || 0).getTime() - new Date(left?.createdAt || 0).getTime()
@@ -2447,11 +2564,18 @@ export default function BenchmarkWorkbenchPage() {
   }, [searchQuery, sessions])
   const topicStatusById = useMemo(() => getTopicStatusMap(sessions), [sessions])
   const articleEntries = useMemo(() => createArticleListEntries(sessions), [sessions])
+  const completedArticleTitleEntries = useMemo(() => createArticleTitleEntries(sessions), [sessions])
 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? orderedSessions[0] ?? sessions[0] ?? null
   const activeArticleSession =
     articlePreviewSessionId != null ? sessions.find((session) => session.id === articlePreviewSessionId) ?? null : null
+  const selectedArticleTitleEntry =
+    articleTitleSelectedSessionId != null
+      ? articleTitleCheckedEntries.find((article) => article.id === articleTitleSelectedSessionId) ?? null
+      : null
+  const selectedArticleTitleResult =
+    articleTitleSelectedSessionId != null ? articleTitleResultsBySessionId[articleTitleSelectedSessionId] ?? null : null
   const currentSessionId = activeSession?.id ?? null
   const currentStageId = activeSession?.stageId ?? 'topic'
 
@@ -2570,6 +2694,23 @@ export default function BenchmarkWorkbenchPage() {
       setArticlePreviewSessionId(null)
     }
   }, [activeModule])
+
+  useEffect(() => {
+    if (!hasCheckedArticleTitles) {
+      return
+    }
+
+    const visibleEntryIds = new Set(completedArticleTitleEntries.map((article) => article.id))
+
+    setArticleTitleCheckedEntries((current) => current.filter((article) => visibleEntryIds.has(article.id)))
+    setArticleTitleResultsBySessionId((current) =>
+      Object.fromEntries(Object.entries(current).filter(([sessionId]) => visibleEntryIds.has(sessionId))),
+    )
+
+    if (articleTitleSelectedSessionId && !visibleEntryIds.has(articleTitleSelectedSessionId)) {
+      setArticleTitleSelectedSessionId(null)
+    }
+  }, [articleTitleSelectedSessionId, completedArticleTitleEntries, hasCheckedArticleTitles])
 
   useEffect(() => {
     if (!articlePreviewSessionId) {
@@ -2741,6 +2882,119 @@ export default function BenchmarkWorkbenchPage() {
     })
   }
 
+  function handleCheckArticleTitles() {
+    const nextEntries = completedArticleTitleEntries
+    const nextEntryIds = new Set(nextEntries.map((article) => article.id))
+
+    setArticleTitleCheckedEntries(nextEntries)
+    setArticleTitleCheckedAt(new Date().toISOString())
+    setHasCheckedArticleTitles(true)
+    setArticleTitleResultsBySessionId((current) =>
+      Object.fromEntries(Object.entries(current).filter(([sessionId]) => nextEntryIds.has(sessionId))),
+    )
+
+    if (articleTitleSelectedSessionId && !nextEntryIds.has(articleTitleSelectedSessionId)) {
+      setArticleTitleSelectedSessionId(null)
+    }
+  }
+
+  function handleSelectArticleTitleSession(sessionId) {
+    setArticleTitleSelectedSessionId(sessionId)
+  }
+
+  async function handleGenerateArticleTitle() {
+    if (!selectedArticleTitleEntry || articleTitleGeneratingSessionId) {
+      return
+    }
+
+    setArticleTitleGeneratingSessionId(selectedArticleTitleEntry.id)
+
+    try {
+      const payload = await requestGeneratedArticleTitle({
+        articleBodyMarkdown: selectedArticleTitleEntry.bodyMarkdown,
+        articleTitle: selectedArticleTitleEntry.title,
+        sessionId: selectedArticleTitleEntry.id,
+        theme: selectedArticleTitleEntry.theme,
+        type: selectedArticleTitleEntry.type,
+      })
+
+      setArticleTitleResultsBySessionId((current) => ({
+        ...current,
+        [selectedArticleTitleEntry.id]: {
+          model: payload?.model || '',
+          title: payload?.title || '',
+          usage: payload?.usage ?? null,
+        },
+      }))
+      showPageToast('标题生成完成')
+    } catch (error) {
+      showPageToast(error.message || '标题生成失败，请稍后重试', 'error')
+    } finally {
+      setArticleTitleGeneratingSessionId((current) => (current === selectedArticleTitleEntry.id ? null : current))
+    }
+  }
+
+  async function handleCopyGeneratedArticleTitle(title) {
+    try {
+      await navigator.clipboard.writeText(title)
+      showPageToast('标题复制成功')
+    } catch {
+      showPageToast('复制失败，请稍后重试', 'error')
+    }
+  }
+
+  function handleApplyGeneratedArticleTitle(sessionId) {
+    const generatedResult = articleTitleResultsBySessionId[sessionId]
+    const nextTitle = typeof generatedResult?.title === 'string' ? generatedResult.title.trim() : ''
+
+    if (!nextTitle) {
+      return
+    }
+
+    updateSession(sessionId, (current) => {
+      const activeVersion = getActiveVersion(current)
+      const nextVersions = Array.isArray(current?.draftReview?.versions)
+        ? current.draftReview.versions.map((version) =>
+            version.id === activeVersion?.id
+              ? {
+                  ...version,
+                  generatedTitle: nextTitle,
+                }
+              : version,
+          )
+        : current?.draftReview?.versions ?? []
+
+      return {
+        ...current,
+        draftReview: {
+          ...(current.draftReview ?? {}),
+          versions: nextVersions,
+        },
+        title: nextTitle,
+      }
+    })
+
+    setArticleTitleCheckedEntries((current) =>
+      current.map((article) =>
+        article.id === sessionId
+          ? {
+              ...article,
+              title: nextTitle,
+              updatedAt: new Date().toISOString(),
+            }
+          : article,
+      ),
+    )
+    setArticleTitleResultsBySessionId((current) => ({
+      ...current,
+      [sessionId]: {
+        ...current[sessionId],
+        title: nextTitle,
+      },
+    }))
+    showPageToast('已应用为当前标题')
+  }
+
   async function runFlow({
     awaitResultStepIndex,
     introMessageContent,
@@ -2857,6 +3111,11 @@ export default function BenchmarkWorkbenchPage() {
           ...activeFlow,
           completedAt: new Date().toISOString(),
           errorMessage: error.message,
+          ...(Array.isArray(error?.llmTelemetry) && error.llmTelemetry.length > 0
+            ? {
+                llmTelemetry: error.llmTelemetry,
+              }
+            : {}),
           steps: failFlowSteps(activeFlow.steps, Date.now()),
         }
         const nextSession = onError
@@ -2894,6 +3153,11 @@ export default function BenchmarkWorkbenchPage() {
       const completedFlow = {
         ...activeFlow,
         completedAt: new Date(finishedAt).toISOString(),
+        ...(Array.isArray(resolvedResult?.llmTelemetry) && resolvedResult.llmTelemetry.length > 0
+          ? {
+              llmTelemetry: resolvedResult.llmTelemetry,
+            }
+          : {}),
         steps: finalSteps,
       }
       const nextSession = onComplete(current, resolvedResult, { flowId, messageId, startedAt })
@@ -3503,7 +3767,49 @@ export default function BenchmarkWorkbenchPage() {
     setCopiedMessageId(null)
   }
 
+  async function handleToggleSessionPublished(session) {
+    if (!session?.id) {
+      return
+    }
+
+    const nextPublishStatus = session.publishStatus === 'published' ? 'default' : 'published'
+
+    updateSession(session.id, {
+      publishStatus: nextPublishStatus,
+    })
+
+    try {
+      await persistCurrentContentSessionsSnapshot()
+    } catch {
+      updateSession(session.id, {
+        publishStatus: session.publishStatus === 'published' ? 'published' : 'default',
+      })
+      showPageToast('已发布标记写入本地历史失败，请稍后再试', 'error')
+      return
+    }
+
+    showPageToast(nextPublishStatus === 'published' ? '已标记为已发布' : '已取消已发布标记')
+  }
+
   function handleSelectSession(sessionId) {
+    const targetSession = sessions.find((session) => session.id === sessionId) ?? null
+    const availableTabs = targetSession ? getAvailableTabs(targetSession) : []
+
+    if (targetSession && availableTabs.length > 0) {
+      const nextActiveWorkbenchTab = availableTabs.includes(targetSession.activeWorkbenchTab)
+        ? targetSession.activeWorkbenchTab
+        : targetSession.stageId === 'preview' || targetSession.stageId === 'completed'
+          ? availableTabs.includes('preview')
+            ? 'preview'
+            : availableTabs[0]
+          : availableTabs[0]
+
+      updateSession(sessionId, {
+        activeWorkbenchTab: nextActiveWorkbenchTab,
+        isWorkbenchOpen: true,
+      })
+    }
+
     setActiveModule('content')
     setArticlePreviewSessionId(null)
     setActiveSessionId(sessionId)
@@ -3588,6 +3894,7 @@ export default function BenchmarkWorkbenchPage() {
         onDeleteSession={handleRequestDeleteSession}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onSearchChange={setSearchQuery}
+        onTogglePublished={handleToggleSessionPublished}
         onSelectSession={handleSelectSession}
         onToggleCollapsed={handleToggleSidebarCollapsed}
         searchQuery={searchQuery}
@@ -3660,6 +3967,32 @@ export default function BenchmarkWorkbenchPage() {
                   }
                 >
                   <LibraryModuleCanvas topicStatusById={topicStatusById} />
+                </Suspense>
+              ) : activeModule === 'article-title' ? (
+                <Suspense
+                  fallback={
+                    <div className="flex min-h-0 flex-1 items-center justify-center bg-white px-6">
+                      <div className="inline-flex items-center gap-2 text-[14px] text-muted-foreground">
+                        <LoaderCircle className="animate-spin" size={16} />
+                        正在加载文章标题模块
+                      </div>
+                    </div>
+                  }
+                >
+                  <ArticleTitleModuleCanvas
+                    articles={articleTitleCheckedEntries}
+                    checkedAt={articleTitleCheckedAt}
+                    generatedTitleResult={selectedArticleTitleResult}
+                    hasChecked={hasCheckedArticleTitles}
+                    isGenerating={articleTitleGeneratingSessionId === articleTitleSelectedSessionId}
+                    onApplyGeneratedTitle={handleApplyGeneratedArticleTitle}
+                    onCheckArticles={handleCheckArticleTitles}
+                    onCopyGeneratedTitle={handleCopyGeneratedArticleTitle}
+                    onGenerateTitle={handleGenerateArticleTitle}
+                    onSelectArticle={handleSelectArticleTitleSession}
+                    selectedArticle={selectedArticleTitleEntry}
+                    selectedArticleId={articleTitleSelectedSessionId}
+                  />
                 </Suspense>
               ) : activeModule === 'articles' ? (
                 <Suspense

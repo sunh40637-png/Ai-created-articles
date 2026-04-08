@@ -55,7 +55,20 @@ async function requestOpenAiCompatible(payload, apiKey, timeoutMs = 300000, base
     throw error
   }
 
-  return data
+  return {
+    ...data,
+    _requestMeta: {
+      baseUrl: buildOpenAiCompatibleUrl(baseUrl),
+      provider: 'openai-compatible',
+      requestIdHeader:
+        response.headers.get('x-request-id') ||
+        response.headers.get('request-id') ||
+        response.headers.get('x-trace-id') ||
+        '',
+      responseId: typeof data?.id === 'string' ? data.id.trim() : '',
+      statusCode: response.status || 200,
+    },
+  }
 }
 
 export async function chatWithOpenAiCompatibleProvider({

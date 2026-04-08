@@ -41,7 +41,20 @@ async function requestGlm(payload, apiKey, timeoutMs = 300000, baseUrl = '') {
     throw error
   }
 
-  return data
+  return {
+    ...data,
+    _requestMeta: {
+      baseUrl: baseUrl || GLM_API_URL,
+      provider: 'glm',
+      requestIdHeader:
+        response.headers.get('x-request-id') ||
+        response.headers.get('request-id') ||
+        response.headers.get('x-trace-id') ||
+        '',
+      responseId: typeof data?.id === 'string' ? data.id.trim() : '',
+      statusCode: response.status || 200,
+    },
+  }
 }
 
 export async function chatWithGlmProvider({
