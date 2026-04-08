@@ -15,7 +15,7 @@ import {
   writeArtifactText,
 } from './benchmarkAssets.js'
 import { transcribeWithDoubao } from './doubaoAsr.js'
-import { chatWithMiniMax } from './minimax.js'
+import { chatWithLlm } from './llm/index.js'
 
 const execFileAsync = promisify(execFile)
 const FFMPEG_BINARY = process.env.FFMPEG_PATH || '/opt/homebrew/bin/ffmpeg'
@@ -88,12 +88,12 @@ function buildPendingAnalysisWorkflowMessage({ asrDuration, audioDuration, jobId
       },
       {
         id: `workflow-analysis-${jobId}`,
-        label: '正在生成 MiniMax 拆解',
+        label: '正在生成 AI 拆解',
         previewId: 'analysis',
         status: 'running',
       },
     ],
-    title: '豆包识别已经完成，现在开始生成 MiniMax 拆解。',
+    title: '豆包识别已经完成，现在开始生成 AI 拆解。',
   }
 }
 
@@ -126,16 +126,16 @@ function buildCompletedWorkflowMessage({ analysisDuration, asrDuration, audioDur
       {
         durationLabel: formatDurationLabel(analysisDuration),
         id: `workflow-analysis-${jobId}`,
-        label: '已生成 MiniMax 拆解',
+        label: '已生成 AI 拆解',
         previewId: 'analysis',
         status: 'done',
       },
     ],
-    title: '这轮素材已经按“上传 -> 抽音频 -> 豆包识别 -> MiniMax 拆解”跑完了。',
+    title: '这轮素材已经按“上传 -> 抽音频 -> 豆包识别 -> AI 拆解”跑完了。',
   }
 }
 
-function buildMiniMaxPrompt({ prompt, transcription }) {
+function buildAnalysisPrompt({ prompt, transcription }) {
   const transcriptBody = transcription.utterances.length
     ? transcription.utterances
         .map((utterance) => {
@@ -254,7 +254,7 @@ function buildWorkbenchPayload({
     analysis: {
       body: 'analysis',
       content: analysisMarkdown,
-      subtitle: 'MiniMax 生成的主分析结果',
+      subtitle: '当前模型生成的主分析结果',
       title: '拆解报告',
     },
     template: {
@@ -518,18 +518,19 @@ export async function runBenchmarkAnalysis({
   const { audioArtifact, sourceAsset, timings, transcription } = pipelineState
 
   const analysisStartedAt = performance.now()
-  const minimaxResult = await chatWithMiniMax({
+  const minimaxResult = await chatWithLlm({
     apiKey: minimaxApiKey,
     messages: [
       {
         role: 'user',
-        content: buildMiniMaxPrompt({
+        content: buildAnalysisPrompt({
           prompt,
           transcription,
         }),
       },
     ],
     model: minimaxModel,
+    thinkingType: 'enabled',
   })
   const analysisMarkdown = minimaxResult?.choices?.[0]?.message?.content?.trim() || '模型没有返回内容。'
   const analysisDuration = performance.now() - analysisStartedAt
@@ -556,7 +557,7 @@ export async function runBenchmarkAnalysis({
   return {
     analysisMarkdown,
     jobId,
-    model: minimaxResult?.model || minimaxModel || 'MiniMax-M2.7',
+    model: minimaxResult?.model || minimaxModel || 'glm-5.1',
     sourceAsset: {
       ...sourceAsset,
       kind: detectAttachmentKind(sourceAsset),

@@ -75,8 +75,8 @@ const PreviewWorkbench = lazy(() => import('@/components/workbench/PreviewWorkbe
 const ShortContentWorkspace = lazy(() => import('@/components/short-content/ShortContentWorkspace.jsx'))
 const SystemSettingsCanvas = lazy(() => import('@/components/settings/SystemSettingsCanvas.jsx'))
 
-const reasoningModel = 'MiniMax-M2.7 深度模式'
-const highspeedModel = 'MiniMax-M2.7 标准模式'
+const reasoningModel = '当前模型·深度模式'
+const highspeedModel = '当前模型·标准模式'
 const LEFT_PANE_MIN_WIDTH = 640
 const RIGHT_PANE_MIN_WIDTH = 540
 const FLOW_STEP_MIN_MS = 420
@@ -909,7 +909,7 @@ async function requestGeneratedDraft({
   const payload = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new Error(payload?.error || 'MiniMax 内容创作失败')
+    throw new Error(payload?.error || '当前模型内容创作失败')
   }
 
   return payload
@@ -1781,9 +1781,11 @@ function SessionSidebar({
   activeModule,
   activeSessionId,
   isCollapsed,
+  isSettingsOpen,
   onChangeModule,
   onCreateSession,
   onDeleteSession,
+  onOpenSettings,
   onSelectSession,
   onToggleCollapsed,
   sessions,
@@ -1813,8 +1815,8 @@ function SessionSidebar({
             icon={module.icon}
             key={module.id}
             label={module.label}
-            onClick={() => onChangeModule(module.id)}
-            selected={activeModule === module.id}
+            onClick={module.id === 'settings' ? onOpenSettings : () => onChangeModule(module.id)}
+            selected={module.id === 'settings' ? isSettingsOpen : activeModule === module.id}
           />
         ))}
       </div>
@@ -2404,6 +2406,7 @@ export default function BenchmarkWorkbenchPage() {
   const [articlePreviewSessionId, setArticlePreviewSessionId] = useState(null)
   const [sessionPendingDelete, setSessionPendingDelete] = useState(null)
   const [copiedMessageId, setCopiedMessageId] = useState(null)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isResizingSplit, setIsResizingSplit] = useState(false)
   const [pageToast, setPageToast] = useState(null)
   const [rightPaneWidth, setRightPaneWidth] = useState(620)
@@ -3579,9 +3582,11 @@ export default function BenchmarkWorkbenchPage() {
         activeModule={activeModule}
         activeSessionId={currentSessionId}
         isCollapsed={isSidebarCollapsed}
+        isSettingsOpen={isSettingsOpen}
         onChangeModule={setActiveModule}
         onCreateSession={handleCreateSession}
         onDeleteSession={handleRequestDeleteSession}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onSearchChange={setSearchQuery}
         onSelectSession={handleSelectSession}
         onToggleCollapsed={handleToggleSidebarCollapsed}
@@ -3681,19 +3686,6 @@ export default function BenchmarkWorkbenchPage() {
                   }
                 >
                   <FixedLayoutConfigCanvas />
-                </Suspense>
-              ) : activeModule === 'settings' ? (
-                <Suspense
-                  fallback={
-                    <div className="flex min-h-0 flex-1 items-center justify-center bg-white px-6">
-                      <div className="inline-flex items-center gap-2 text-[14px] text-muted-foreground">
-                        <LoaderCircle className="animate-spin" size={16} />
-                        正在加载系统设置
-                      </div>
-                    </div>
-                  }
-                >
-                  <SystemSettingsCanvas onShowPageToast={showPageToast} />
                 </Suspense>
               ) : (
                 <Suspense
@@ -3888,6 +3880,12 @@ export default function BenchmarkWorkbenchPage() {
         open={activeModule === 'articles' && Boolean(activeArticleSession)}
         session={activeArticleSession}
       />
+
+      {isSettingsOpen ? (
+        <Suspense fallback={null}>
+          <SystemSettingsCanvas onClose={() => setIsSettingsOpen(false)} onShowPageToast={showPageToast} open={isSettingsOpen} />
+        </Suspense>
+      ) : null}
 
       {pageToast ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[80] flex justify-center px-4">

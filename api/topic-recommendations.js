@@ -1,5 +1,5 @@
 import { generateTopicRecommendations } from '../server/topicRecommendations.js'
-import { resolveMiniMaxConfig } from '../server/runtimeConfig.js'
+import { resolveActiveLlmProfile } from '../server/runtimeConfig.js'
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -8,13 +8,13 @@ export default async function handler(request, response) {
   }
 
   try {
-    const minimaxConfig = resolveMiniMaxConfig({
+    const activeProfile = resolveActiveLlmProfile({
       model: request.body?.model,
     })
 
     const result = await generateTopicRecommendations({
-      apiKey: minimaxConfig.apiKey,
-      model: minimaxConfig.model,
+      apiKey: activeProfile.apiKey,
+      model: activeProfile.model,
       supplement: request.body?.supplement || '',
     })
 

@@ -40,8 +40,9 @@ import {
   recordLibraryAssetUsage,
   updateLibraryAsset,
 } from './server/libraryAssets.js'
-import { chatWithMiniMax } from './server/minimax.js'
-import { resolveDoubaoAsrConfig, resolveMiniMaxConfig } from './server/runtimeConfig.js'
+import { saveLlmConfig } from './server/llm/config.js'
+import { chatWithLlm } from './server/llm/index.js'
+import { normalizeLlmProfile, resolveActiveLlmProfile, resolveDoubaoAsrConfig, resolveLlmConfig } from './server/runtimeConfig.js'
 import { generateTopicRecommendations } from './server/topicRecommendations.js'
 import { prepareWechatClipboardHtml } from './server/wechatClipboard.js'
 import { readWechatDraftStatus, syncSessionToWechatDraft } from './server/wechatDraft.js'
@@ -80,9 +81,9 @@ function parseRangeHeader(rangeHeader, size) {
   return { end, start }
 }
 
-function minimaxDevApi(env) {
+function benchmarkChatDevApi() {
   return {
-    name: 'minimax-dev-api',
+    name: 'benchmark-chat-dev-api',
     configureServer(server) {
       server.middlewares.use('/api/benchmark-chat', async (req, res, next) => {
         if (req.method !== 'POST') {
@@ -98,9 +99,14 @@ function minimaxDevApi(env) {
           }
 
           const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
-          const result = await chatWithMiniMax({
-            apiKey: env.MINIMAX_API_KEY,
-            model: body.model || env.MINIMAX_MODEL,
+          const activeProfile = resolveActiveLlmProfile({
+            model: body.model,
+          })
+          const result = await chatWithLlm({
+            apiKey: activeProfile.apiKey,
+            baseUrl: activeProfile.baseUrl,
+            model: activeProfile.model,
+            provider: activeProfile.provider,
             messages: body.messages ?? [],
           })
 
@@ -109,7 +115,7 @@ function minimaxDevApi(env) {
           res.end(
             JSON.stringify({
               content: result?.choices?.[0]?.message?.content ?? '',
-              model: result?.model ?? env.MINIMAX_MODEL ?? 'MiniMax-M2.7',
+              model: result?.model ?? activeProfile.model ?? '当前模型',
               usage: result?.usage ?? null,
             }),
           )
@@ -128,7 +134,7 @@ function minimaxDevApi(env) {
   }
 }
 
-function contentCreationDevApi(env) {
+function contentCreationDevApi() {
   return {
     name: 'content-creation-dev-api',
     configureServer(server) {
@@ -163,10 +169,13 @@ function contentCreationDevApi(env) {
             res.flushHeaders?.()
 
             try {
+              const activeProfile = resolveActiveLlmProfile({
+                model: body.model,
+              })
               const result = await runInitialContentPipeline({
-                apiKey: env.MINIMAX_API_KEY,
+                apiKey: activeProfile.apiKey,
                 deepThinkingEnabled: body.deepThinkingEnabled ?? true,
-                model: body.model || env.MINIMAX_MODEL,
+                model: activeProfile.model,
                 ruleProfileId: body.ruleProfileId,
                 supplement: body.supplement || '',
                 topic: body.topic || null,
@@ -194,11 +203,14 @@ function contentCreationDevApi(env) {
             return
           }
 
+          const activeProfile = resolveActiveLlmProfile({
+            model: body.model,
+          })
           const result = await generateContentDraft({
             action: body.action || 'initial',
-            apiKey: env.MINIMAX_API_KEY,
+            apiKey: activeProfile.apiKey,
             deepThinkingEnabled: body.deepThinkingEnabled ?? true,
-            model: body.model || env.MINIMAX_MODEL,
+            model: activeProfile.model,
             note: body.note || '',
             ruleProfileId: body.ruleProfileId,
             supplement: body.supplement || '',
@@ -223,7 +235,7 @@ function contentCreationDevApi(env) {
   }
 }
 
-function topicRecommendationDevApi(env) {
+function topicRecommendationDevApi() {
   return {
     name: 'topic-recommendation-dev-api',
     configureServer(server) {
@@ -241,9 +253,12 @@ function topicRecommendationDevApi(env) {
           }
 
           const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+          const activeProfile = resolveActiveLlmProfile({
+            model: body.model,
+          })
           const result = await generateTopicRecommendations({
-            apiKey: env.MINIMAX_API_KEY,
-            model: body.model || env.MINIMAX_MODEL,
+            apiKey: activeProfile.apiKey,
+            model: activeProfile.model,
             supplement: body.supplement || '',
           })
 
@@ -514,7 +529,7 @@ function contentSessionsDevApi() {
   }
 }
 
-function shortContentDevApi(env) {
+function shortContentDevApi() {
   return {
     name: 'short-content-dev-api',
     configureServer(server) {
@@ -536,10 +551,13 @@ function shortContentDevApi(env) {
 
         try {
           const body = await readJsonBody(req)
+          const activeProfile = resolveActiveLlmProfile({
+            model: body?.model,
+          })
           const result = await generateShortContent({
-            apiKey: env.MINIMAX_API_KEY,
+            apiKey: activeProfile.apiKey,
             existingContents: body?.existingContents ?? [],
-            model: body?.model || env.MINIMAX_MODEL,
+            model: activeProfile.model,
           })
 
           res.statusCode = 200
@@ -624,6 +642,101 @@ function shortContentSessionsDevApi() {
           res.end(
             JSON.stringify({
               error: error.message || '短文本地历史记录请求失败',
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
+function llmConfigDevApi() {
+  return {
+    name: 'llm-config-dev-api',
+    configureServer(server) {
+      async function readJsonBody(req) {
+        const chunks = []
+
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+
+        return chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+      }
+
+      server.middlewares.use('/api/llm-config', async (req, res, next) => {
+        const requestUrl = new URL(req.url, 'http://127.0.0.1')
+        const pathname = requestUrl.pathname || '/'
+
+        try {
+          if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/') {
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                activeProfile: resolveActiveLlmProfile(),
+                config: resolveLlmConfig(),
+              }),
+            )
+            return
+          }
+
+          if (req.method === 'PUT' && pathname === '/') {
+            const body = await readJsonBody(req)
+            const result = await saveLlmConfig(body?.config ?? null)
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if (req.method === 'POST' && pathname === '/test') {
+            const body = await readJsonBody(req)
+            const profile = body?.profile
+              ? normalizeLlmProfile(body.profile, 0)
+              : resolveActiveLlmProfile()
+            const result = await chatWithLlm({
+              apiKey: profile.apiKey,
+              baseUrl: profile.baseUrl,
+              messages: [
+                {
+                  role: 'user',
+                  content: '请只回复 ok',
+                },
+              ],
+              model: profile.model,
+              provider: profile.provider,
+              systemPrompt: '你是一个连通性测试助手。',
+              temperature: 0,
+              thinking: false,
+              timeoutMs: 60000,
+              topP: 1,
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                content: result?.choices?.[0]?.message?.content ?? '',
+                model: result?.model ?? profile.model,
+                provider: profile.provider,
+                success: true,
+                usage: result?.usage ?? null,
+              }),
+            )
+            return
+          }
+
+          next()
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error.message || '模型配置请求失败',
+              details: error.payload ?? null,
+              success: false,
             }),
           )
         }
@@ -823,10 +936,13 @@ function benchmarkPipelineDevApi(env) {
           }
 
           const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+          const activeProfile = resolveActiveLlmProfile({
+            model: body.model,
+          })
           const result = await runBenchmarkAnalysis({
             jobId: body.jobId,
-            minimaxApiKey: env.MINIMAX_API_KEY,
-            minimaxModel: body.model || env.MINIMAX_MODEL,
+            minimaxApiKey: activeProfile.apiKey,
+            minimaxModel: activeProfile.model,
             prompt: body.prompt || '',
           })
 
@@ -838,7 +954,7 @@ function benchmarkPipelineDevApi(env) {
           res.setHeader('Content-Type', 'application/json')
           res.end(
             JSON.stringify({
-              error: error.message || 'MiniMax 分析失败',
+              error: error.message || '当前模型分析失败',
               details: error.payload ?? null,
             }),
           )
@@ -921,10 +1037,6 @@ function benchmarkPipelineDevApi(env) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const minimaxConfig = resolveMiniMaxConfig({
-    apiKey: env.MINIMAX_API_KEY,
-    model: env.MINIMAX_MODEL,
-  })
   const doubaoConfig = resolveDoubaoAsrConfig({
     accessKey: env.DOUBAO_ASR_ACCESS_KEY,
     appId: env.DOUBAO_ASR_APP_ID,
@@ -935,22 +1047,21 @@ export default defineConfig(({ mode }) => {
     DOUBAO_ASR_ACCESS_KEY: doubaoConfig.accessKey,
     DOUBAO_ASR_APP_ID: doubaoConfig.appId,
     DOUBAO_ASR_RESOURCE_ID: doubaoConfig.resourceId,
-    MINIMAX_API_KEY: minimaxConfig.apiKey,
-    MINIMAX_MODEL: minimaxConfig.model,
   }
 
   return {
     plugins: [
       react(),
       tailwindcss(),
-      minimaxDevApi(runtimeEnv),
-      contentCreationDevApi(runtimeEnv),
-      topicRecommendationDevApi(runtimeEnv),
+      benchmarkChatDevApi(),
+      contentCreationDevApi(),
+      topicRecommendationDevApi(),
       libraryAssetsDevApi(),
       fixedLayoutConfigDevApi(),
       contentSessionsDevApi(),
-      shortContentDevApi(runtimeEnv),
+      shortContentDevApi(),
       shortContentSessionsDevApi(),
+      llmConfigDevApi(),
       systemSyncStatusDevApi(),
       wechatDraftDevApi(),
       benchmarkPipelineDevApi(runtimeEnv),

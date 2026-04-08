@@ -37,7 +37,7 @@
 - Zustand
 - Tailwind CSS 4
 - shadcn/ui 风格组件
-- MiniMax 文本生成
+- 多模型文本生成（默认 GLM 5.1）
 - 豆包 ASR 音频转写
 - 阿里云 OSS 云端镜像
 - 微信公众号草稿与剪贴板接口
@@ -78,8 +78,12 @@ cp .env.example .env
 基础配置示例：
 
 ```env
-MINIMAX_API_KEY=
-MINIMAX_MODEL=MiniMax-M2.7
+LLM_PROVIDER=glm
+LLM_API_KEY=
+LLM_MODEL=glm-5.1
+LLM_BASE_URL=
+GLM_API_KEY=
+GLM_MODEL=glm-5.1
 DOUBAO_ASR_APP_ID=
 DOUBAO_ASR_ACCESS_KEY=
 DOUBAO_ASR_RESOURCE_ID=volc.bigasr.auc_turbo
@@ -92,9 +96,19 @@ FFMPEG_PATH=/opt/homebrew/bin/ffmpeg
 
 ```json
 {
-  "minimax": {
-    "apiKey": "",
-    "model": "MiniMax-M2.7"
+  "llm": {
+    "activeProfileId": "glm-main",
+    "profiles": [
+      {
+        "id": "glm-main",
+        "name": "GLM 5.1 主账号",
+        "provider": "glm",
+        "model": "glm-5.1",
+        "apiKey": "",
+        "baseUrl": "",
+        "enabled": true
+      }
+    ]
   },
   "aliyunOss": {
     "accessKeyId": "",
@@ -117,7 +131,7 @@ FFMPEG_PATH=/opt/homebrew/bin/ffmpeg
 
 说明：
 
-- `MiniMax` 用于长文和短文生成
+- `LLM 模型中心` 统一管理长文、短文、选题与拆解使用的当前模型
 - `阿里云 OSS` 用于内容云端镜像
 - `豆包 ASR` 用于音频转写
 - `微信公众号配置` 用于草稿同步

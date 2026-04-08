@@ -1,5 +1,5 @@
 import { generateShortContent } from '../../server/shortContentGeneration.js'
-import { resolveMiniMaxConfig } from '../../server/runtimeConfig.js'
+import { resolveActiveLlmProfile } from '../../server/runtimeConfig.js'
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -8,14 +8,14 @@ export default async function handler(request, response) {
   }
 
   try {
-    const minimaxConfig = resolveMiniMaxConfig({
+    const activeProfile = resolveActiveLlmProfile({
       model: request.body?.model,
     })
 
     const result = await generateShortContent({
-      apiKey: minimaxConfig.apiKey,
+      apiKey: activeProfile.apiKey,
       existingContents: request.body?.existingContents ?? [],
-      model: minimaxConfig.model,
+      model: activeProfile.model,
     })
 
     response.status(200).json(result)

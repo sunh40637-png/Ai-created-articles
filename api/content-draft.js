@@ -1,5 +1,5 @@
 import { generateContentDraft } from '../server/contentCreation.js'
-import { resolveMiniMaxConfig } from '../server/runtimeConfig.js'
+import { resolveActiveLlmProfile } from '../server/runtimeConfig.js'
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -8,15 +8,15 @@ export default async function handler(request, response) {
   }
 
   try {
-    const minimaxConfig = resolveMiniMaxConfig({
+    const activeProfile = resolveActiveLlmProfile({
       model: request.body?.model,
     })
 
     const result = await generateContentDraft({
       action: request.body?.action || 'initial',
-      apiKey: minimaxConfig.apiKey,
+      apiKey: activeProfile.apiKey,
       deepThinkingEnabled: request.body?.deepThinkingEnabled ?? true,
-      model: minimaxConfig.model,
+      model: activeProfile.model,
       note: request.body?.note || '',
       ruleProfileId: request.body?.ruleProfileId,
       supplement: request.body?.supplement || '',

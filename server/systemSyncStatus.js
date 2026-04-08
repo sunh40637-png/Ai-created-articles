@@ -9,10 +9,17 @@ import {
   getAliyunOssPublicConfig,
   isAliyunOssConfigured,
   readContentSessionPayloadFromOss,
+  readLlmConfigPayloadFromOss,
   readShortContentPayloadFromOss,
   writeContentSessionPayloadToOss,
+  writeLlmConfigPayloadToOss,
   writeShortContentPayloadToOss,
 } from './ossContentStorage.js'
+import {
+  LLM_CONFIG_PERSISTENCE_PATH,
+  readEffectiveLlmConfigPayloadFromLocal,
+  writePersistedLlmConfigPayloadToLocal,
+} from './llmConfigPersistence.js'
 import {
   SHORT_CONTENT_SESSION_PERSISTENCE_PATH,
   readPersistedShortContentPayload,
@@ -87,6 +94,10 @@ function countShortContentConversations(payload) {
   ).length
 }
 
+function countLlmProfiles(payload) {
+  return Array.isArray(payload?.item?.state?.profiles) ? payload.item.state.profiles.length : 0
+}
+
 function resolveStatusMeta(status) {
   switch (status) {
     case 'synced':
@@ -109,20 +120,20 @@ function resolveStatusMeta(status) {
       }
     case 'local_newer':
       return {
-        label: '本地较新',
-        summary: '你本机改过内容，但还没手动同步到云端。',
+        label: '内容不同',
+        summary: '本地和云端内容不同；当前以本地版本更新为准，可以同步到云端。',
         tone: 'warning',
       }
     case 'cloud_newer':
       return {
-        label: '云端较新',
-        summary: '云端版本更新，可以恢复到这台电脑。',
+        label: '内容不同',
+        summary: '本地和云端内容不同；当前以云端版本更新为准，可以恢复到这台电脑。',
         tone: 'warning',
       }
     case 'conflict':
       return {
-        label: '需要选择',
-        summary: '本地和云端内容不同，请选择保留哪一边。',
+        label: '内容不同',
+        summary: '本地和云端内容不同，且无法自动判断更新方向，请选择保留哪一边。',
         tone: 'warning',
       }
     case 'cloud_unavailable':
@@ -242,7 +253,7 @@ function buildTargetStatus({
     localUpdatedAt,
   })
   const statusMeta = resolveStatusMeta(status)
-  const countLabel = type === 'content' ? 'sessionCount' : 'conversationCount'
+  const countLabel = type === 'content' ? 'sessionCount' : type === 'llm' ? 'profileCount' : 'conversationCount'
 
   return {
     actions: resolveAvailableActions(status).map(buildActionMeta),
@@ -271,18 +282,22 @@ function buildTargetStatus({
 }
 
 export async function readSystemSyncStatus() {
-  const [contentLocalPayload, contentLocalStat, shortLocalPayload, shortLocalStat] = await Promise.all([
+  const [contentLocalPayload, contentLocalStat, shortLocalPayload, shortLocalStat, llmLocalPayload, llmLocalStat] = await Promise.all([
     readPersistedContentSessionPayloadFromLocal(),
     readFileStat(CONTENT_SESSION_PERSISTENCE_PATH),
     readPersistedShortContentPayload(),
     readFileStat(SHORT_CONTENT_SESSION_PERSISTENCE_PATH),
+    readEffectiveLlmConfigPayloadFromLocal(),
+    readFileStat(LLM_CONFIG_PERSISTENCE_PATH),
   ])
 
   const cloudEnabled = isAliyunOssConfigured()
   let contentCloudPayload = null
   let shortCloudPayload = null
+  let llmCloudPayload = null
   let contentCloudError = ''
   let shortCloudError = ''
+  let llmCloudError = ''
 
   if (cloudEnabled) {
     try {
@@ -295,6 +310,12 @@ export async function readSystemSyncStatus() {
       shortCloudPayload = await readShortContentPayloadFromOss()
     } catch (error) {
       shortCloudError = error.message || '读取短文云端镜像失败'
+    }
+
+    try {
+      llmCloudPayload = await readLlmConfigPayloadFromOss()
+    } catch (error) {
+      llmCloudError = error.message || '读取模型配置云端镜像失败'
     }
   }
 
@@ -328,11 +349,25 @@ export async function readSystemSyncStatus() {
       label: '短文生成',
       summary: MANUAL_SYNC_SUMMARY,
     },
+    llm: {
+      ...buildTargetStatus({
+        cloudEnabled,
+        cloudError: llmCloudError,
+        cloudPayload: llmCloudPayload,
+        countFromPayload: countLlmProfiles,
+        localPath: LLM_CONFIG_PERSISTENCE_PATH,
+        localPayload: llmLocalPayload,
+        localStat: llmLocalStat,
+        type: 'llm',
+      }),
+      label: '模型配置',
+      summary: MANUAL_SYNC_SUMMARY,
+    },
   }
 }
 
 function normalizeSyncTarget(target = '') {
-  return target === 'shortContent' ? 'shortContent' : target === 'content' ? 'content' : ''
+  return target === 'shortContent' ? 'shortContent' : target === 'content' ? 'content' : target === 'llm' ? 'llm' : ''
 }
 
 function normalizeSyncAction(action = '') {
@@ -391,29 +426,57 @@ export async function performSystemSyncAction({ action, target }) {
         name: cloudPayload.name,
       })
     }
+  } else if (normalizedTarget === 'shortContent') {
+    if (normalizedAction === 'push') {
+      const localPayload = await readPersistedShortContentPayload()
+
+      if (!localPayload?.item) {
+        const error = new Error('当前没有可同步到云端的短文内容')
+        error.status = 400
+        throw error
+      }
+
+      payload = await writeShortContentPayloadToOss({
+        item: localPayload.item,
+        name: localPayload.name,
+      })
+    } else {
+      const cloudPayload = await readShortContentPayloadFromOss()
+
+      if (!cloudPayload?.item) {
+        const error = new Error('云端当前没有可恢复的短文内容')
+        error.status = 400
+        throw error
+      }
+
+      payload = await writePersistedShortContentPayload({
+        item: cloudPayload.item,
+        name: cloudPayload.name,
+      })
+    }
   } else if (normalizedAction === 'push') {
-    const localPayload = await readPersistedShortContentPayload()
+    const localPayload = await readEffectiveLlmConfigPayloadFromLocal()
 
     if (!localPayload?.item) {
-      const error = new Error('当前没有可同步到云端的短文内容')
+      const error = new Error('当前没有可同步到云端的模型配置')
       error.status = 400
       throw error
     }
 
-    payload = await writeShortContentPayloadToOss({
+    payload = await writeLlmConfigPayloadToOss({
       item: localPayload.item,
       name: localPayload.name,
     })
   } else {
-    const cloudPayload = await readShortContentPayloadFromOss()
+    const cloudPayload = await readLlmConfigPayloadFromOss()
 
     if (!cloudPayload?.item) {
-      const error = new Error('云端当前没有可恢复的短文内容')
+      const error = new Error('云端当前没有可恢复的模型配置')
       error.status = 400
       throw error
     }
 
-    payload = await writePersistedShortContentPayload({
+    payload = await writePersistedLlmConfigPayloadToLocal({
       item: cloudPayload.item,
       name: cloudPayload.name,
     })

@@ -23,6 +23,7 @@ const WRITING_CONFIG_KEY = `${OSS_ROOT_PREFIX}/configs/writing-config.json`
 const SYSTEM_CONFIG_KEY = `${OSS_ROOT_PREFIX}/configs/system-config.json`
 const CONTENT_SESSION_SNAPSHOT_KEY = `${OSS_ROOT_PREFIX}/sync/content-creation-sessions.json`
 const SHORT_CONTENT_SNAPSHOT_KEY = `${OSS_ROOT_PREFIX}/sync/short-content-conversations.json`
+const LLM_CONFIG_SNAPSHOT_KEY = `${OSS_ROOT_PREFIX}/sync/llm-config.json`
 const TOPIC_STATUS_PRIORITY = {
   pending: 0,
   'in-progress': 1,
@@ -780,6 +781,43 @@ export async function deleteShortContentPayloadFromOss() {
   }
 
   await deleteObject(SHORT_CONTENT_SNAPSHOT_KEY).catch(() => null)
+  return { deleted: true }
+}
+
+export async function readLlmConfigPayloadFromOss({ name = 'llm-config-v1' } = {}) {
+  if (!isAliyunOssConfigured()) {
+    return null
+  }
+
+  const payload = await getJsonObject(LLM_CONFIG_SNAPSHOT_KEY)
+  return normalizePersistedSnapshotPayload(payload, name)
+}
+
+export async function writeLlmConfigPayloadToOss({ item, name = 'llm-config-v1' } = {}) {
+  if (!item || typeof item !== 'object') {
+    throw createOssError('缺少可写入 OSS 的模型配置数据', 400)
+  }
+
+  if (!isAliyunOssConfigured()) {
+    return null
+  }
+
+  const payload = {
+    item,
+    name,
+    updatedAt: new Date().toISOString(),
+  }
+
+  await putJsonObject(LLM_CONFIG_SNAPSHOT_KEY, payload)
+  return payload
+}
+
+export async function deleteLlmConfigPayloadFromOss() {
+  if (!isAliyunOssConfigured()) {
+    return null
+  }
+
+  await deleteObject(LLM_CONFIG_SNAPSHOT_KEY).catch(() => null)
   return { deleted: true }
 }
 

@@ -757,6 +757,25 @@ function ensureSessionsShape(state) {
   }
 }
 
+function buildWorkspaceStateFromSnapshot(state) {
+  const normalizedState = ensureSessionsShape(state)
+  const persistedSessions = getPersistableContentSessions(normalizedState.sessions)
+
+  if (persistedSessions.length === 0) {
+    return normalizedState
+  }
+
+  const freshSession = createSession(persistedSessions.length + 1, {
+    sessions: persistedSessions,
+  })
+
+  return {
+    activeSessionId: freshSession.id,
+    isSidebarCollapsed: normalizedState.isSidebarCollapsed,
+    sessions: [freshSession, ...persistedSessions].slice(0, MAX_ARTICLE_SESSIONS + 1),
+  }
+}
+
 function createPersistableBenchmarkState(state) {
   const persistedSessions = getPersistableContentSessions(state?.sessions)
   const persistedSessionIds = new Set(persistedSessions.map((session) => session.id))
@@ -842,7 +861,7 @@ export const useBenchmarkStore = create(
         },
         hydrateFromPersistedSnapshot: (snapshot) =>
           set(() => ({
-            ...ensureSessionsShape(snapshot),
+            ...buildWorkspaceStateFromSnapshot(snapshot),
           })),
         updateSession: (sessionId, updater) =>
           set((state) => ({
@@ -868,7 +887,11 @@ export const useBenchmarkStore = create(
       version: 4,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => createPersistableBenchmarkState(state),
-      migrate: (persistedState) => ensureSessionsShape(persistedState),
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...buildWorkspaceStateFromSnapshot(persistedState),
+      }),
+      migrate: (persistedState) => buildWorkspaceStateFromSnapshot(persistedState),
     },
   ),
 )

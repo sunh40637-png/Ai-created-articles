@@ -1,6 +1,6 @@
-import { chatWithMiniMax } from './minimax.js'
+import { chatWithLlm } from './llm/index.js'
 
-const DEFAULT_MODEL = 'MiniMax-M2.7'
+const DEFAULT_MODEL = 'glm-5.1'
 const TOPIC_ASSISTANT_NAME = '选题规划助手'
 const ALLOWED_TYPES = new Set(['A型', 'B型', 'C型'])
 const ALLOWED_THEMES = new Set(['做人处世智慧', '家庭关系', '晚年自处', '孝道与父母', '健康与生命'])
@@ -154,12 +154,14 @@ export async function generateTopicRecommendations({
   model = DEFAULT_MODEL,
   supplement = '',
 }) {
-  const result = await chatWithMiniMax({
+  const result = await chatWithLlm({
     apiKey,
     assistantName: TOPIC_ASSISTANT_NAME,
     model,
+    responseFormat: 'json_object',
     systemPrompt: buildTopicRecommendationSystemPrompt(),
     temperature: 0.65,
+    thinkingType: 'enabled',
     timeoutMs: 120000,
     messages: [
       {

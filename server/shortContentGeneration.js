@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { chatWithMiniMax } from './minimax.js'
+import { chatWithLlm } from './llm/index.js'
 
-const DEFAULT_MODEL = 'MiniMax-M2.7'
+const DEFAULT_MODEL = 'glm-5.1'
 const WRITING_RULES_PATH = new URL('./prompts/writing_rules_D_type.md', import.meta.url)
 const ENDING_LINES = {
   agree: '同意请点亮文末"爱心"，转发分享，弘扬中华传统文化！',
@@ -70,7 +70,7 @@ function normalizeShortContent(rawContent = '', endingLine) {
     .trim()
 
   if (!normalized) {
-    throw new Error('MiniMax 没有返回可用的短文内容')
+    throw new Error('当前模型没有返回可用的短文内容')
   }
 
   return `${normalized}\n\n${endingLine}`
@@ -116,7 +116,7 @@ export async function generateShortContent({
   const endingVariant = resolveEndingVariant(versionIndex)
   const endingLine = ENDING_LINES[endingVariant]
 
-  const result = await chatWithMiniMax({
+  const result = await chatWithLlm({
     apiKey,
     assistantName: '短文写作助手',
     model,

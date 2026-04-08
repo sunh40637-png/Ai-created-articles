@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { chatWithMiniMax } from './minimax.js'
-import { resolveMiniMaxConfig } from './runtimeConfig.js'
+import { chatWithLlm } from './llm/index.js'
+import { resolveActiveLlmProfile } from './runtimeConfig.js'
 import {
   clampLibraryAssetScene,
   DEFAULT_LIBRARY_ASSET_SORT,
@@ -327,16 +327,17 @@ function normalizeAiAssignments(parsed) {
 }
 
 async function requestAiAssetAssignments({ articleTopic = '', sections = [], sortedAssets = [] }) {
-  const { apiKey, model } = resolveMiniMaxConfig()
+  const { apiKey, model } = resolveActiveLlmProfile()
 
   if (!apiKey) {
     return []
   }
 
-  const result = await chatWithMiniMax({
+  const result = await chatWithLlm({
     apiKey,
     assistantName: ASSET_MATCH_ASSISTANT_NAME,
     model,
+    responseFormat: 'json_object',
     systemPrompt: [
       '你是一个公众号文章配图助手，只负责为每个正文段落选择最匹配的素材图片。',
       '选择优先级必须是：1.scene 画面描述；2.emotion 情绪；3.figures 人物构成；4.topic 母题只做弱约束。',
@@ -348,6 +349,7 @@ async function requestAiAssetAssignments({ articleTopic = '', sections = [], sor
       'JSON 格式：{"assignments":[{"sectionOrder":1,"assetId":"img_001","reason":"一句简短理由"}]}',
     ].join('\n'),
     temperature: 0.15,
+    thinkingType: 'disabled',
     timeoutMs: 120000,
     messages: [
       {

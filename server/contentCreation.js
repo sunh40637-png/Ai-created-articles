@@ -1,4 +1,4 @@
-import { chatWithMiniMax } from './minimax.js'
+import { chatWithLlm } from './llm/index.js'
 import {
   CONTENT_TARGET_WORD_COUNT_RANGE,
   CONTENT_WRITING_WORD_COUNT_RANGE,
@@ -8,7 +8,7 @@ import {
 } from './contentRuleProfiles.js'
 import { countReadableLength } from '../shared/readableLength.js'
 
-const DEFAULT_MODEL = 'MiniMax-M2.7'
+const DEFAULT_MODEL = 'glm-5.1'
 const CONTENT_ASSISTANT_NAME = '内容创作助手'
 const REQUIRED_DRAFT_PLACEHOLDERS = ['[IMAGE_1]', '[IMAGE_2]', '[IMAGE_3]', '[ENDING]']
 
@@ -273,12 +273,14 @@ async function requestContentGeneration({
 }) {
   const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
 
-  return chatWithMiniMax({
+  return chatWithLlm({
     apiKey,
     assistantName: CONTENT_ASSISTANT_NAME,
     model,
+    responseFormat: 'json_object',
     systemPrompt: buildContentSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.35 : 0.2,
+    thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     timeoutMs: 300000,
     messages: [
       {
@@ -301,17 +303,20 @@ async function requestStructuredContentStage({
   apiKey,
   assistantName = CONTENT_ASSISTANT_NAME,
   model,
+  thinkingType = 'disabled',
   systemPrompt,
   temperature,
   timeoutMs = 300000,
   userPrompt,
 }) {
-  return chatWithMiniMax({
+  return chatWithLlm({
     apiKey,
     assistantName,
     model,
+    responseFormat: 'json_object',
     systemPrompt,
     temperature,
+    thinkingType,
     timeoutMs,
     messages: [
       {
@@ -932,6 +937,7 @@ async function requestDraftGenerationStage({
   const result = await requestStructuredContentStage({
     apiKey,
     model,
+    thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     systemPrompt: buildDraftGenerationSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.35 : 0.2,
     userPrompt: buildDraftGenerationUserPrompt({
@@ -966,6 +972,7 @@ async function requestDraftAuditStage({
   const result = await requestStructuredContentStage({
     apiKey,
     model,
+    thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     systemPrompt: buildDraftAuditSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.2 : 0.1,
     userPrompt: buildDraftAuditUserPrompt({
@@ -1009,6 +1016,7 @@ async function requestDraftRevisionStage({
   const result = await requestStructuredContentStage({
     apiKey,
     model,
+    thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     systemPrompt: buildDraftRevisionSystemPrompt(ruleProfile),
     temperature: deepThinkingEnabled ? 0.32 : 0.18,
     userPrompt: buildDraftRevisionUserPrompt({
@@ -1227,7 +1235,7 @@ export async function generateContentDraft({
   const generatedTitle = readGeneratedTitle(parsed, topic)
 
   if (!sanitized.draftMarkdown) {
-    const error = new Error('MiniMax 没有返回可用的正文内容')
+    const error = new Error('当前模型没有返回可用的正文内容')
     error.status = 502
     throw error
   }
