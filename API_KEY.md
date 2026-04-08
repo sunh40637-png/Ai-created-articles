@@ -1,9 +1,10 @@
 # API Key
 
-## MiniMax
+## GLM / BigModel
 
-- Model: `MiniMax-M2.7`
-- API Key: `sk-api-DzCfRxuEg6iyaUiTghLhsyXc3h-WqX3WJMU0AqS3V95ScClTzSMbYPiu27AYDBKtTPTBD9PtgBiTeuV43n8u4E_Z8CNPXYghupySMDAGH_4KGPP6Kr6auSY`
+- GLM Model: `glm-5.1`
+- GLM API Key: `6d903e11ffb04bc08a6aaa551cd97a6f.ut6uJwrGpFj2XOHk`
+- GLM Base URL: `https://open.bigmodel.cn/api/paas/v4/chat/completions`
 
 ## Notes
 
