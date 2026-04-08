@@ -13,10 +13,10 @@ import {
   runInitialContentPipeline,
 } from './server/contentCreation.js'
 import {
-  deletePersistedContentSessionPayload,
+  deletePersistedContentSessionPayloadFromLocal,
   readContentSessionPersistenceMeta,
-  readPersistedContentSessionPayload,
-  writePersistedContentSessionPayload,
+  readPersistedContentSessionPayloadFromLocal,
+  writePersistedContentSessionPayloadToLocal,
 } from './server/contentSessionPersistence.js'
 import { generateShortContent } from './server/shortContentGeneration.js'
 import {
@@ -25,6 +25,7 @@ import {
   readShortContentPersistenceMeta,
   writePersistedShortContentPayload,
 } from './server/shortContentSessionPersistence.js'
+import { performSystemSyncAction, readSystemSyncStatus } from './server/systemSyncStatus.js'
 import { parseRequestFormData } from './server/httpFormData.js'
 import {
   deleteFixedLayoutAsset,
@@ -458,7 +459,7 @@ function contentSessionsDevApi() {
       server.middlewares.use('/api/content-sessions', async (req, res, next) => {
         try {
           if (req.method === 'GET' || req.method === 'HEAD') {
-            const payload = await readPersistedContentSessionPayload()
+            const payload = await readPersistedContentSessionPayloadFromLocal()
 
             res.statusCode = 200
             res.setHeader('Content-Type', 'application/json')
@@ -473,7 +474,7 @@ function contentSessionsDevApi() {
 
           if (req.method === 'PUT') {
             const body = await readJsonBody(req)
-            const payload = await writePersistedContentSessionPayload({
+            const payload = await writePersistedContentSessionPayloadToLocal({
               item: body?.item ?? null,
               name: body?.name ?? 'content-creation-sessions-v1',
             })
@@ -490,7 +491,7 @@ function contentSessionsDevApi() {
           }
 
           if (req.method === 'DELETE') {
-            const payload = await deletePersistedContentSessionPayload()
+            const payload = await deletePersistedContentSessionPayloadFromLocal()
 
             res.statusCode = 200
             res.setHeader('Content-Type', 'application/json')
@@ -623,6 +624,55 @@ function shortContentSessionsDevApi() {
           res.end(
             JSON.stringify({
               error: error.message || '短文本地历史记录请求失败',
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
+function systemSyncStatusDevApi() {
+  return {
+    name: 'system-sync-status-dev-api',
+    configureServer(server) {
+      server.middlewares.use('/api/system-sync-status', async (req, res, next) => {
+        try {
+          if (req.method === 'GET' || req.method === 'HEAD') {
+            const result = await readSystemSyncStatus()
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          if (req.method === 'POST') {
+            const chunks = []
+
+            for await (const chunk of req) {
+              chunks.push(chunk)
+            }
+
+            const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
+            const result = await performSystemSyncAction({
+              action: body?.action ?? '',
+              target: body?.target ?? '',
+            })
+
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+            return
+          }
+
+          next()
+        } catch (error) {
+          res.statusCode = error.status || 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error.message || '读取同步状态失败',
             }),
           )
         }
@@ -901,6 +951,7 @@ export default defineConfig(({ mode }) => {
       contentSessionsDevApi(),
       shortContentDevApi(runtimeEnv),
       shortContentSessionsDevApi(),
+      systemSyncStatusDevApi(),
       wechatDraftDevApi(),
       benchmarkPipelineDevApi(runtimeEnv),
     ],

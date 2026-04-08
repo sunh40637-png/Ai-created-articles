@@ -3,6 +3,8 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 
 export const MAX_ARTICLE_SESSIONS = 16
 export const TOPIC_PAGE_SIZE = 6
+const INITIAL_SESSION_ASSISTANT_MESSAGE =
+  '我先从选题库里随机准备了 6 个推荐选题。你可以直接选择，也可以通过筛选切换不同作者署名。'
 const TOPIC_STATUS_PRIORITY = {
   pending: 0,
   'in-progress': 1,
@@ -487,11 +489,86 @@ function createInitialMessages() {
     {
       id: createId('assistant'),
       role: 'assistant',
-      content:
-        '我先从选题库里随机准备了 6 个推荐选题。你可以直接选择，也可以通过筛选切换不同作者署名。',
+      content: INITIAL_SESSION_ASSISTANT_MESSAGE,
       createdAt: new Date().toISOString(),
     },
   ]
+}
+
+function toSessionTimestamp(value) {
+  const timestamp = new Date(value || 0).getTime()
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+function hasMeaningfulAssistantMessage(message, index) {
+  if (!message || message.role !== 'assistant') {
+    return false
+  }
+
+  if (message.workflow) {
+    return true
+  }
+
+  const content = typeof message.content === 'string' ? message.content.trim() : ''
+
+  return index > 0 && content.length > 0 && content !== INITIAL_SESSION_ASSISTANT_MESSAGE
+}
+
+export function isPersistableContentSession(session) {
+  if (!session || typeof session !== 'object') {
+    return false
+  }
+
+  const versions = Array.isArray(session?.draftReview?.versions) ? session.draftReview.versions : []
+
+  if (versions.length > 0) {
+    return true
+  }
+
+  const messages = Array.isArray(session?.messages) ? session.messages : []
+
+  if (messages.some((message, index) => hasMeaningfulAssistantMessage(message, index))) {
+    return true
+  }
+
+  if (Array.isArray(session?.runLogs) && session.runLogs.length > 0) {
+    return true
+  }
+
+  if (session?.processingFlow || session?.lastFlowSummary) {
+    return true
+  }
+
+  const draftSyncStatus = typeof session?.draftSync?.status === 'string' ? session.draftSync.status : 'idle'
+
+  return Boolean(session?.draftSync?.lastSyncedAt || session?.draftSync?.mediaId || draftSyncStatus !== 'idle')
+}
+
+export function getContentSessionActivityTimestamp(session) {
+  if (!isPersistableContentSession(session)) {
+    return 0
+  }
+
+  const versions = Array.isArray(session?.draftReview?.versions) ? session.draftReview.versions : []
+  const messages = Array.isArray(session?.messages) ? session.messages : []
+  const timestamps = [
+    ...versions.map((version) => toSessionTimestamp(version?.createdAt)),
+    ...messages
+      .map((message, index) => (hasMeaningfulAssistantMessage(message, index) ? toSessionTimestamp(message?.createdAt) : 0))
+      .filter(Boolean),
+    toSessionTimestamp(session?.processingFlow?.createdAt),
+    toSessionTimestamp(session?.lastFlowSummary?.completedAt || session?.lastFlowSummary?.createdAt),
+    toSessionTimestamp(session?.draftSync?.lastSyncedAt),
+    toSessionTimestamp(session?.createdAt),
+  ]
+
+  return timestamps.reduce((latest, current) => (current > latest ? current : latest), 0)
+}
+
+export function getPersistableContentSessions(sessions = []) {
+  return (Array.isArray(sessions) ? sessions : [])
+    .filter(isPersistableContentSession)
+    .slice(0, MAX_ARTICLE_SESSIONS)
 }
 
 function createSessionTitle(index = 1) {
@@ -554,7 +631,7 @@ function createSession(index = 1, options = {}) {
 }
 
 function ensureSessionsShape(state) {
-  const sessions = Array.isArray(state?.sessions) ? state.sessions : []
+  const sessions = getPersistableContentSessions(state?.sessions)
 
   if (sessions.length === 0) {
     const initialSession = createSession(1)
@@ -681,10 +758,13 @@ function ensureSessionsShape(state) {
 }
 
 function createPersistableBenchmarkState(state) {
+  const persistedSessions = getPersistableContentSessions(state?.sessions)
+  const persistedSessionIds = new Set(persistedSessions.map((session) => session.id))
+
   return {
-    activeSessionId: state.activeSessionId,
+    activeSessionId: persistedSessionIds.has(state?.activeSessionId) ? state.activeSessionId : persistedSessions[0]?.id ?? null,
     isSidebarCollapsed: state.isSidebarCollapsed,
-    sessions: state.sessions,
+    sessions: persistedSessions,
   }
 }
 

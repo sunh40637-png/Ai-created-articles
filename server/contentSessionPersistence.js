@@ -44,7 +44,7 @@ async function ensureContentSessionPersistenceDir() {
   await mkdir(CONTENT_SESSION_PERSISTENCE_DIR, { recursive: true })
 }
 
-async function readPersistedContentSessionPayloadFromLocal() {
+export async function readPersistedContentSessionPayloadFromLocal() {
   await ensureContentSessionPersistenceDir()
 
   try {
@@ -59,7 +59,7 @@ async function readPersistedContentSessionPayloadFromLocal() {
   }
 }
 
-async function writePersistedContentSessionPayloadToLocal({ item, name = 'content-creation-sessions-v1' } = {}) {
+export async function writePersistedContentSessionPayloadToLocal({ item, name = 'content-creation-sessions-v1' } = {}) {
   if (!item || typeof item !== 'object') {
     throw new Error('缺少可持久化的会话数据')
   }
@@ -76,7 +76,7 @@ async function writePersistedContentSessionPayloadToLocal({ item, name = 'conten
   return payload
 }
 
-async function deletePersistedContentSessionPayloadFromLocal() {
+export async function deletePersistedContentSessionPayloadFromLocal() {
   try {
     await unlink(CONTENT_SESSION_PERSISTENCE_PATH)
   } catch (error) {

@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  ChevronDown,
   ListFilter,
   LoaderCircle,
   Trash2,
@@ -24,6 +25,29 @@ import {
   LIBRARY_ASSET_SORT_OPTIONS,
   LIBRARY_ASSET_TOPICS,
 } from '../../../shared/libraryAssets.js'
+
+const LIBRARY_RADIUS_PANEL = 'rounded-[16px]'
+const LIBRARY_RADIUS_CARD = 'rounded-[14px]'
+const LIBRARY_RADIUS_CONTROL = 'rounded-[10px]'
+const LIBRARY_RADIUS_BADGE = 'rounded-[8px]'
+const LIBRARY_RADIUS_LIGHTBOX = 'rounded-[10px]'
+
+function LibrarySelect({ className = '', children, ...props }) {
+  return (
+    <div className="relative">
+      <select
+        className={`h-10 w-full appearance-none border border-border/70 bg-white px-3 pr-9 text-[14px] outline-none ${LIBRARY_RADIUS_CONTROL} ${className}`}
+        {...props}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+        size={15}
+      />
+    </div>
+  )
+}
 
 function LibraryAssetThumbnail({ asset, onPreview }) {
   const [hasError, setHasError] = useState(false)
@@ -87,7 +111,7 @@ function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savi
   }
 
   return (
-    <article className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
+    <article className={`overflow-hidden ${LIBRARY_RADIUS_CARD} border border-border/70 bg-white shadow-[0_16px_36px_rgba(15,23,42,0.05)]`}>
       <LibraryAssetThumbnail asset={asset} onPreview={onPreview} />
 
       <div className="p-4 sm:p-5">
@@ -99,12 +123,12 @@ function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savi
 
           <div className="flex shrink-0 items-center gap-2">
             {isEditing ? null : (
-              <Button className="rounded-full" onClick={() => setIsEditing(true)} size="sm" type="button" variant="outline">
+              <Button className={LIBRARY_RADIUS_CONTROL} onClick={() => setIsEditing(true)} size="sm" type="button" variant="outline">
                 编辑标签
               </Button>
             )}
             <Button
-              className="rounded-full"
+              className={LIBRARY_RADIUS_CONTROL}
               disabled={deletingId === asset.id || savingId === asset.id}
               onClick={() => onDelete(asset)}
               size="icon-sm"
@@ -121,7 +145,7 @@ function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savi
             <div className="mt-4 flex flex-wrap gap-2">
               {[asset.emotion, asset.topic, asset.figures].map((label) => (
                 <span
-                  className="rounded-full border border-border/70 bg-secondary/55 px-2.5 py-1 text-[11px] text-muted-foreground"
+                  className={`${LIBRARY_RADIUS_BADGE} border border-border/70 bg-secondary/55 px-2.5 py-1 text-[11px] text-muted-foreground`}
                   key={label}
                 >
                   {label}
@@ -130,8 +154,8 @@ function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savi
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
-              <span className="rounded-full border border-border/70 px-2.5 py-1">使用 {asset.usedCount} 次</span>
-              <span className="rounded-full border border-border/70 px-2.5 py-1">入库于 {formatLibraryAssetDate(asset.createdAt)}</span>
+              <span className={`${LIBRARY_RADIUS_BADGE} border border-border/70 px-2.5 py-1`}>使用 {asset.usedCount} 次</span>
+              <span className={`${LIBRARY_RADIUS_BADGE} border border-border/70 px-2.5 py-1`}>入库于 {formatLibraryAssetDate(asset.createdAt)}</span>
             </div>
           </>
         ) : (
@@ -139,8 +163,8 @@ function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savi
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1.5">
                 <div className="text-[12px] font-medium text-muted-foreground">情绪标签</div>
-                <select
-                  className="h-10 w-full rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+                <LibrarySelect
+                  className="h-10"
                   onChange={(event) => setDraft((current) => ({ ...current, emotion: event.target.value }))}
                   value={draft.emotion}
                 >
@@ -149,13 +173,13 @@ function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savi
                       {option}
                     </option>
                   ))}
-                </select>
+                </LibrarySelect>
               </label>
 
               <label className="space-y-1.5">
                 <div className="text-[12px] font-medium text-muted-foreground">母题标签</div>
-                <select
-                  className="h-10 w-full rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+                <LibrarySelect
+                  className="h-10"
                   onChange={(event) => setDraft((current) => ({ ...current, topic: event.target.value }))}
                   value={draft.topic}
                 >
@@ -164,13 +188,13 @@ function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savi
                       {option}
                     </option>
                   ))}
-                </select>
+                </LibrarySelect>
               </label>
 
               <label className="space-y-1.5">
                 <div className="text-[12px] font-medium text-muted-foreground">人物构成</div>
-                <select
-                  className="h-10 w-full rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+                <LibrarySelect
+                  className="h-10"
                   onChange={(event) => setDraft((current) => ({ ...current, figures: event.target.value }))}
                   value={draft.figures}
                 >
@@ -179,13 +203,13 @@ function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savi
                       {option}
                     </option>
                   ))}
-                </select>
+                </LibrarySelect>
               </label>
 
               <label className="space-y-1.5">
                 <div className="text-[12px] font-medium text-muted-foreground">场景描述</div>
                 <input
-                  className="h-10 w-full rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+                  className={`h-10 w-full ${LIBRARY_RADIUS_CONTROL} border border-border/70 bg-white px-3 text-[14px] outline-none`}
                   maxLength={LIBRARY_ASSET_SCENE_MAX_LENGTH}
                   onChange={(event) => setDraft((current) => ({ ...current, scene: event.target.value }))}
                   value={draft.scene}
@@ -196,11 +220,11 @@ function LibraryAssetCard({ asset, deletingId, onDelete, onPreview, onSave, savi
             <div className="flex items-center justify-between gap-3">
               <div className="text-[12px] text-muted-foreground">场景描述建议控制在 {LIBRARY_ASSET_SCENE_MAX_LENGTH} 字以内</div>
               <div className="flex items-center gap-2">
-                <Button className="rounded-full" onClick={handleCancel} size="sm" type="button" variant="outline">
+                <Button className={LIBRARY_RADIUS_CONTROL} onClick={handleCancel} size="sm" type="button" variant="outline">
                   取消
                 </Button>
                 <Button
-                  className="rounded-full"
+                  className={LIBRARY_RADIUS_CONTROL}
                   disabled={savingId === asset.id || deletingId === asset.id || !draft.scene.trim()}
                   onClick={handleSave}
                   size="sm"
@@ -312,11 +336,11 @@ function LibraryAssetLightbox({ activeAssetId, assets, onClose, onSelectAssetId 
         {activeAsset.path ? (
           <img
             alt={activeAsset.scene}
-            className="max-h-full max-w-[calc(100vw-140px)] rounded-[16px] object-contain"
+            className={`max-h-full max-w-[calc(100vw-140px)] ${LIBRARY_RADIUS_LIGHTBOX} object-contain`}
             src={activeAsset.path}
           />
         ) : (
-          <div className="flex min-h-[320px] w-full max-w-[960px] items-center justify-center rounded-[16px] border border-white/10 bg-white/6 px-6 text-center text-[15px] text-white/68">
+          <div className={`flex min-h-[320px] w-full max-w-[960px] items-center justify-center ${LIBRARY_RADIUS_LIGHTBOX} border border-white/10 bg-white/6 px-6 text-center text-[15px] text-white/68`}>
             图片已移除
           </div>
         )}
@@ -447,20 +471,20 @@ export default function AssetsModuleCanvas() {
             </p>
           </div>
 
-          <div className="rounded-full border border-border/70 bg-secondary/45 px-4 py-2 text-[13px] text-muted-foreground">
+          <div className={`${LIBRARY_RADIUS_BADGE} border border-border/70 bg-secondary/45 px-4 py-2 text-[13px] text-muted-foreground`}>
             当前共 {items.length} 张素材
           </div>
         </div>
 
-        <div className="mt-6 rounded-[22px] border border-border/70 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:p-5">
+        <div className={`mt-6 ${LIBRARY_RADIUS_PANEL} border border-border/70 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:p-5`}>
           <div className="flex items-center gap-2 text-[13px] font-medium text-foreground">
             <ListFilter size={16} />
             筛选与排序
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <select
-              className="h-11 rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+            <LibrarySelect
+              className="h-11"
               onChange={(event) => setEmotionFilter(event.target.value)}
               value={emotionFilter}
             >
@@ -470,10 +494,10 @@ export default function AssetsModuleCanvas() {
                   {option}
                 </option>
               ))}
-            </select>
+            </LibrarySelect>
 
-            <select
-              className="h-11 rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+            <LibrarySelect
+              className="h-11"
               onChange={(event) => setTopicFilter(event.target.value)}
               value={topicFilter}
             >
@@ -483,10 +507,10 @@ export default function AssetsModuleCanvas() {
                   {option}
                 </option>
               ))}
-            </select>
+            </LibrarySelect>
 
-            <select
-              className="h-11 rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+            <LibrarySelect
+              className="h-11"
               onChange={(event) => setFiguresFilter(event.target.value)}
               value={figuresFilter}
             >
@@ -496,10 +520,10 @@ export default function AssetsModuleCanvas() {
                   {option}
                 </option>
               ))}
-            </select>
+            </LibrarySelect>
 
-            <select
-              className="h-11 rounded-2xl border border-border/70 bg-white px-3 text-[14px] outline-none"
+            <LibrarySelect
+              className="h-11"
               onChange={(event) => setSort(event.target.value)}
               value={sort}
             >
@@ -508,30 +532,30 @@ export default function AssetsModuleCanvas() {
                   {option.label}
                 </option>
               ))}
-            </select>
+            </LibrarySelect>
 
-            <Button className="h-11 rounded-2xl" onClick={clearFilters} type="button" variant="outline">
+            <Button className={`h-11 ${LIBRARY_RADIUS_CONTROL}`} onClick={clearFilters} type="button" variant="outline">
               清空筛选
             </Button>
           </div>
         </div>
 
         {errorMessage ? (
-          <div className="mt-4 rounded-[16px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+          <div className={`mt-4 ${LIBRARY_RADIUS_CONTROL} border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700`}>
             {errorMessage}
           </div>
         ) : null}
 
         <div className="mt-6 flex-1">
           {isLoading ? (
-            <div className="flex min-h-[360px] items-center justify-center rounded-[24px] border border-border/70 bg-white">
+            <div className={`flex min-h-[360px] items-center justify-center ${LIBRARY_RADIUS_PANEL} border border-border/70 bg-white`}>
               <div className="flex items-center gap-2 text-[14px] text-muted-foreground">
                 <LoaderCircle className="animate-spin" size={16} />
                 正在读取素材库
               </div>
             </div>
           ) : items.length === 0 ? (
-            <div className="flex min-h-[360px] items-center justify-center rounded-[24px] border border-dashed border-border/80 bg-secondary/20">
+            <div className={`flex min-h-[360px] items-center justify-center ${LIBRARY_RADIUS_PANEL} border border-dashed border-border/80 bg-secondary/20`}>
               <div className="max-w-[420px] text-center">
                 <div className="text-[16px] font-medium text-foreground">{hasActiveFilters ? '当前筛选下暂无素材' : '暂无素材'}</div>
                 <p className="mt-2 text-[14px] leading-6 text-muted-foreground">

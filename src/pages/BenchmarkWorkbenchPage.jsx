@@ -11,6 +11,7 @@ import {
   RiMenuFoldLine,
   RiMenuUnfoldLine,
   RiQuillPenLine,
+  RiSettings3Line,
 } from '@remixicon/react'
 import {
   ArrowDown,
@@ -52,9 +53,12 @@ import { cn } from '@/lib/utils'
 import {
   createPersistableBenchmarkState,
   createTopicRecommendations,
+  getContentSessionActivityTimestamp,
   getTopicById,
   getTopicStatusMap,
   getTopicRecommendationPageCount,
+  getPersistableContentSessions,
+  isPersistableContentSession,
   TOPIC_LIBRARY_PEN_NAMES,
   useBenchmarkStore,
 } from '@/stores/useBenchmarkStore.js'
@@ -69,6 +73,7 @@ const AssetsModuleCanvas = lazy(() => import('@/components/assets/AssetsModuleCa
 const FixedLayoutConfigCanvas = lazy(() => import('@/components/fixed-layout/FixedLayoutConfigCanvas.jsx'))
 const PreviewWorkbench = lazy(() => import('@/components/workbench/PreviewWorkbench.jsx'))
 const ShortContentWorkspace = lazy(() => import('@/components/short-content/ShortContentWorkspace.jsx'))
+const SystemSettingsCanvas = lazy(() => import('@/components/settings/SystemSettingsCanvas.jsx'))
 
 const reasoningModel = 'MiniMax-M2.7 深度模式'
 const highspeedModel = 'MiniMax-M2.7 标准模式'
@@ -136,6 +141,7 @@ const sidebarModules = [
   { id: 'articles', label: '文章列表', icon: RiArticleLine },
   { id: 'assets', label: '素材库', icon: RiImageLine },
   { id: 'fixed-layout', label: '模板配置', icon: RiLayoutGridLine },
+  { id: 'settings', label: '系统设置', icon: RiSettings3Line },
 ]
 
 const TOPIC_STATUS_META = {
@@ -618,18 +624,7 @@ function createArticleListEntries(sessions = []) {
 }
 
 function hasSessionHistory(session) {
-  if (!session) {
-    return false
-  }
-
-  const messages = Array.isArray(session.messages) ? session.messages : []
-  const hasUserMessage = messages.some((message) => message?.role === 'user')
-  const hasSelectedTopic = Boolean(session?.topicSelection?.selectedTopicId)
-  const hasGeneratedVersions = (session?.draftReview?.versions?.length ?? 0) > 0
-  const hasAdvancedStage = typeof session?.stageId === 'string' && session.stageId !== 'topic'
-  const hasFlow = Boolean(session?.processingFlow || session?.lastFlowSummary)
-
-  return hasUserMessage || hasSelectedTopic || hasGeneratedVersions || hasAdvancedStage || hasFlow
+  return isPersistableContentSession(session)
 }
 
 function getSessionHistoryLatestTimestamp(sessions = []) {
@@ -638,7 +633,7 @@ function getSessionHistoryLatestTimestamp(sessions = []) {
       return latest
     }
 
-    const nextTimestamp = new Date(session?.updatedAt || session?.createdAt || 0).getTime()
+    const nextTimestamp = getContentSessionActivityTimestamp(session)
     return Number.isFinite(nextTimestamp) && nextTimestamp > latest ? nextTimestamp : latest
   }, 0)
 }
@@ -1841,7 +1836,7 @@ function SessionSidebar({
             {sessions.map((session) => (
               <div
                 className={cn(
-                  'group/session relative flex items-center rounded-[var(--radius-control)] border px-3 py-1.5 transition-colors',
+                  'group/session grid grid-cols-[minmax(0,1fr)_28px] items-center gap-1 rounded-[var(--radius-control)] border px-2.5 py-1 transition-colors',
                   session.id === activeSessionId
                     ? 'border-border/80 bg-white'
                     : 'border-transparent bg-transparent hover:border-border/70 hover:bg-white/75',
@@ -1850,7 +1845,7 @@ function SessionSidebar({
               >
                 <button
                   className={cn(
-                    'min-w-0 flex-1 pr-0 text-left text-[13px] leading-5 transition-[padding-right,color] duration-150 group-hover/session:pr-9',
+                    'min-w-0 rounded-[calc(var(--radius-control)-4px)] px-1 py-0.5 text-left text-[13px] leading-5 transition-colors',
                     session.id === activeSessionId ? 'text-foreground' : 'text-foreground/78 group-hover/session:text-foreground',
                   )}
                   onClick={() => onSelectSession(session.id)}
@@ -1862,7 +1857,7 @@ function SessionSidebar({
 
                 <button
                   aria-label={`删除 ${session.title}`}
-                  className="pointer-events-none absolute right-1.5 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-all duration-150 hover:bg-secondary hover:text-foreground group-hover/session:pointer-events-auto group-hover/session:opacity-100"
+                  className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-all duration-150 hover:bg-secondary hover:text-foreground group-hover/session:opacity-100 focus-visible:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation()
                     onDeleteSession(session)
@@ -2419,18 +2414,34 @@ export default function BenchmarkWorkbenchPage() {
 
   const orderedSessions = useMemo(
     () =>
-      [...sessions]
-        .filter((session) => {
-          if (!searchQuery.trim()) {
-            return true
-          }
-
-          return session.title.toLowerCase().includes(searchQuery.trim().toLowerCase())
-        })
-        .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()),
-    [searchQuery, sessions],
+      [...sessions].sort((left, right) => {
+        const leftTimestamp = new Date(left?.updatedAt || left?.createdAt || 0).getTime()
+        const rightTimestamp = new Date(right?.updatedAt || right?.createdAt || 0).getTime()
+        return rightTimestamp - leftTimestamp
+      }),
+    [sessions],
   )
-  const historySessions = useMemo(() => orderedSessions.filter(hasSessionHistory), [orderedSessions])
+  const historySessions = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase()
+
+    return getPersistableContentSessions(sessions)
+      .filter((session) => {
+        if (!normalizedQuery) {
+          return true
+        }
+
+        return session.title.toLowerCase().includes(normalizedQuery)
+      })
+      .sort((left, right) => {
+        const activityGap = getContentSessionActivityTimestamp(right) - getContentSessionActivityTimestamp(left)
+
+        if (activityGap !== 0) {
+          return activityGap
+        }
+
+        return new Date(right?.createdAt || 0).getTime() - new Date(left?.createdAt || 0).getTime()
+      })
+  }, [searchQuery, sessions])
   const topicStatusById = useMemo(() => getTopicStatusMap(sessions), [sessions])
   const articleEntries = useMemo(() => createArticleListEntries(sessions), [sessions])
 
@@ -3670,6 +3681,19 @@ export default function BenchmarkWorkbenchPage() {
                   }
                 >
                   <FixedLayoutConfigCanvas />
+                </Suspense>
+              ) : activeModule === 'settings' ? (
+                <Suspense
+                  fallback={
+                    <div className="flex min-h-0 flex-1 items-center justify-center bg-white px-6">
+                      <div className="inline-flex items-center gap-2 text-[14px] text-muted-foreground">
+                        <LoaderCircle className="animate-spin" size={16} />
+                        正在加载系统设置
+                      </div>
+                    </div>
+                  }
+                >
+                  <SystemSettingsCanvas onShowPageToast={showPageToast} />
                 </Suspense>
               ) : (
                 <Suspense

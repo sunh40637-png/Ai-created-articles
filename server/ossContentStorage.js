@@ -21,6 +21,8 @@ const CONFIG_INDEX_KEY = `${OSS_ROOT_PREFIX}/index/configs.json`
 const TOPIC_LIBRARY_KEY = `${OSS_ROOT_PREFIX}/topic-library/topic-library.json`
 const WRITING_CONFIG_KEY = `${OSS_ROOT_PREFIX}/configs/writing-config.json`
 const SYSTEM_CONFIG_KEY = `${OSS_ROOT_PREFIX}/configs/system-config.json`
+const CONTENT_SESSION_SNAPSHOT_KEY = `${OSS_ROOT_PREFIX}/sync/content-creation-sessions.json`
+const SHORT_CONTENT_SNAPSHOT_KEY = `${OSS_ROOT_PREFIX}/sync/short-content-conversations.json`
 const TOPIC_STATUS_PRIORITY = {
   pending: 0,
   'in-progress': 1,
@@ -656,6 +658,12 @@ export async function readContentSessionPayloadFromOss({ name = 'content-creatio
     return null
   }
 
+  const snapshotPayload = normalizePersistedSnapshotPayload(await getJsonObject(CONTENT_SESSION_SNAPSHOT_KEY), name)
+
+  if (snapshotPayload?.item?.state) {
+    return snapshotPayload
+  }
+
   const state = await readStateFromOssIndexes()
 
   if (!state) {
@@ -696,11 +704,15 @@ export async function writeContentSessionPayloadToOss({ item, name = 'content-cr
 
   await writeDerivedObjectsToOss(state)
 
-  return {
+  const payload = {
     item,
     name,
     updatedAt: new Date().toISOString(),
   }
+
+  await putJsonObject(CONTENT_SESSION_SNAPSHOT_KEY, payload)
+
+  return payload
 }
 
 export async function deleteContentSessionPayloadFromOss() {
@@ -709,6 +721,7 @@ export async function deleteContentSessionPayloadFromOss() {
   }
 
   await Promise.allSettled([
+    deleteObject(CONTENT_SESSION_SNAPSHOT_KEY),
     deleteObject(SESSION_INDEX_KEY),
     deleteObject(ARTICLE_INDEX_KEY),
     deleteObject(TOPIC_INDEX_KEY),
@@ -718,6 +731,55 @@ export async function deleteContentSessionPayloadFromOss() {
     deleteObject(SYSTEM_CONFIG_KEY),
   ])
 
+  return { deleted: true }
+}
+
+function normalizePersistedSnapshotPayload(payload, fallbackName) {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  return {
+    item: payload.item && typeof payload.item === 'object' ? payload.item : null,
+    name: typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : fallbackName,
+    updatedAt: normalizeIsoTimestamp(payload.updatedAt) || null,
+  }
+}
+
+export async function readShortContentPayloadFromOss({ name = 'short-content-conversations-v1' } = {}) {
+  if (!isAliyunOssConfigured()) {
+    return null
+  }
+
+  const payload = await getJsonObject(SHORT_CONTENT_SNAPSHOT_KEY)
+  return normalizePersistedSnapshotPayload(payload, name)
+}
+
+export async function writeShortContentPayloadToOss({ item, name = 'short-content-conversations-v1' } = {}) {
+  if (!item || typeof item !== 'object') {
+    throw createOssError('缺少可写入 OSS 的短文会话数据', 400)
+  }
+
+  if (!isAliyunOssConfigured()) {
+    return null
+  }
+
+  const payload = {
+    item,
+    name,
+    updatedAt: new Date().toISOString(),
+  }
+
+  await putJsonObject(SHORT_CONTENT_SNAPSHOT_KEY, payload)
+  return payload
+}
+
+export async function deleteShortContentPayloadFromOss() {
+  if (!isAliyunOssConfigured()) {
+    return null
+  }
+
+  await deleteObject(SHORT_CONTENT_SNAPSHOT_KEY).catch(() => null)
   return { deleted: true }
 }
 

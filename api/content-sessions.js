@@ -1,14 +1,14 @@
 import {
-  deletePersistedContentSessionPayload,
+  deletePersistedContentSessionPayloadFromLocal,
   readContentSessionPersistenceMeta,
-  readPersistedContentSessionPayload,
-  writePersistedContentSessionPayload,
+  readPersistedContentSessionPayloadFromLocal,
+  writePersistedContentSessionPayloadToLocal,
 } from '../server/contentSessionPersistence.js'
 
 export default async function handler(request, response) {
   if (request.method === 'GET') {
     try {
-      const payload = await readPersistedContentSessionPayload()
+      const payload = await readPersistedContentSessionPayloadFromLocal()
       response.status(200).json({
         ...(payload ?? { item: null, name: 'content-creation-sessions-v1', updatedAt: null }),
         meta: readContentSessionPersistenceMeta(),
@@ -24,7 +24,7 @@ export default async function handler(request, response) {
 
   if (request.method === 'PUT') {
     try {
-      const payload = await writePersistedContentSessionPayload({
+      const payload = await writePersistedContentSessionPayloadToLocal({
         item: request.body?.item ?? null,
         name: request.body?.name ?? 'content-creation-sessions-v1',
       })
@@ -43,7 +43,7 @@ export default async function handler(request, response) {
 
   if (request.method === 'DELETE') {
     try {
-      const payload = await deletePersistedContentSessionPayload()
+      const payload = await deletePersistedContentSessionPayloadFromLocal()
       response.status(200).json(payload)
     } catch (error) {
       response.status(error.status || 500).json({

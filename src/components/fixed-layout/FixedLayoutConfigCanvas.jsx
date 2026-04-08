@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, LoaderCircle, Paperclip, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, LoaderCircle, Paperclip, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   createTemplatePreviewPlaceholderSlots,
@@ -112,6 +112,168 @@ function formatFixedLayoutAssetDate(value) {
   } catch {
     return ''
   }
+}
+
+function resolveFixedLayoutSlotThumbnailMeta(slot) {
+  switch (slot) {
+    case 'heroGif':
+    case 'guideFollow':
+    case 'footerGif':
+      return {
+        aspectClassName: 'aspect-[21/9]',
+        sizeClassName: 'w-[144px] sm:w-[156px]',
+      }
+    case 'sectionAvatar':
+    case 'qrImage':
+    default:
+      return {
+        aspectClassName: 'aspect-square',
+        sizeClassName: 'w-[92px] sm:w-[104px]',
+      }
+  }
+}
+
+function isGifAsset(asset, assetSrc = '') {
+  const mimeType = typeof asset?.mimeType === 'string' ? asset.mimeType.trim().toLowerCase() : ''
+  const filename = typeof asset?.filename === 'string' ? asset.filename.trim().toLowerCase() : ''
+  return mimeType === 'image/gif' || filename.endsWith('.gif') || /\.gif(?:$|\?)/i.test(assetSrc)
+}
+
+function FixedLayoutSlotThumbnail({
+  accent,
+  alt,
+  asset,
+  aspectClassName,
+  className = '',
+  isUploading = false,
+  onPreview,
+  onReplace,
+}) {
+  const origin = typeof window === 'undefined' ? '' : window.location.origin
+  const assetSrc = resolveRenderableAssetPath(asset, origin)
+  const hasAsset = Boolean(asset?.path)
+  const isGif = hasAsset && isGifAsset(asset, assetSrc)
+  const [stillFrameSrc, setStillFrameSrc] = useState('')
+  const [isStillFramePending, setIsStillFramePending] = useState(false)
+
+  useEffect(() => {
+    if (!isGif || !assetSrc || typeof window === 'undefined') {
+      setStillFrameSrc('')
+      setIsStillFramePending(false)
+      return undefined
+    }
+
+    let cancelled = false
+    const image = new window.Image()
+    image.decoding = 'async'
+    setIsStillFramePending(true)
+
+    image.onload = () => {
+      if (cancelled) {
+        return
+      }
+
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = image.naturalWidth || 1
+        canvas.height = image.naturalHeight || 1
+        const context = canvas.getContext('2d')
+
+        if (!context) {
+          throw new Error('无法创建缩略图画布')
+        }
+
+        context.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+        if (!cancelled) {
+          setStillFrameSrc(canvas.toDataURL('image/png'))
+          setIsStillFramePending(false)
+        }
+      } catch {
+        if (!cancelled) {
+          setStillFrameSrc('')
+          setIsStillFramePending(false)
+        }
+      }
+    }
+
+    image.onerror = () => {
+      if (!cancelled) {
+        setStillFrameSrc('')
+        setIsStillFramePending(false)
+      }
+    }
+
+    image.src = assetSrc
+
+    return () => {
+      cancelled = true
+    }
+  }, [assetSrc, isGif])
+
+  return (
+    <div
+      className={cn(
+        'group relative overflow-hidden rounded-[var(--radius-control)] border border-border/70 bg-secondary/20',
+        aspectClassName,
+        className,
+      )}
+    >
+      {hasAsset ? (
+        <button
+          className="block h-full w-full"
+          onClick={() =>
+            onPreview({
+              ...asset,
+              label: alt,
+            })
+          }
+          type="button"
+        >
+          {isGif ? (
+            stillFrameSrc ? (
+              <img alt={alt} className="h-full w-full object-cover" src={stillFrameSrc} />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[12px] font-medium text-muted-foreground">
+                {isStillFramePending ? '正在生成缩略图…' : 'GIF 缩略图'}
+              </div>
+            )
+          ) : (
+            <img
+              alt={alt}
+              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+              src={assetSrc}
+            />
+          )}
+        </button>
+      ) : (
+        <button className="flex h-full w-full items-center justify-center" onClick={onReplace} type="button">
+          <div className="flex flex-col items-center gap-1 text-muted-foreground">
+            <Paperclip size={14} />
+            <span className="text-[11px] font-medium">上传</span>
+          </div>
+          <div className="absolute inset-0" style={{ backgroundColor: accent, opacity: 0.22 }} />
+        </button>
+      )}
+      {hasAsset ? (
+        <button
+          aria-label={`${alt}${isUploading ? '上传中' : '替换图片'}`}
+          className={cn(
+            'absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-white/88 text-foreground transition-all',
+            isUploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+          )}
+          disabled={isUploading}
+          onClick={(event) => {
+            event.stopPropagation()
+            onReplace()
+          }}
+          type="button"
+        >
+          {isUploading ? <LoaderCircle className="animate-spin" size={14} /> : <Paperclip size={14} />}
+        </button>
+      ) : null}
+    </div>
+  )
 }
 
 function FixedLayoutArticlePreviewFrame({ documentHtml, title = '模板预览' }) {
@@ -281,7 +443,7 @@ function FixedLayoutTemplatePreview({ config }) {
   )
 
   return (
-    <div className="mx-auto w-[375px] max-w-full overflow-hidden border border-[#e8eaef] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
+    <div className="mx-auto w-[375px] max-w-full overflow-hidden rounded-[var(--radius-panel)] border border-[#e8eaef] bg-white">
       <div className="border-b border-[#eef1f5] px-4 py-4">
         <div className="text-[18px] font-semibold leading-8 text-foreground">{TEMPLATE_PREVIEW_SAMPLE_TITLE}</div>
       </div>
@@ -309,6 +471,7 @@ function FixedLayoutImageSlotCard({
   const uploadedAtLabel = asset?.uploadedAt ? formatFixedLayoutAssetDate(asset.uploadedAt) : ''
   const isUploading = uploadingSlot === slot
   const hasAsset = Boolean(asset?.path)
+  const thumbnailMeta = resolveFixedLayoutSlotThumbnailMeta(slot)
 
   async function handleFileChange(event) {
     const nextFile = event.target.files?.[0]
@@ -323,99 +486,81 @@ function FixedLayoutImageSlotCard({
   return (
     <article
       className={cn(
-        'rounded-[18px] border border-border/70 bg-white p-4 transition-all',
-        selected ? 'bg-secondary/10 shadow-[0_16px_28px_rgba(15,23,42,0.08)]' : '',
+        'rounded-[var(--radius-card)] border bg-white p-4 transition-colors',
+        selected ? 'border-foreground/12 bg-white' : 'border-border/70',
       )}
     >
-      <button className="block w-full text-left" onClick={() => onSelect(slot)} type="button">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: slotConfig.accent }} />
-          <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-            <div className="truncate text-[15px] font-medium text-foreground">{slotConfig.label}</div>
-            <div className="shrink-0 text-right text-[12px] text-muted-foreground">{slotConfig.description}</div>
-          </div>
-        </div>
-      </button>
-
-      <div className="mt-4 flex items-start gap-4">
-        <button
-          className="group relative inline-flex h-[92px] w-[132px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-border/70 bg-secondary/20"
-          disabled={!hasAsset}
-          onClick={() =>
-            hasAsset &&
-            onPreview({
-              ...asset,
-              label: slotConfig.label,
-            })
-          }
-          type="button"
-        >
-          {hasAsset ? (
-            <img
-              alt={slotConfig.label}
-              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-              src={resolveRenderableAssetPath(asset, typeof window === 'undefined' ? '' : window.location.origin)}
-            />
-          ) : (
-            <div className="h-full w-full" style={{ backgroundColor: slotConfig.accent }} />
-          )}
-        </button>
-
-        <div className="min-w-0 flex-1">
-          <div className="text-[12px] text-muted-foreground">{asset?.filename || '支持 gif、png、jpg、jpeg'}</div>
-          {uploadedAtLabel ? <div className="mt-1 text-[12px] text-muted-foreground">更新于 {uploadedAtLabel}</div> : null}
-
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <div className="shrink-0 text-[12px] font-medium text-muted-foreground">间距</div>
-            <div className="flex flex-nowrap gap-2">
-              {FIXED_LAYOUT_SPACING_PRESETS.map((preset) => (
-                <button
-                  className={cn(
-                    'shrink-0 rounded-[10px] border border-border/70 px-3 py-1.5 text-[12px] transition-colors',
-                    slotConfig.spacingPreset === preset.id
-                      ? 'bg-secondary text-foreground'
-                      : 'bg-white text-muted-foreground hover:text-foreground',
-                  )}
-                  key={preset.id}
-                  onClick={() => onSetSpacing(slot, preset.id)}
-                  type="button"
-                >
-                  {preset.label}
-                </button>
-              ))}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <button className="block min-w-0 flex-1 text-left" onClick={() => onSelect(slot)} type="button">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: slotConfig.accent }} />
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-medium text-foreground">{slotConfig.label}</div>
+              <div className="mt-1 text-[12px] leading-5 text-muted-foreground">{slotConfig.description}</div>
             </div>
           </div>
+        </button>
 
-          {slot === 'qrImage' ? <div className="mt-4 text-[12px] leading-6 text-muted-foreground">二维码宽度已固定为 200px。</div> : null}
+        <div className="flex items-center gap-2 self-start">
+          <div className="shrink-0 text-[12px] font-medium text-muted-foreground">间距</div>
+          <div className="relative w-[120px] shrink-0">
+            <select
+              className="h-9 w-full appearance-none rounded-[var(--radius-control)] border border-border/70 bg-white px-3 pr-9 text-[13px] text-foreground outline-none transition-colors focus:border-primary/40"
+              onChange={(event) => onSetSpacing(slot, event.target.value)}
+              value={slotConfig.spacingPreset}
+            >
+              {FIXED_LAYOUT_SPACING_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              size={14}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <input accept={FIXED_LAYOUT_FILE_ACCEPT} className="hidden" onChange={handleFileChange} ref={fileInputRef} type="file" />
-        <Button
-          className="rounded-[10px]"
-          disabled={isSavingTemplate || isUploading}
-          onClick={() => fileInputRef.current?.click()}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          {isUploading ? <LoaderCircle className="animate-spin" size={14} /> : <Paperclip size={14} />}
-          {hasAsset ? '替换' : '上传'}
-        </Button>
-        {hasAsset ? (
-          <Button
-            className="rounded-[10px]"
-            disabled={isSavingTemplate || isUploading}
-            onClick={() => onDelete(slot, slotConfig.label)}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <Trash2 size={14} />
-            删除
-          </Button>
-        ) : null}
+      <input accept={FIXED_LAYOUT_FILE_ACCEPT} className="hidden" onChange={handleFileChange} ref={fileInputRef} type="file" />
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-2.5">
+        <div className="shrink-0">
+          <FixedLayoutSlotThumbnail
+            accent={slotConfig.accent}
+            alt={slotConfig.label}
+            asset={asset}
+            aspectClassName={thumbnailMeta.aspectClassName}
+            className={thumbnailMeta.sizeClassName}
+            isUploading={isUploading}
+            onPreview={onPreview}
+            onReplace={() => fileInputRef.current?.click()}
+          />
+        </div>
+
+        <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 space-y-1.5 pt-0.5">
+            <div className="truncate text-[13px] font-medium text-foreground">
+              {asset?.filename || '支持 gif、png、jpg、jpeg'}
+            </div>
+            {uploadedAtLabel ? <div className="text-[12px] text-muted-foreground">更新于 {uploadedAtLabel}</div> : null}
+            {slot === 'qrImage' ? <div className="text-[12px] leading-5 text-muted-foreground">二维码宽度已固定为 200px。</div> : null}
+          </div>
+
+          {hasAsset ? (
+            <Button
+              className="h-8 w-8 rounded-[var(--radius-control)] px-0"
+              disabled={isSavingTemplate || isUploading}
+              onClick={() => onDelete(slot, slotConfig.label)}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              <Trash2 size={14} />
+            </Button>
+          ) : null}
+        </div>
       </div>
     </article>
   )
@@ -576,7 +721,8 @@ export default function FixedLayoutConfigCanvas() {
     <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto bg-white">
       <div className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-5 lg:px-6">
         <div className="mb-6">
-          <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-foreground sm:text-[32px]">模板配置</h1>
+          <h1 className="text-[30px] font-semibold tracking-[-0.03em] text-foreground sm:text-[34px]">模板配置</h1>
+          <p className="mt-2 text-[14px] leading-6 text-muted-foreground">移动端模板预览 · 375 宽度</p>
         </div>
 
         {errorMessage ? (
@@ -595,15 +741,11 @@ export default function FixedLayoutConfigCanvas() {
         ) : (
           <div className="grid gap-6 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)]">
             <section className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[15px] font-medium text-foreground">移动端模板预览 · 375 宽度</div>
-              </div>
-
               <FixedLayoutTemplatePreview config={draftConfig} />
             </section>
 
             <section className="space-y-5">
-              <div className="rounded-[18px] border border-border/70 bg-white p-5">
+              <div className="rounded-[var(--radius-card)] border border-border/70 bg-white p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-[15px] font-medium text-foreground">图片顺序与图片设置</div>
@@ -618,7 +760,7 @@ export default function FixedLayoutConfigCanvas() {
                       {isDirty ? '有未保存更改' : '当前已保存'}
                     </span>
                     <Button
-                      className="rounded-full"
+                      className="rounded-[var(--radius-control)]"
                       disabled={!isDirty || isSavingTemplate || isServerMutationPending}
                       onClick={handleRestoreSaved}
                       size="sm"
@@ -628,7 +770,7 @@ export default function FixedLayoutConfigCanvas() {
                       恢复已保存
                     </Button>
                     <Button
-                      className="rounded-full"
+                      className="rounded-[var(--radius-control)]"
                       disabled={!isDirty || isSavingTemplate || isServerMutationPending}
                       onClick={handleSaveTemplate}
                       size="sm"
@@ -658,7 +800,7 @@ export default function FixedLayoutConfigCanvas() {
                 ))}
               </div>
 
-              <div className="rounded-[18px] border border-dashed border-border/70 bg-secondary/10 p-4 text-[12px] leading-6 text-muted-foreground">
+              <div className="rounded-[var(--radius-card)] border border-dashed border-border/70 bg-secondary/10 p-4 text-[12px] leading-6 text-muted-foreground">
                 非二维码图片固定按 100% 宽显示。上传格式支持 jpg、png、gif；webp 不再作为模板图片格式。
               </div>
             </section>
