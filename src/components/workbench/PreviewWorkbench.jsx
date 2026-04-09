@@ -7,6 +7,7 @@ import {
   LoaderCircle,
   MessageSquareText,
   Monitor,
+  RefreshCw,
   Smartphone,
   X,
 } from 'lucide-react'
@@ -371,6 +372,7 @@ function resolveWechatSyncIndicatorMeta({ hasCoverImage, isWechatSyncing, wechat
 
 export default function PreviewWorkbench({
   onCopyTitleSuccess,
+  onRefreshGeneratedTitle,
   onShowPageToast,
   onSetPreviewDevice,
   onSetPreviewFontSize,
@@ -380,6 +382,8 @@ export default function PreviewWorkbench({
 }) {
   const [copyStatus, setCopyStatus] = useState('idle')
   const [isWechatSyncing, setIsWechatSyncing] = useState(false)
+  const [isRefreshingTitle, setIsRefreshingTitle] = useState(false)
+  const [titleRefreshError, setTitleRefreshError] = useState('')
   const [wechatStatus, setWechatStatus] = useState({
     appId: '',
     configured: false,
@@ -445,6 +449,11 @@ export default function PreviewWorkbench({
     wechatStatus,
   })
   const previewViewportClassName = previewDevice === 'mobile' ? 'w-[375px] max-w-full' : 'w-[760px] max-w-full'
+
+  useEffect(() => {
+    setTitleRefreshError('')
+    setIsRefreshingTitle(false)
+  }, [session?.id, version?.id])
 
   useEffect(() => {
     if (!session?.id) {
@@ -549,6 +558,24 @@ export default function PreviewWorkbench({
       await navigator.clipboard.writeText(displayTitle || '未命名标题')
       onCopyTitleSuccess?.()
     } catch {}
+  }
+
+  async function handleRefreshTitle() {
+    if (!session?.id || typeof onRefreshGeneratedTitle !== 'function' || isRefreshingTitle) {
+      return
+    }
+
+    try {
+      setIsRefreshingTitle(true)
+      setTitleRefreshError('')
+      await onRefreshGeneratedTitle(session.id)
+    } catch (error) {
+      const errorMessage = error.message || '标题生成失败，请稍后重试'
+      setTitleRefreshError(errorMessage)
+      onShowPageToast?.(errorMessage, 'error')
+    } finally {
+      setIsRefreshingTitle(false)
+    }
   }
 
   async function handleSyncWechatDraft() {
@@ -730,15 +757,36 @@ export default function PreviewWorkbench({
         <div className="rounded-[var(--radius-card)] border border-border/60 bg-white px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 text-[18px] font-semibold leading-[1.55] text-foreground">{displayTitle || '未命名标题'}</div>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button aria-label="复制标题" className="rounded-full" onClick={handleCopyTitle} size="icon-sm" type="button" variant="ghost">
-                  <Copy size={15} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent sideOffset={10}>复制标题</TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-1">
+              {typeof onRefreshGeneratedTitle === 'function' ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label={isRefreshingTitle ? '正在重新生成标题' : '刷新标题'}
+                      className="rounded-full"
+                      disabled={!version?.draftMarkdown?.trim() || isRefreshingTitle}
+                      onClick={handleRefreshTitle}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      {isRefreshingTitle ? <LoaderCircle className="animate-spin" size={15} /> : <RefreshCw size={15} />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={10}>{isRefreshingTitle ? '正在重新生成标题' : '刷新标题'}</TooltipContent>
+                </Tooltip>
+              ) : null}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button aria-label="复制标题" className="rounded-full" onClick={handleCopyTitle} size="icon-sm" type="button" variant="ghost">
+                    <Copy size={15} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={10}>复制标题</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
+          {titleRefreshError ? <div className="mt-3 text-[12px] leading-5 text-red-600">{titleRefreshError}</div> : null}
         </div>
 
         <div className="flex justify-center">

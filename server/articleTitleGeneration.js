@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { DEFAULT_MINIMAX_BASE_URL, DEFAULT_MINIMAX_MODEL, MINIMAX_PROVIDER } from './llm/constants.js'
+import { DEFAULT_GLM_MODEL, DEFAULT_LLM_PROVIDER } from './llm/constants.js'
 import { chatWithLlm } from './llm/index.js'
 
 const TITLE_ASSISTANT_NAME = '文章标题助手'
@@ -201,9 +201,9 @@ export async function generateArticleTitle({
   apiKey,
   articleBodyMarkdown = '',
   articleTitle = '',
-  baseUrl = DEFAULT_MINIMAX_BASE_URL,
-  model = DEFAULT_MINIMAX_MODEL,
-  provider = MINIMAX_PROVIDER,
+  baseUrl = '',
+  model = DEFAULT_GLM_MODEL,
+  provider = DEFAULT_LLM_PROVIDER,
   sessionId = '',
   theme = '',
   type = '',

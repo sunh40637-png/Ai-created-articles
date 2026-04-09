@@ -1249,7 +1249,7 @@ export async function runInitialContentPipeline({
 }) {
   const ruleProfile = resolveContentRuleProfile(ruleProfileId, topic)
   const startedAt = Date.now()
-  const stepCount = 8
+  const stepCount = 9
   let steps = createPipelineSteps(stepCount, startedAt)
   const stageTelemetry = []
   const stageUsages = []
@@ -1343,6 +1343,8 @@ export async function runInitialContentPipeline({
 
     advance(6)
   }
+
+  advance(7)
 
   const qualitySection = buildQualityCheckSection({
     adjustments: finalDraft.adjustments,

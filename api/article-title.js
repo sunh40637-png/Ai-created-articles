@@ -1,6 +1,6 @@
 import { generateArticleTitle } from '../server/articleTitleGeneration.js'
-import { DEFAULT_MINIMAX_MODEL } from '../server/llm/constants.js'
-import { resolveMiniMaxConfig } from '../server/runtimeConfig.js'
+import { DEFAULT_GLM_MODEL } from '../server/llm/constants.js'
+import { resolveActiveLlmProfile } from '../server/runtimeConfig.js'
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -9,16 +9,16 @@ export default async function handler(request, response) {
   }
 
   try {
-    const minimaxProfile = resolveMiniMaxConfig({
-      model: DEFAULT_MINIMAX_MODEL,
+    const llmProfile = resolveActiveLlmProfile({
+      model: DEFAULT_GLM_MODEL,
     })
     const result = await generateArticleTitle({
-      apiKey: minimaxProfile.apiKey,
+      apiKey: llmProfile.apiKey,
       articleBodyMarkdown: request.body?.articleBodyMarkdown || '',
       articleTitle: request.body?.articleTitle || '',
-      baseUrl: minimaxProfile.baseUrl,
-      model: minimaxProfile.model,
-      provider: minimaxProfile.provider,
+      baseUrl: llmProfile.baseUrl,
+      model: llmProfile.model,
+      provider: llmProfile.provider,
       sessionId: request.body?.sessionId || '',
       theme: request.body?.theme || '',
       type: request.body?.type || '',

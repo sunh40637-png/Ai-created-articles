@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
+  Eye,
+  FolderOpen,
   LoaderCircle,
   Plus,
   Sparkles,
@@ -123,59 +126,91 @@ async function copyPlainText(text = '') {
   document.body.removeChild(textarea)
 }
 
-function ConversationGroup({ activeConversationId, items, label, onSelectConversation }) {
+function FolderGroup({ activeConversationId, items, label, onSelectConversation, onTogglePublish }) {
+  const [isOpen, setIsOpen] = useState(true)
+
   return (
     <section>
-      <div className="mb-2 flex items-center justify-between px-1">
-        <div className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground">{label}</div>
-        <div className="text-[11px] font-medium tabular-nums text-muted-foreground">
-          {items.length}
-        </div>
-      </div>
+      <button
+        className="flex w-full items-center justify-between gap-2 px-1 text-left"
+        onClick={() => setIsOpen((current) => !current)}
+        type="button"
+      >
+        <span className="flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+          <FolderOpen className="text-muted-foreground" size={14} />
+          <span>{label}</span>
+        </span>
+        {isOpen ? (
+          <ChevronDown className="text-muted-foreground" size={12} />
+        ) : (
+          <ChevronRight className="text-muted-foreground" size={12} />
+        )}
+      </button>
 
-      {items.length === 0 ? (
-        <div className="rounded-[var(--radius-card)] border border-dashed border-border/75 bg-secondary/20 px-4 py-4 text-[13px] text-muted-foreground">
-          暂无{label}
-        </div>
-      ) : (
-        <div className="space-y-1.5">
+      {isOpen ? (
+        items.length === 0 ? (
+          <div className="pl-5 pt-1.5 text-[11px] text-muted-foreground">暂无对话</div>
+        ) : (
+        <div className="mt-1.5 space-y-0.5 pl-5">
           {items.map((conversation) => {
             const isPublished = conversation.publishStatus === 'published'
             const isActive = conversation.id === activeConversationId
 
             return (
-              <button
+              <div
                 className={cn(
-                  'w-full rounded-[var(--radius-card)] border px-4 py-3 text-left transition-colors',
+                  'group/conversation grid grid-cols-[minmax(0,1fr)_20px] items-center gap-0 rounded-[6px] border px-2 py-1 transition-colors',
                   isActive
-                    ? 'border-primary/20 bg-primary/[0.06]'
-                    : 'border-transparent bg-secondary/25 hover:border-border/80 hover:bg-white',
+                    ? 'border-border/80 bg-white'
+                    : 'border-transparent bg-transparent hover:border-border/70 hover:bg-secondary/20',
                 )}
                 key={conversation.id}
-                onClick={() => onSelectConversation(conversation.id)}
-                type="button"
               >
-                <div
-                  className={cn(
-                    'truncate text-[14px] font-medium text-foreground',
-                    isPublished && 'text-muted-foreground line-through decoration-muted-foreground/60',
-                  )}
+                <button
+                  className="min-w-0 text-left"
+                  onClick={() => onSelectConversation(conversation.id)}
+                  type="button"
                 >
-                  {conversation.title}
-                </div>
-                <div className="mt-1 text-[12px] text-muted-foreground">
-                  {new Date(conversation.updatedAt).toLocaleString('zh-CN', {
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    month: '2-digit',
-                  })}
-                </div>
-              </button>
+                  <div
+                    className={cn(
+                      'truncate text-[12px] font-medium leading-5 text-foreground',
+                      isPublished && 'text-muted-foreground line-through decoration-muted-foreground/60',
+                    )}
+                  >
+                    {conversation.title}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {new Date(conversation.updatedAt).toLocaleString('zh-CN', {
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      month: '2-digit',
+                    })}
+                  </div>
+                </button>
+
+                <button
+                  aria-label={isPublished ? `取消标记已发布：${conversation.title}` : `标记已发布：${conversation.title}`}
+                  className={cn(
+                    'inline-flex size-5 items-center justify-center rounded-full transition-all duration-150 hover:bg-secondary hover:text-foreground',
+                    isPublished
+                      ? 'text-primary opacity-100'
+                      : 'text-muted-foreground opacity-0 group-hover/conversation:opacity-100 focus-visible:opacity-100',
+                  )}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onTogglePublish(conversation)
+                  }}
+                  type="button"
+                >
+                  <Eye className="size-[12px]" />
+                </button>
+              </div>
             )
           })}
         </div>
-      )}
+        )
+      ) : null}
     </section>
   )
 }
@@ -339,6 +374,17 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
   function handleCreateConversation() {
     const nextConversationId = createConversation()
     setActiveConversationId(nextConversationId)
+  }
+
+  function handleToggleConversationPublish(conversation) {
+    if (!conversation?.id) {
+      return
+    }
+
+    setConversationPublishStatus(
+      conversation.id,
+      conversation.publishStatus === 'published' ? 'default' : 'published',
+    )
   }
 
   const copyLabel = copiedVersionId === activeVersion?.id ? '已复制' : '复制'
@@ -513,17 +559,19 @@ export default function ShortContentWorkspace({ onShowPageToast }) {
           </Button>
 
           <div className="mt-5 min-h-0 flex-1 space-y-5 overflow-y-auto pb-1">
-            <ConversationGroup
+            <FolderGroup
               activeConversationId={activeConversationId}
               items={defaultConversations}
-              label="默认"
+              label="创作中"
               onSelectConversation={setActiveConversationId}
+              onTogglePublish={handleToggleConversationPublish}
             />
-            <ConversationGroup
+            <FolderGroup
               activeConversationId={activeConversationId}
               items={publishedConversations}
               label="已发布"
               onSelectConversation={setActiveConversationId}
+              onTogglePublish={handleToggleConversationPublish}
             />
           </div>
         </aside>

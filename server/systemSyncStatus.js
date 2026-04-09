@@ -70,14 +70,49 @@ function stableSerialize(value) {
   return `{${entries.join(',')}}`
 }
 
-function buildStateHash(payload) {
+function normalizeShortConversationForHash(conversation) {
+  const versions = Array.isArray(conversation?.versions)
+    ? conversation.versions
+        .filter((version) => typeof version?.content === 'string' && version.content.trim())
+        .map((version) => ({
+          content: version.content,
+          createdAt: version.createdAt || null,
+          endingVariant: version.endingVariant === 'agree' ? 'agree' : 'identify',
+          id: version.id || null,
+        }))
+        .sort((left, right) => String(left.id || '').localeCompare(String(right.id || '')))
+    : []
+
+  if (versions.length === 0) {
+    return null
+  }
+
+  return {
+    id: conversation?.id || null,
+    publishStatus: conversation?.publishStatus === 'published' ? 'published' : 'default',
+    updatedAt: conversation?.updatedAt || conversation?.createdAt || null,
+    versions,
+  }
+}
+
+function buildStateHash(payload, type = '') {
   const state = payload?.item?.state
 
   if (!state || typeof state !== 'object') {
     return null
   }
 
-  return crypto.createHash('sha1').update(stableSerialize(state), 'utf8').digest('hex').slice(0, 12)
+  const comparableState =
+    type === 'short'
+      ? {
+          conversations: (Array.isArray(state?.conversations) ? state.conversations : [])
+            .map((conversation) => normalizeShortConversationForHash(conversation))
+            .filter(Boolean)
+            .sort((left, right) => String(left.id || '').localeCompare(String(right.id || ''))),
+        }
+      : state
+
+  return crypto.createHash('sha1').update(stableSerialize(comparableState), 'utf8').digest('hex').slice(0, 12)
 }
 
 function countLongContentSessions(payload) {
@@ -96,6 +131,54 @@ function countShortContentConversations(payload) {
 
 function countLlmProfiles(payload) {
   return Array.isArray(payload?.item?.state?.profiles) ? payload.item.state.profiles.length : 0
+}
+
+function getLongContentLatestTimestamp(payload) {
+  const sessions = Array.isArray(payload?.item?.state?.sessions) ? payload.item.state.sessions : []
+
+  return sessions.reduce((latest, session) => {
+    const nextTime = toTimestamp(session?.updatedAt || session?.createdAt)
+    return nextTime > latest ? nextTime : latest
+  }, 0)
+}
+
+function getShortContentLatestTimestamp(payload) {
+  const conversations = Array.isArray(payload?.item?.state?.conversations) ? payload.item.state.conversations : []
+
+  return conversations.reduce((latest, conversation) => {
+    if (!Array.isArray(conversation?.versions) || conversation.versions.length === 0) {
+      return latest
+    }
+
+    const conversationTimestamp = toTimestamp(conversation?.updatedAt || conversation?.createdAt)
+    const versionTimestamp = Array.isArray(conversation?.versions)
+      ? conversation.versions.reduce((versionLatest, version) => {
+          const nextTime = toTimestamp(version?.createdAt)
+          return nextTime > versionLatest ? nextTime : versionLatest
+        }, 0)
+      : 0
+
+    return Math.max(latest, conversationTimestamp, versionTimestamp)
+  }, 0)
+}
+
+function getLlmLatestTimestamp(payload) {
+  return toTimestamp(payload?.updatedAt)
+}
+
+function resolveEffectiveUpdatedAt(payload, type, fallbackValue = null) {
+  const latestTimestamp =
+    type === 'content'
+      ? getLongContentLatestTimestamp(payload)
+      : type === 'short'
+        ? getShortContentLatestTimestamp(payload)
+        : getLlmLatestTimestamp(payload)
+
+  if (latestTimestamp > 0) {
+    return new Date(latestTimestamp).toISOString()
+  }
+
+  return fallbackValue
 }
 
 function resolveStatusMeta(status) {
@@ -240,10 +323,10 @@ function buildTargetStatus({
 }) {
   const localCount = countFromPayload(localPayload)
   const cloudCount = cloudEnabled ? countFromPayload(cloudPayload) : 0
-  const localHash = localCount > 0 ? buildStateHash(localPayload) : null
-  const cloudHash = cloudEnabled && cloudCount > 0 ? buildStateHash(cloudPayload) : null
-  const localUpdatedAt = localPayload?.updatedAt || localStat?.mtime || null
-  const cloudUpdatedAt = cloudEnabled ? cloudPayload?.updatedAt || null : null
+  const localHash = localCount > 0 ? buildStateHash(localPayload, type) : null
+  const cloudHash = cloudEnabled && cloudCount > 0 ? buildStateHash(cloudPayload, type) : null
+  const localUpdatedAt = resolveEffectiveUpdatedAt(localPayload, type, localPayload?.updatedAt || localStat?.mtime || null)
+  const cloudUpdatedAt = cloudEnabled ? resolveEffectiveUpdatedAt(cloudPayload, type, cloudPayload?.updatedAt || null) : null
   const status = resolveSyncStatus({
     cloudEnabled,
     cloudError,

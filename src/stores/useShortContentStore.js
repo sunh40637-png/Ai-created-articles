@@ -117,8 +117,18 @@ function normalizeConversation(conversation) {
   }
 }
 
+export function isPersistableShortConversation(conversation) {
+  return Array.isArray(conversation?.versions) && conversation.versions.length > 0
+}
+
+function getPersistableShortConversations(conversations = []) {
+  return (Array.isArray(conversations) ? conversations : [])
+    .map((conversation) => normalizeConversation(conversation))
+    .filter(isPersistableShortConversation)
+}
+
 function ensureShortContentStateShape(state) {
-  const conversations = Array.isArray(state?.conversations) ? state.conversations.map(normalizeConversation) : []
+  const conversations = getPersistableShortConversations(state?.conversations)
   const normalizedConversations = conversations.length > 0 ? conversations : [createConversation()]
   const activeConversationId =
     typeof state?.activeConversationId === 'string' &&
@@ -134,19 +144,32 @@ function ensureShortContentStateShape(state) {
 }
 
 export function createPersistableShortContentState(state) {
+  const conversations = getPersistableShortConversations(state?.conversations)
+  const conversationIds = new Set(conversations.map((conversation) => conversation.id))
+
   return {
-    activeConversationId: state.activeConversationId,
-    conversations: state.conversations,
-    isConversationPaneCollapsed: state.isConversationPaneCollapsed,
+    activeConversationId:
+      typeof state?.activeConversationId === 'string' && conversationIds.has(state.activeConversationId)
+        ? state.activeConversationId
+        : conversations[0]?.id ?? null,
+    conversations,
+    isConversationPaneCollapsed: Boolean(state?.isConversationPaneCollapsed),
   }
 }
 
 export function getShortContentLatestTimestamp(state) {
-  const conversations = Array.isArray(state?.conversations) ? state.conversations : []
+  const conversations = getPersistableShortConversations(state?.conversations)
 
   return conversations.reduce((latest, conversation) => {
-    const timestamp = new Date(conversation?.updatedAt || conversation?.createdAt || 0).getTime()
-    return Number.isFinite(timestamp) && timestamp > latest ? timestamp : latest
+    const conversationTimestamp = new Date(conversation?.updatedAt || conversation?.createdAt || 0).getTime()
+    const latestVersionTimestamp = Array.isArray(conversation?.versions)
+      ? conversation.versions.reduce((versionLatest, version) => {
+          const timestamp = new Date(version?.createdAt || 0).getTime()
+          return Number.isFinite(timestamp) && timestamp > versionLatest ? timestamp : versionLatest
+        }, 0)
+      : 0
+
+    return Math.max(latest, conversationTimestamp, latestVersionTimestamp)
   }, 0)
 }
 

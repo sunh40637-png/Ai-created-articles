@@ -1,15 +1,17 @@
 export const DEFAULT_CONTENT_RULE_PROFILE_ID = 'LIVE'
 export const CONTENT_RULE_PROFILE_IDS = ['A', 'B']
 export const CONTENT_TARGET_WORD_COUNT_RANGE = Object.freeze({
-  max: 1500,
-  min: 1200,
+  max: 1200,
+  min: 900,
 })
 export const CONTENT_WRITING_WORD_COUNT_RANGE = Object.freeze({
-  max: 1420,
-  min: 1280,
+  max: 1100,
+  min: 980,
 })
-export const CONTENT_WORD_COUNT_SECTION_GUIDE =
-  '- 分段字数预算参考：开头 120~180 字；正文1 260~320 字；正文2 260~320 字；正文3 260~320 字；结尾 160~200 字；祝福语 10~30 字。'
+export const CONTENT_WORD_COUNT_SECTION_GUIDE = [
+  '- 分段字数预算参考：开头 110~150 字；正文1 220~260 字；正文2 220~260 字；正文3 220~260 字；结尾 120~160 字；祝福语 10~20 字。',
+  '- 字数分配逻辑：优先保证三个主体段写透，再安排开头和结尾；字数不足时优先补主体段的故事细节、转折和解释，字数超出时优先压缩重复解释和结尾抒情，不要靠拉长祝福语凑字数。',
+].join('\n')
 
 const CONTENT_TARGET_WORD_COUNT_LINE = `- 总字数控制在 ${CONTENT_TARGET_WORD_COUNT_RANGE.min} 到 ${CONTENT_TARGET_WORD_COUNT_RANGE.max} 字。`
 const CONTENT_WRITING_WORD_COUNT_LINE = `- 正文尽量收敛在 ${CONTENT_WRITING_WORD_COUNT_RANGE.min} 到 ${CONTENT_WRITING_WORD_COUNT_RANGE.max} 字。`

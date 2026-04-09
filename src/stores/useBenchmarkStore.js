@@ -389,24 +389,49 @@ export function getTopicById(topicId) {
   return CONTENT_TOPIC_LIBRARY.find((topic) => topic.id === topicId) ?? null
 }
 
+export function getContentSessionTopicId(session) {
+  return typeof session?.topicSelection?.selectedTopicId === 'string'
+    ? session.topicSelection.selectedTopicId
+    : typeof session?.topicSelection?.selectedTopic?.id === 'string'
+      ? session.topicSelection.selectedTopic.id
+      : ''
+}
+
+export function hasContentSessionEnteredCreation(session) {
+  const topicId = getContentSessionTopicId(session)
+
+  if (!topicId) {
+    return false
+  }
+
+  const hasDraftVersions = Array.isArray(session?.draftReview?.versions) && session.draftReview.versions.length > 0
+  const hasActiveFlow = Boolean(session?.processingFlow)
+  const hasStartedStage = typeof session?.stageId === 'string' && session.stageId !== 'topic'
+
+  return hasDraftVersions || hasActiveFlow || hasStartedStage
+}
+
+export function getContentSessionTopicStatus(session) {
+  if (!hasContentSessionEnteredCreation(session)) {
+    return 'pending'
+  }
+
+  return session?.stageId === 'completed' ? 'completed' : 'in-progress'
+}
+
 export function getTopicStatusMap(sessions = []) {
   if (!Array.isArray(sessions) || sessions.length === 0) {
     return {}
   }
 
   return sessions.reduce((statusMap, session) => {
-    const topicId =
-      typeof session?.topicSelection?.selectedTopicId === 'string'
-        ? session.topicSelection.selectedTopicId
-        : typeof session?.topicSelection?.selectedTopic?.id === 'string'
-          ? session.topicSelection.selectedTopic.id
-          : ''
+    const topicId = getContentSessionTopicId(session)
+    const nextStatus = getContentSessionTopicStatus(session)
 
-    if (!topicId) {
+    if (!topicId || nextStatus === 'pending') {
       return statusMap
     }
 
-    const nextStatus = session?.stageId === 'completed' ? 'completed' : 'in-progress'
     const currentStatus = statusMap[topicId] ?? 'pending'
 
     if (TOPIC_STATUS_PRIORITY[nextStatus] > TOPIC_STATUS_PRIORITY[currentStatus]) {
@@ -427,14 +452,9 @@ function resolveExcludedTopicIds({ excludeSessionId = null, sessions = [] } = {}
       return excludedTopicIds
     }
 
-    const topicId =
-      typeof session?.topicSelection?.selectedTopicId === 'string'
-        ? session.topicSelection.selectedTopicId
-        : typeof session?.topicSelection?.selectedTopic?.id === 'string'
-          ? session.topicSelection.selectedTopic.id
-          : ''
+    const topicId = getContentSessionTopicId(session)
 
-    if (topicId) {
+    if (topicId && hasContentSessionEnteredCreation(session)) {
       excludedTopicIds.add(topicId)
     }
 
