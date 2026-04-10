@@ -128,6 +128,17 @@ async function requestSystemSyncStatus() {
   return payload
 }
 
+async function requestCloudVaultData() {
+  const response = await fetch('/api/cloud-vault')
+  const payload = await readJsonResponse(response, '保险箱接口返回异常。')
+
+  if (!response.ok) {
+    throw new Error(payload?.error || '拉取全量云端库失败')
+  }
+
+  return payload
+}
+
 async function requestSystemSyncAction(target, action) {
   const response = await fetch('/api/system-sync-status', {
     body: JSON.stringify({
@@ -432,6 +443,148 @@ function ProfileEditorDialog({
       </div>
     </div>,
     document.body,
+  )
+}
+
+function CloudVaultViewer() {
+  const [activeTab, setActiveTab] = useState('content')
+  const [data, setData] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function loadVault() {
+      try {
+        setIsLoading(true)
+        const vaultData = await requestCloudVaultData()
+        if (active) setData(vaultData)
+      } catch (err) {
+        if (active) setError(err.message)
+      } finally {
+        if (active) setIsLoading(false)
+      }
+    }
+    loadVault()
+    return () => { active = false }
+  }, [])
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[360px] items-center justify-center rounded-[6px] border border-border/70 bg-white">
+        <div className="inline-flex items-center gap-2 text-[14px] text-muted-foreground">
+          <LoaderCircle className="animate-spin" size={16} />
+          正在读取云端全量数据...
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-[6px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700">
+        {error}
+      </div>
+    )
+  }
+
+  const listData = activeTab === 'content' ? data?.content || [] : data?.shortContent || []
+
+  // Group by Date
+  const groupedTasks = listData.reduce((acc, item) => {
+    const timeToUse = item.updatedAt || item.createdAt || 0
+    const d = new Date(timeToUse)
+    const yyyymmdd = Number.isNaN(d.getTime()) ? '未知日期' : d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    if (!acc[yyyymmdd]) acc[yyyymmdd] = []
+    acc[yyyymmdd].push(item)
+    return acc
+  }, {})
+
+  const dateKeys = Object.keys(groupedTasks).sort((a, b) => {
+    if (a === '未知日期') return 1
+    if (b === '未知日期') return -1
+    return new Date(b.replace(/\//g, '-')).getTime() - new Date(a.replace(/\//g, '-')).getTime()
+  })
+
+  return (
+    <div className="flex flex-col h-full space-y-4">
+      <div className="flex items-center gap-2 p-1 bg-secondary/30 rounded-[8px] self-start">
+        <button
+          className={cn('px-4 py-1.5 text-[13px] font-medium rounded-[6px] transition-colors', activeTab === 'content' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
+          onClick={() => setActiveTab('content')}
+        >
+          长文宝库
+        </button>
+        <button
+          className={cn('px-4 py-1.5 text-[13px] font-medium rounded-[6px] transition-colors', activeTab === 'short' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
+          onClick={() => setActiveTab('short')}
+        >
+          短文碎片
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto pr-2 pb-4 space-y-6">
+        {dateKeys.length === 0 ? (
+          <div className="py-12 text-center text-[13px] text-muted-foreground">该分类下为空</div>
+        ) : (
+          dateKeys.map(dateKey => (
+            <div key={dateKey} className="space-y-3">
+              <div className="flex items-center gap-2 border-b border-border/70 pb-2">
+                <span className="text-[13px] font-semibold text-foreground tracking-tight">📅 {dateKey}</span>
+                <span className="text-[11px] bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full">
+                  共 {groupedTasks[dateKey].length} 篇
+                </span>
+              </div>
+              <div className="grid gap-2">
+                {groupedTasks[dateKey].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()).map((item, idx) => {
+                  const d = new Date(item.updatedAt || item.createdAt || 0)
+                  const timeLabel = Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+                  
+                  // Derive status
+                  let statusBadge = ''
+                  let badgeTone = 'default'
+                  if (activeTab === 'content') {
+                    if (item.publishStatus === 'published') { statusBadge = '已发布'; badgeTone = 'emerald' }
+                    else if (item.stageId === 'completed') { statusBadge = '已完成'; badgeTone = 'indigo' }
+                    else if (item.stageId === 'preview') { statusBadge = '已排版/定稿'; badgeTone = 'blue' }
+                    else if (item.stageId === 'draft') { statusBadge = '初稿阶段'; badgeTone = 'amber' }
+                    else { statusBadge = '选题中'; badgeTone = 'neutral' }
+                  } else {
+                    statusBadge = '短内容'
+                    badgeTone = 'fuchsia'
+                  }
+
+                  const badgeClass = {
+                    emerald: 'bg-emerald-100/80 text-emerald-700 border-emerald-200',
+                    indigo: 'bg-indigo-100/80 text-indigo-700 border-indigo-200',
+                    blue: 'bg-blue-100/80 text-blue-700 border-blue-200',
+                    amber: 'bg-amber-100/80 text-amber-700 border-amber-200',
+                    fuchsia: 'bg-fuchsia-100/80 text-fuchsia-700 border-fuchsia-200',
+                    neutral: 'bg-secondary text-muted-foreground border-border/70'
+                  }[badgeTone]
+
+                  return (
+                    <div key={item.id || idx} className="flex items-center justify-between p-3 rounded-[6px] border border-border/70 bg-white hover:border-border transition-colors group">
+                      <div className="flex items-center gap-3 min-w-0 pr-4">
+                        <span className={cn("shrink-0 text-[11px] px-2 py-0.5 rounded border whitespace-nowrap", badgeClass)}>
+                          {statusBadge}
+                        </span>
+                        <span className="truncate text-[13px] font-medium text-foreground">
+                          {item.title || '无标题记录'}
+                        </span>
+                      </div>
+                      <div className="shrink-0 text-[12px] text-muted-foreground font-mono">
+                        {timeLabel}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -951,6 +1104,12 @@ export default function SystemSettingsCanvas({ onClose, onShowPageToast, open })
           <aside className="flex w-[200px] shrink-0 flex-col border-r border-border/70 bg-[#f5f7fa] px-4 py-7">
             <div className="space-y-1">
               <SettingsNavItem
+                active={activePanel === 'cloud_vault'}
+                icon={Cloud}
+                label="云端保险箱"
+                onClick={() => setActivePanel('cloud_vault')}
+              />
+              <SettingsNavItem
                 active={activePanel === 'sync'}
                 icon={Cloud}
                 label="长文云端同步"
@@ -1027,7 +1186,17 @@ export default function SystemSettingsCanvas({ onClose, onShowPageToast, open })
             </div>
 
             <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto px-7 pb-7 pt-2">
-              {activePanel === 'sync' || activePanel === 'sync_short' ? (
+              {activePanel === 'cloud_vault' ? (
+                <div className="h-full">
+                  <div className="mb-4 flex items-center justify-between text-[12px] text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={14} />
+                      这里存放着您推送到云端的完整历史账本
+                    </div>
+                  </div>
+                  <CloudVaultViewer />
+                </div>
+              ) : activePanel === 'sync' || activePanel === 'sync_short' ? (
                 <div>
                   <div className="mb-4 flex items-center gap-2 text-[12px] text-muted-foreground">
                     <CheckCircle2 size={14} />
