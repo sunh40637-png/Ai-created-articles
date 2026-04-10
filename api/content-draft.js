@@ -1,4 +1,4 @@
-import { generateContentDraft } from '../server/contentCreation.js'
+import { generateContentDraft, runInitialContentPipeline } from '../server/contentCreation.js'
 import { resolveActiveLlmProfile } from '../server/runtimeConfig.js'
 
 export default async function handler(request, response) {
@@ -8,20 +8,80 @@ export default async function handler(request, response) {
   }
 
   try {
+    const action = request.body?.action || 'initial'
     const activeProfile = resolveActiveLlmProfile({
       model: request.body?.model,
     })
 
-    const result = await generateContentDraft({
-      action: request.body?.action || 'initial',
-      apiKey: activeProfile.apiKey,
-      deepThinkingEnabled: request.body?.deepThinkingEnabled ?? true,
-      model: activeProfile.model,
-      note: request.body?.note || '',
-      ruleProfileId: request.body?.ruleProfileId,
-      supplement: request.body?.supplement || '',
-      topic: request.body?.topic || null,
-    })
+    if (request.body?.streamProgress && action === 'initial') {
+      response.status(200)
+      response.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+      response.setHeader('Cache-Control', 'no-cache, no-transform')
+      response.setHeader('Connection', 'keep-alive')
+      response.flushHeaders?.()
+
+      const writeEvent = (payload) => {
+        response.write(`${JSON.stringify(payload)}\n`)
+      }
+
+      try {
+        const result = await runInitialContentPipeline({
+          apiKey: activeProfile.apiKey,
+          baseUrl: activeProfile.baseUrl,
+          deepThinkingEnabled: request.body?.deepThinkingEnabled ?? true,
+          model: activeProfile.model,
+          provider: activeProfile.provider,
+          ruleProfileId: request.body?.ruleProfileId,
+          supplement: request.body?.supplement || '',
+          topic: request.body?.topic || null,
+          onProgress: (progress) => {
+            writeEvent({
+              type: 'progress',
+              ...progress,
+            })
+          },
+        })
+
+        writeEvent({
+          type: 'result',
+          data: result,
+        })
+      } catch (error) {
+        writeEvent({
+          type: 'error',
+          details: error.payload ?? null,
+          error: error.message || '内容创作请求失败',
+        })
+      }
+
+      response.end()
+      return
+    }
+
+    const result =
+      action === 'initial'
+        ? await runInitialContentPipeline({
+            apiKey: activeProfile.apiKey,
+            baseUrl: activeProfile.baseUrl,
+            deepThinkingEnabled: request.body?.deepThinkingEnabled ?? true,
+            model: activeProfile.model,
+            provider: activeProfile.provider,
+            ruleProfileId: request.body?.ruleProfileId,
+            supplement: request.body?.supplement || '',
+            topic: request.body?.topic || null,
+          })
+        : await generateContentDraft({
+            action,
+            apiKey: activeProfile.apiKey,
+            baseUrl: activeProfile.baseUrl,
+            deepThinkingEnabled: request.body?.deepThinkingEnabled ?? true,
+            model: activeProfile.model,
+            note: request.body?.note || '',
+            provider: activeProfile.provider,
+            ruleProfileId: request.body?.ruleProfileId,
+            supplement: request.body?.supplement || '',
+            topic: request.body?.topic || null,
+          })
 
     response.status(200).json(result)
   } catch (error) {

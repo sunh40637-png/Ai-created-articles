@@ -42,7 +42,7 @@ import {
   updateLibraryAsset,
 } from './server/libraryAssets.js'
 import { saveLlmConfig } from './server/llm/config.js'
-import { DEFAULT_MINIMAX_MODEL } from './server/llm/constants.js'
+import { DEFAULT_GLM_MODEL } from './server/llm/constants.js'
 import { chatWithLlm } from './server/llm/index.js'
 import {
   normalizeLlmProfile,
@@ -182,8 +182,10 @@ function contentCreationDevApi() {
               })
               const result = await runInitialContentPipeline({
                 apiKey: activeProfile.apiKey,
+                baseUrl: activeProfile.baseUrl,
                 deepThinkingEnabled: body.deepThinkingEnabled ?? true,
                 model: activeProfile.model,
+                provider: activeProfile.provider,
                 ruleProfileId: body.ruleProfileId,
                 supplement: body.supplement || '',
                 topic: body.topic || null,
@@ -211,19 +213,34 @@ function contentCreationDevApi() {
             return
           }
 
+          const action = body.action || 'initial'
           const activeProfile = resolveActiveLlmProfile({
             model: body.model,
           })
-          const result = await generateContentDraft({
-            action: body.action || 'initial',
-            apiKey: activeProfile.apiKey,
-            deepThinkingEnabled: body.deepThinkingEnabled ?? true,
-            model: activeProfile.model,
-            note: body.note || '',
-            ruleProfileId: body.ruleProfileId,
-            supplement: body.supplement || '',
-            topic: body.topic || null,
-          })
+          const result =
+            action === 'initial'
+              ? await runInitialContentPipeline({
+                  apiKey: activeProfile.apiKey,
+                  baseUrl: activeProfile.baseUrl,
+                  deepThinkingEnabled: body.deepThinkingEnabled ?? true,
+                  model: activeProfile.model,
+                  provider: activeProfile.provider,
+                  ruleProfileId: body.ruleProfileId,
+                  supplement: body.supplement || '',
+                  topic: body.topic || null,
+                })
+              : await generateContentDraft({
+                  action,
+                  apiKey: activeProfile.apiKey,
+                  baseUrl: activeProfile.baseUrl,
+                  deepThinkingEnabled: body.deepThinkingEnabled ?? true,
+                  model: activeProfile.model,
+                  note: body.note || '',
+                  provider: activeProfile.provider,
+                  ruleProfileId: body.ruleProfileId,
+                  supplement: body.supplement || '',
+                  topic: body.topic || null,
+                })
 
           res.statusCode = 200
           res.setHeader('Content-Type', 'application/json')
@@ -310,16 +327,16 @@ function articleTitleDevApi() {
 
         try {
           const body = await readJsonBody(req)
-          const minimaxProfile = resolveMiniMaxConfig({
-            model: DEFAULT_MINIMAX_MODEL,
+          const activeProfile = resolveActiveLlmProfile({
+            model: DEFAULT_GLM_MODEL,
           })
           const result = await generateArticleTitle({
-            apiKey: minimaxProfile.apiKey,
+            apiKey: activeProfile.apiKey,
             articleBodyMarkdown: body?.articleBodyMarkdown || '',
             articleTitle: body?.articleTitle || '',
-            baseUrl: minimaxProfile.baseUrl,
-            model: minimaxProfile.model,
-            provider: minimaxProfile.provider,
+            baseUrl: activeProfile.baseUrl,
+            model: activeProfile.model,
+            provider: activeProfile.provider,
             sessionId: body?.sessionId || '',
             theme: body?.theme || '',
             type: body?.type || '',

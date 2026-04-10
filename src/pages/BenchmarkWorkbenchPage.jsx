@@ -90,7 +90,7 @@ const CONTENT_FLOW_UI_PREVIEW = false
 const INITIAL_DRAFT_FLOW_TITLE = '正在准备首版稿件'
 const INITIAL_DRAFT_FLOW_SUMMARY = '正在完成从接收选题到首版稿件准备的处理流程。'
 const INITIAL_DRAFT_FLOW_INTRO_MESSAGE =
-  '已接收这个选题，正在生成首版稿件。系统会依次完成正文起草、内容审核、自动修订和标题生成，处理完成后再把正文和校验报告展示在右侧。'
+  '已接收这个选题，正在生成首版稿件。系统会依次完成正文起草、内容审核、自动修订、标题生成和阅读排版整理，处理完成后再把正文和校验报告展示在右侧。'
 const INITIAL_DRAFT_FLOW_STEPS = [
   { label: '接收选题', seconds: 1 },
   { label: '整理写作要求', seconds: 2 },
@@ -100,6 +100,7 @@ const INITIAL_DRAFT_FLOW_STEPS = [
   { label: '判定修改方式', seconds: 2 },
   { label: '自动修订内容', seconds: 6 },
   { label: '生成标题', seconds: 2 },
+  { label: '整理阅读排版', seconds: 2 },
   { label: '呈现首版稿件', seconds: 1 },
 ]
 const CONTENT_SESSION_STORAGE_KEY = 'content-creation-sessions-v1'
@@ -3468,6 +3469,7 @@ export default function BenchmarkWorkbenchPage() {
         { label: '重新规划文章结构与节奏', seconds: 4, tabId: 'draft' },
         { label: '整篇重写正文', seconds: 9, tabId: 'draft' },
         { label: '重新输出详细校验报告', seconds: 5, tabId: 'report' },
+        { label: '整理阅读排版', seconds: 2, tabId: 'draft' },
       ],
       title: '正在整篇重写',
     })
@@ -3551,8 +3553,9 @@ export default function BenchmarkWorkbenchPage() {
           { label: '读取修改意见并定位段落', seconds: 3, tabId: 'draft' },
           { label: '完成局部改写', seconds: 7, tabId: 'draft' },
           { label: '重新输出详细校验报告', seconds: 5, tabId: 'report' },
-      ],
-      title: '正在重写当前文字稿',
+          { label: '整理阅读排版', seconds: 2, tabId: 'draft' },
+        ],
+        title: '正在重写当前文字稿',
       })
 
       return

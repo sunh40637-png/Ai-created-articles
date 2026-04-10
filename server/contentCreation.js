@@ -6,6 +6,16 @@ import {
   DEFAULT_CONTENT_RULE_PROFILE_ID,
   resolveContentRuleProfile,
 } from './contentRuleProfiles.js'
+import {
+  detectTopicIntentCategory,
+  readATypeDiscussionGuide,
+  readATypeEndingGuide,
+  readBTypeClosingGuide,
+  readOutputLayoutGuide,
+  readStoryWritingGuide,
+  readTopicIntentGuide,
+} from './contentStyleRules.js'
+import { renderContentPromptTemplate } from './contentPromptTemplates.js'
 import { appendContentLlmTelemetryEvent } from './contentLlmTelemetry.js'
 import { countReadableLength } from '../shared/readableLength.js'
 
@@ -51,7 +61,56 @@ const DRAFT_TEMPLATE_CONTRACT_GUIDE = [
   `- 可读正文字数尽量收敛在 ${CONTENT_WRITING_WORD_COUNT_RANGE.min} 到 ${CONTENT_WRITING_WORD_COUNT_RANGE.max} 字，最终必须落在 ${CONTENT_TARGET_WORD_COUNT_RANGE.min} 到 ${CONTENT_TARGET_WORD_COUNT_RANGE.max} 字。`,
   '- 程序统计字数时，不计一级标题、不计 [IMAGE_1]/[IMAGE_2]/[IMAGE_3]/[ENDING] 占位符、不计 Markdown 符号与空白，只统计可读中文/字母/数字字符。',
   CONTENT_WORD_COUNT_SECTION_GUIDE,
+  '故事写作补充要求：',
+  readStoryWritingGuide(),
+  '输出排版补充要求：',
+  readOutputLayoutGuide(),
 ].join('\n')
+
+const TOPIC_INTENT_LABELS = {
+  progressive: '进取型',
+  relationship: '关系型',
+  self: '自处型',
+  unknown: '未明确',
+}
+
+function buildTopicIntentExecutionNotes(topic) {
+  const title = typeof topic?.title === 'string' ? topic.title.trim() : ''
+
+  if (!title) {
+    return ''
+  }
+
+  const category = detectTopicIntentCategory(title)
+  const label = TOPIC_INTENT_LABELS[category] || TOPIC_INTENT_LABELS.unknown
+  const guide = readTopicIntentGuide(category)
+
+  return [
+    '选题类型判断补充：',
+    `- 当前选题判定：${label}。`,
+    guide,
+  ].join('\n')
+}
+
+function buildTypeSpecificExecutionNotes(topic) {
+  if (topic?.type === 'A型') {
+    return [
+      'A型补充执行要求：',
+      readATypeDiscussionGuide(),
+      '',
+      readATypeEndingGuide(),
+    ].join('\n')
+  }
+
+  if (topic?.type === 'B型') {
+    return [
+      'B型补充执行要求：',
+      readBTypeClosingGuide(),
+    ].join('\n')
+  }
+
+  return ''
+}
 
 function buildContentSystemPrompt(ruleProfile) {
   return ruleProfile.contentSystemPrompt
@@ -93,8 +152,9 @@ function buildSharedContentContextLines({
         `当前笔名风格摘要（${topic?.penName ?? '未指定'}）：`,
         getPenStyleDoc(ruleProfile, topic?.penName),
       ].join('\n')
-
-  return [
+  const topicIntentNotes = buildTopicIntentExecutionNotes(topic)
+  const typeSpecificNotes = buildTypeSpecificExecutionNotes(topic)
+  const lines = [
     `任务：${taskLabel}`,
     `推理模式：${modeLabel}`,
     `规则版本：${ruleProfile.label}`,
@@ -103,18 +163,33 @@ function buildSharedContentContextLines({
     `- 选题标题：${topic?.title ?? '未提供'}`,
     `- 文章类型：${topic?.type ?? '未提供'}`,
     `- 笔名口吻：${topic?.penName ?? '未提供'}`,
-    `- 推荐理由：${topic?.reason ?? '无'}`,
-    `- 补充要求：${supplement.trim() || '无'}`,
-    `- 修改意见：${note.trim() || '无'}`,
-    '',
-    buildTypeExecutionNotes(ruleProfile, topic?.type),
-    '',
-    buildPenExecutionNotes(ruleProfile, topic?.penName),
-    '',
-    ruleBlock,
-    '',
-    DRAFT_TEMPLATE_CONTRACT_GUIDE,
   ]
+
+  if (typeof topic?.reason === 'string' && topic.reason.trim()) {
+    lines.push(`- 推荐理由：${topic.reason.trim()}`)
+  }
+
+  if (supplement.trim()) {
+    lines.push(`- 补充要求：${supplement.trim()}`)
+  }
+
+  if (note.trim()) {
+    lines.push(`- 修改意见：${note.trim()}`)
+  }
+
+  lines.push('', buildTypeExecutionNotes(ruleProfile, topic?.type), '', buildPenExecutionNotes(ruleProfile, topic?.penName))
+
+  if (topicIntentNotes) {
+    lines.push('', topicIntentNotes)
+  }
+
+  if (typeSpecificNotes) {
+    lines.push('', typeSpecificNotes)
+  }
+
+  lines.push('', ruleBlock, '', DRAFT_TEMPLATE_CONTRACT_GUIDE)
+
+  return lines
 }
 
 function buildContentUserPrompt({
@@ -159,8 +234,8 @@ function buildDraftGenerationSystemPrompt(ruleProfile) {
 }
 
 function buildDraftGenerationUserPrompt({ deepThinkingEnabled, ruleProfile, supplement = '', topic }) {
-  return [
-    ...buildSharedContentContextLines({
+  return renderContentPromptTemplate('draftUser', {
+    sharedContext: buildSharedContentContextLines({
       action: 'initial',
       compact: false,
       deepThinkingEnabled,
@@ -168,16 +243,8 @@ function buildDraftGenerationUserPrompt({ deepThinkingEnabled, ruleProfile, supp
       ruleProfile,
       supplement,
       topic,
-    }),
-    '',
-    '输出要求：',
-    '- draftMarkdown：直接可读的公众号正文 Markdown，允许使用一级标题、引用、段落、小标题、列表。',
-    '- draftMarkdown 必须严格遵守固定 Markdown 骨架与占位符结构。',
-    '- summary：一句适合展示在工作流里的简短总结。',
-    '- 只输出正文草稿，不要输出审核报告。',
-    '',
-    '再次提醒：只返回 JSON 对象本身，不要加 ```json 代码块。',
-  ].join('\n')
+    }).join('\n'),
+  })
 }
 
 function buildDraftAuditSystemPrompt(ruleProfile) {
@@ -185,8 +252,11 @@ function buildDraftAuditSystemPrompt(ruleProfile) {
 }
 
 function buildDraftAuditUserPrompt({ deepThinkingEnabled, draftMarkdown = '', ruleProfile, supplement = '', topic }) {
-  return [
-    ...buildSharedContentContextLines({
+  return renderContentPromptTemplate('auditUser', {
+    draftMarkdown: draftMarkdown.trim(),
+    reportFormattingInstruction: ruleProfile.reportFormattingInstruction,
+    reportInstruction: ruleProfile.reportInstruction,
+    sharedContext: buildSharedContentContextLines({
       action: 'initial',
       compact: true,
       deepThinkingEnabled,
@@ -194,25 +264,9 @@ function buildDraftAuditUserPrompt({ deepThinkingEnabled, draftMarkdown = '', ru
       ruleProfile,
       supplement,
       topic,
-    }),
-    '',
-    '待审核正文：',
-    draftMarkdown.trim(),
-    '',
-    '输出要求：',
-    ruleProfile.reportInstruction,
-    ruleProfile.reportFormattingInstruction,
-    '- 必须额外检查正文里 [IMAGE_1]、[IMAGE_2]、[IMAGE_3]、[ENDING] 是否齐全且顺序正确。',
-    '- 必须额外检查正文是否满足“一级标题 + 开头正文 + 3 个主体段 + [ENDING] + 结尾标题 + 结尾正文 + 祝福语”的固定 Markdown 骨架。',
-    '- 如果主体段数不等于 3，可记录为结构偏差，但不要因此丢弃正文内容；只有在标题层级、结尾结构或主体边界无法稳定识别时，才优先判为 rewrite。',
-    '- generatedTitle：基于当前正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
-    '- decision：只能输出 pass / partial / rewrite 其中一个。',
-    '- summary：一句适合展示在工作流里的简短总结。',
-    '',
-    TITLE_GENERATION_REQUIREMENTS,
-    '',
-    '再次提醒：只返回 JSON 对象本身，不要加 ```json 代码块。',
-  ].join('\n')
+    }).join('\n'),
+    titleGenerationRequirements: TITLE_GENERATION_REQUIREMENTS,
+  })
 }
 
 function buildDraftRevisionSystemPrompt(ruleProfile) {
@@ -223,6 +277,7 @@ function buildDraftRevisionUserPrompt({
   decision = 'partial',
   deepThinkingEnabled,
   draftMarkdown = '',
+  revisionBrief = '',
   reportMarkdown = '',
   ruleProfile,
   supplement = '',
@@ -230,44 +285,31 @@ function buildDraftRevisionUserPrompt({
 }) {
   const revisionLabel = decision === 'rewrite' ? '整篇重写' : '局部修订'
 
-  return [
-    ...buildSharedContentContextLines({
+  return renderContentPromptTemplate('revisionUser', {
+    draftMarkdown: draftMarkdown.trim(),
+    revisionBrief: (revisionBrief || buildRevisionBriefFallback(reportMarkdown)).trim(),
+    revisionLabel,
+    sharedContext: buildSharedContentContextLines({
       action: 'revise',
       compact: true,
       deepThinkingEnabled,
-      note: reportMarkdown.trim(),
+      note: revisionBrief.trim() || buildRevisionBriefFallback(reportMarkdown),
       ruleProfile,
       supplement,
       topic,
-    }),
-    '',
-    `修订方式：${revisionLabel}`,
-    '',
-    '当前正文：',
-    draftMarkdown.trim(),
-    '',
-    '审核报告：',
-    reportMarkdown.trim(),
-    '',
-    '输出要求：',
-    '- draftMarkdown：修订后的最终正文 Markdown。',
-    '- 修订后的 draftMarkdown 必须严格遵守固定 Markdown 骨架与占位符结构。',
-    '- reportMarkdown：基于修订后正文输出的最终校验报告 Markdown。',
-    '- generatedTitle：基于修订后正文内容生成的 1 个正式标题，直接供右侧文字稿和后续排版使用。',
-    '- summary：一句适合展示在工作流里的简短总结。',
-    '',
-    TITLE_GENERATION_REQUIREMENTS,
-    '',
-    '再次提醒：只返回 JSON 对象本身，不要加 ```json 代码块。',
-  ].join('\n')
+    }).join('\n'),
+    titleGenerationRequirements: TITLE_GENERATION_REQUIREMENTS,
+  })
 }
 
 async function requestContentGeneration({
   action,
   apiKey,
+  baseUrl,
   deepThinkingEnabled,
   model,
   note,
+  provider,
   ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
   supplement,
   topic,
@@ -288,7 +330,9 @@ async function requestContentGeneration({
     action,
     apiKey,
     assistantName: CONTENT_ASSISTANT_NAME,
+    baseUrl,
     model,
+    provider,
     responseFormat: 'json_object',
     stage: action === 'revise' ? 'revise' : 'direct',
     systemPrompt,
@@ -309,7 +353,9 @@ async function requestStructuredContentStage({
   action = 'initial',
   apiKey,
   assistantName = CONTENT_ASSISTANT_NAME,
+  baseUrl,
   model,
+  provider,
   stage = 'draft',
   thinkingType = 'disabled',
   systemPrompt,
@@ -322,7 +368,9 @@ async function requestStructuredContentStage({
     action,
     apiKey,
     assistantName,
+    baseUrl,
     model,
+    provider,
     responseFormat: 'json_object',
     stage,
     systemPrompt,
@@ -436,8 +484,10 @@ async function executeContentLlmRequest({
   action = 'initial',
   apiKey,
   assistantName = CONTENT_ASSISTANT_NAME,
+  baseUrl,
   messages = [],
   model,
+  provider,
   responseFormat = 'json_object',
   stage = 'direct',
   systemPrompt = '',
@@ -454,8 +504,10 @@ async function executeContentLlmRequest({
     const result = await chatWithLlm({
       apiKey,
       assistantName,
+      baseUrl,
       messages,
       model,
+      provider,
       responseFormat,
       systemPrompt,
       temperature,
@@ -908,7 +960,264 @@ function sanitizeDraftMarkdown(draftMarkdown, topic) {
   }
 }
 
-function buildQualityCheckSection({ adjustments, draftMarkdown, ruleProfile, topic }) {
+const READABILITY_PARAGRAPH_MAX_LENGTH = 88
+const READABILITY_PARAGRAPH_MAX_SENTENCES = 2
+const READABILITY_STANDALONE_PREFIXES = [
+  '其实',
+  '说到底',
+  '真正',
+  '记住',
+  '后来',
+  '可后来',
+  '但真正',
+  '直到这时',
+  '那一刻',
+  '偏偏',
+  '结果',
+  '于是',
+  '从那以后',
+  '从那天起',
+  '慢慢地',
+  '忽然',
+]
+
+function normalizeReadableParagraphSource(text = '') {
+  return String(text).replace(/\r/g, '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function splitReadableSentences(text = '') {
+  const normalized = normalizeReadableParagraphSource(text)
+
+  if (!normalized) {
+    return []
+  }
+
+  const boundaryChars = new Set(['。', '！', '？', '；'])
+  const trailingChars = new Set(['”', '"', '’', "'", '」', '』', '）', ')'])
+  const sentences = []
+  let buffer = ''
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const currentChar = normalized[index]
+    buffer += currentChar
+
+    if (!boundaryChars.has(currentChar)) {
+      continue
+    }
+
+    while (index + 1 < normalized.length && trailingChars.has(normalized[index + 1])) {
+      index += 1
+      buffer += normalized[index]
+    }
+
+    if (buffer.trim()) {
+      sentences.push(buffer.trim())
+    }
+    buffer = ''
+  }
+
+  if (buffer.trim()) {
+    sentences.push(buffer.trim())
+  }
+
+  return sentences
+}
+
+function isStandaloneReadableSentence(sentence = '') {
+  const normalized = String(sentence).trim()
+
+  if (!normalized) {
+    return false
+  }
+
+  const readableLength = countReadableLength(normalized)
+
+  if (readableLength >= 56) {
+    return true
+  }
+
+  if ((normalized.includes('“') || normalized.includes('"')) && readableLength <= 42) {
+    return true
+  }
+
+  return READABILITY_STANDALONE_PREFIXES.some(
+    (prefix) => normalized.startsWith(prefix) && readableLength <= 38,
+  )
+}
+
+function shouldPreserveParagraphChunk(chunk = '') {
+  const normalized = String(chunk).trim()
+
+  if (!normalized) {
+    return true
+  }
+
+  return /^(>|[-*]\s|\d+\.\s|`{3,})/u.test(normalized)
+}
+
+function formatReadableParagraphChunk(chunk = '') {
+  const normalizedChunk = String(chunk).trim()
+
+  if (!normalizedChunk || shouldPreserveParagraphChunk(normalizedChunk)) {
+    return normalizedChunk
+  }
+
+  const sentences = splitReadableSentences(normalizedChunk)
+
+  if (sentences.length <= 1 && countReadableLength(normalizedChunk) <= READABILITY_PARAGRAPH_MAX_LENGTH) {
+    return normalizeReadableParagraphSource(normalizedChunk)
+  }
+
+  const paragraphs = []
+  let currentSentences = []
+
+  const flushCurrent = () => {
+    if (currentSentences.length === 0) {
+      return
+    }
+
+    paragraphs.push(currentSentences.join(''))
+    currentSentences = []
+  }
+
+  for (const sentence of sentences) {
+    const normalizedSentence = sentence.trim()
+
+    if (!normalizedSentence) {
+      continue
+    }
+
+    const currentText = currentSentences.join('')
+    const currentLength = countReadableLength(currentText)
+    const nextLength = countReadableLength(currentText + normalizedSentence)
+
+    if (isStandaloneReadableSentence(normalizedSentence)) {
+      flushCurrent()
+      paragraphs.push(normalizedSentence)
+      continue
+    }
+
+    if (
+      currentSentences.length > 0 &&
+      (currentSentences.length >= READABILITY_PARAGRAPH_MAX_SENTENCES ||
+        currentLength >= READABILITY_PARAGRAPH_MAX_LENGTH - 18 ||
+        nextLength > READABILITY_PARAGRAPH_MAX_LENGTH)
+    ) {
+      flushCurrent()
+    }
+
+    currentSentences.push(normalizedSentence)
+
+    if (
+      currentSentences.length >= READABILITY_PARAGRAPH_MAX_SENTENCES ||
+      countReadableLength(currentSentences.join('')) >= READABILITY_PARAGRAPH_MAX_LENGTH
+    ) {
+      flushCurrent()
+    }
+  }
+
+  flushCurrent()
+
+  return paragraphs.filter(Boolean).join('\n\n').trim()
+}
+
+function formatReadableBodyMarkdown(markdown = '') {
+  return String(markdown)
+    .replace(/\r/g, '')
+    .split(/\n{2,}/)
+    .map((chunk) => formatReadableParagraphChunk(chunk))
+    .filter(Boolean)
+    .join('\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function rebuildStructuredDraftMarkdown(parsedDraft) {
+  const segments = [`# ${parsedDraft.articleTitle}`]
+
+  if (parsedDraft.introBody?.trim()) {
+    segments.push(parsedDraft.introBody.trim())
+  }
+
+  parsedDraft.sections.forEach((section, index) => {
+    segments.push(`## ${section.title}`)
+
+    if (section.bodyMarkdown?.trim()) {
+      segments.push(section.bodyMarkdown.trim())
+    }
+
+    segments.push(`[IMAGE_${index + 1}]`)
+  })
+
+  segments.push('[ENDING]')
+
+  if (parsedDraft.outro?.title) {
+    segments.push(`## ${parsedDraft.outro.title}`)
+  }
+
+  if (parsedDraft.outro?.bodyMarkdown?.trim()) {
+    segments.push(parsedDraft.outro.bodyMarkdown.trim())
+  }
+
+  if (parsedDraft.blessing?.trim()) {
+    segments.push(parsedDraft.blessing.trim())
+  }
+
+  return segments.join('\n\n').trim()
+}
+
+function formatDraftMarkdownForReading(draftMarkdown = '') {
+  const normalizedDraft = normalizeDraftMarkdown(draftMarkdown)
+  const parsedDraft = parseStructuredDraftMarkdown(normalizedDraft)
+
+  if (!parsedDraft.valid) {
+    return {
+      adjustments: [],
+      draftMarkdown: normalizedDraft,
+      formatted: false,
+      summary: '当前正文结构未稳定，已跳过阅读排版整理。',
+    }
+  }
+
+  const nextDraft = rebuildStructuredDraftMarkdown({
+    ...parsedDraft,
+    blessing: formatReadableBodyMarkdown(parsedDraft.blessing || ''),
+    introBody: formatReadableBodyMarkdown(parsedDraft.introBody || ''),
+    outro: parsedDraft.outro
+      ? {
+          ...parsedDraft.outro,
+          bodyMarkdown: formatReadableBodyMarkdown(parsedDraft.outro.bodyMarkdown || ''),
+        }
+      : null,
+    sections: parsedDraft.sections.map((section) => ({
+      ...section,
+      bodyMarkdown: formatReadableBodyMarkdown(section.bodyMarkdown || ''),
+    })),
+  })
+
+  const placeholderCheck = validateDraftPlaceholderStructure(nextDraft)
+  const structureCheck = validateStructuredDraftMarkdown(nextDraft)
+
+  if (!placeholderCheck.valid || !structureCheck.valid) {
+    return {
+      adjustments: [],
+      draftMarkdown: normalizedDraft,
+      formatted: false,
+      summary: '排版整理结果未通过结构校验，已回退原稿。',
+    }
+  }
+
+  const formatted = nextDraft !== normalizedDraft
+
+  return {
+    adjustments: formatted ? ['已按阅读节奏整理正文分段和留白。'] : [],
+    draftMarkdown: formatted ? nextDraft : normalizedDraft,
+    formatted,
+    summary: formatted ? '已按阅读节奏整理分段。' : '当前正文已符合基础阅读节奏。',
+  }
+}
+
+function buildQualityCheckSection({ adjustments, draftMarkdown, formattingSummary = '', ruleProfile, topic }) {
   const readableLength = countReadableLength(draftMarkdown)
   const bannedHits = ruleProfile.forbiddenAiPhrases.filter((phrase) => draftMarkdown.includes(phrase))
   const hasDash = draftMarkdown.includes('——')
@@ -925,6 +1234,7 @@ function buildQualityCheckSection({ adjustments, draftMarkdown, ruleProfile, top
     `- AI 腔词检查：${bannedHits.length === 0 ? '未发现明显禁用词。' : `发现 ${bannedHits.join('、')}。`}`,
     `- 固定模板占位符检查：${placeholderCheck.valid ? '通过。' : `未通过：${placeholderCheck.issues.join('；')}`}`,
     `- 固定 Markdown 骨架检查：${structureCheck.valid ? '通过。' : `未通过：${structureCheck.issues.join('；')}`}`,
+    `- 阅读排版整理：${formattingSummary || '未执行。'}`,
     adjustments.length > 0 ? `- 程序兜底修正：${adjustments.join(' ')}` : '- 程序兜底修正：本轮未触发。',
   ]
 
@@ -941,6 +1251,37 @@ function normalizeStageText(content) {
 
 function readStringField(parsed, fieldName, fallback = '') {
   return typeof parsed?.[fieldName] === 'string' && parsed[fieldName].trim() ? parsed[fieldName].trim() : fallback
+}
+
+function normalizeRevisionBriefLine(line = '') {
+  const trimmed = String(line).trim()
+
+  if (!trimmed) {
+    return ''
+  }
+
+  if (/^[-*•]\s+/.test(trimmed)) {
+    return `- ${trimmed.replace(/^[-*•]\s+/, '').trim()}`
+  }
+
+  return `- ${trimmed}`
+}
+
+function buildRevisionBriefFallback(reportMarkdown = '') {
+  const briefLines = String(reportMarkdown)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+    .filter((line) => /^[-*•]\s+/.test(line) || /未通过|建议|问题|需|应|必须/.test(line))
+    .slice(0, 6)
+    .map(normalizeRevisionBriefLine)
+    .filter(Boolean)
+
+  if (briefLines.length > 0) {
+    return briefLines.join('\n')
+  }
+
+  return '- 按审核结论修正结构、真实性和表达问题。\n- 保持固定 Markdown 骨架与图片占位符顺序不变。'
 }
 
 function buildFallbackGeneratedTitle(topic) {
@@ -986,6 +1327,10 @@ function readGeneratedTitle(parsed, topic) {
   }
 
   return buildFallbackGeneratedTitle(topic)
+}
+
+function readRevisionBrief(parsed, reportMarkdown = '') {
+  return readStringField(parsed, 'revisionBrief', buildRevisionBriefFallback(reportMarkdown))
 }
 
 function normalizeRevisionDecision(value, fallback = 'pass') {
@@ -1110,8 +1455,10 @@ function clonePipelineSteps(steps) {
 
 async function requestDraftGenerationStage({
   apiKey,
+  baseUrl,
   deepThinkingEnabled,
   model,
+  provider,
   ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
   supplement,
   topic,
@@ -1120,7 +1467,9 @@ async function requestDraftGenerationStage({
   const result = await requestStructuredContentStage({
     action: 'initial',
     apiKey,
+    baseUrl,
     model,
+    provider,
     stage: 'draft',
     thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     systemPrompt: buildDraftGenerationSystemPrompt(ruleProfile),
@@ -1148,9 +1497,11 @@ async function requestDraftGenerationStage({
 
 async function requestDraftAuditStage({
   apiKey,
+  baseUrl,
   deepThinkingEnabled,
   draftMarkdown,
   model,
+  provider,
   ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
   supplement,
   topic,
@@ -1159,7 +1510,9 @@ async function requestDraftAuditStage({
   const result = await requestStructuredContentStage({
     action: 'initial',
     apiKey,
+    baseUrl,
     model,
+    provider,
     stage: 'audit',
     thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     systemPrompt: buildDraftAuditSystemPrompt(ruleProfile),
@@ -1175,29 +1528,34 @@ async function requestDraftAuditStage({
   })
   const rawContent = normalizeStageText(result?.choices?.[0]?.message?.content)
   const parsed = extractJsonObject(rawContent)
+  const nextReportMarkdown = readStringField(
+    parsed,
+    'reportMarkdown',
+    buildFallbackReport({ action: 'initial', ruleProfile, supplement, topic }),
+  )
 
   return {
     decision: normalizeRevisionDecision(parsed?.decision, 'pass'),
     model: result?.model ?? model,
     llmTelemetry: result?.llmTelemetry ?? null,
     rawContent,
-    reportMarkdown: readStringField(
-      parsed,
-      'reportMarkdown',
-      buildFallbackReport({ action: 'initial', ruleProfile, supplement, topic }),
-    ),
+    reportMarkdown: nextReportMarkdown,
     summary: readStringField(parsed, 'summary', '审核完成，已生成审核结果。'),
     generatedTitle: readGeneratedTitle(parsed, topic),
+    revisionBrief: readRevisionBrief(parsed, nextReportMarkdown),
     usage: result?.usage ?? null,
   }
 }
 
 async function requestDraftRevisionStage({
   apiKey,
+  baseUrl,
   decision,
   deepThinkingEnabled,
   draftMarkdown,
   model,
+  provider,
+  revisionBrief = '',
   reportMarkdown,
   ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
   supplement,
@@ -1207,7 +1565,9 @@ async function requestDraftRevisionStage({
   const result = await requestStructuredContentStage({
     action: 'initial',
     apiKey,
+    baseUrl,
     model,
+    provider,
     stage: 'revision',
     thinkingType: deepThinkingEnabled ? 'enabled' : 'disabled',
     systemPrompt: buildDraftRevisionSystemPrompt(ruleProfile),
@@ -1217,6 +1577,7 @@ async function requestDraftRevisionStage({
       decision,
       deepThinkingEnabled,
       draftMarkdown,
+      revisionBrief,
       reportMarkdown,
       ruleProfile,
       supplement,
@@ -1240,8 +1601,10 @@ async function requestDraftRevisionStage({
 
 export async function runInitialContentPipeline({
   apiKey,
+  baseUrl,
   deepThinkingEnabled = true,
   model = DEFAULT_MODEL,
+  provider,
   ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
   supplement = '',
   topic,
@@ -1272,8 +1635,10 @@ export async function runInitialContentPipeline({
 
   const generationStage = await requestDraftGenerationStage({
     apiKey,
+    baseUrl,
     deepThinkingEnabled,
     model,
+    provider,
     ruleProfileId: ruleProfile.id,
     supplement,
     topic,
@@ -1292,9 +1657,11 @@ export async function runInitialContentPipeline({
 
   const auditStage = await requestDraftAuditStage({
     apiKey,
+    baseUrl,
     deepThinkingEnabled,
     draftMarkdown: initialDraft.draftMarkdown,
     model,
+    provider,
     ruleProfileId: ruleProfile.id,
     supplement,
     topic,
@@ -1321,10 +1688,13 @@ export async function runInitialContentPipeline({
   } else {
     const revisionStage = await requestDraftRevisionStage({
       apiKey,
+      baseUrl,
       decision,
       deepThinkingEnabled,
       draftMarkdown: initialDraft.draftMarkdown,
       model,
+      provider,
+      revisionBrief: auditStage.revisionBrief,
       reportMarkdown: auditStage.reportMarkdown,
       ruleProfileId: ruleProfile.id,
       supplement,
@@ -1344,23 +1714,28 @@ export async function runInitialContentPipeline({
     advance(6)
   }
 
+  const formattedFinalDraft = formatDraftMarkdownForReading(finalDraft.draftMarkdown)
+  const finalDraftMarkdown = formattedFinalDraft.draftMarkdown
+  const finalDraftAdjustments = [...finalDraft.adjustments, ...formattedFinalDraft.adjustments]
+
   advance(7)
 
   const qualitySection = buildQualityCheckSection({
-    adjustments: finalDraft.adjustments,
-    draftMarkdown: finalDraft.draftMarkdown,
+    adjustments: finalDraftAdjustments,
+    draftMarkdown: finalDraftMarkdown,
+    formattingSummary: formattedFinalDraft.summary,
     ruleProfile,
     topic,
   })
-  const finalPlaceholderCheck = validateDraftPlaceholderStructure(finalDraft.draftMarkdown)
-  const finalStructureCheck = validateStructuredDraftMarkdown(finalDraft.draftMarkdown)
+  const finalPlaceholderCheck = validateDraftPlaceholderStructure(finalDraftMarkdown)
+  const finalStructureCheck = validateStructuredDraftMarkdown(finalDraftMarkdown)
   const finishedAt = Date.now()
   steps = completePipelineSteps(steps, finishedAt)
   pushProgress()
 
   return {
     decision,
-    draftMarkdown: finalDraft.draftMarkdown,
+    draftMarkdown: finalDraftMarkdown,
     model,
     rawContent: stagePayloads,
     reportMarkdown: `${(finalReportMarkdown || buildFallbackReport({ action: 'initial', ruleProfile, supplement, topic })).trim()}\n\n${
@@ -1399,9 +1774,11 @@ export async function runInitialContentPipeline({
 export async function generateContentDraft({
   action = 'initial',
   apiKey,
+  baseUrl,
   deepThinkingEnabled = true,
   model = DEFAULT_MODEL,
   note = '',
+  provider,
   ruleProfileId = DEFAULT_CONTENT_RULE_PROFILE_ID,
   supplement = '',
   topic,
@@ -1410,9 +1787,11 @@ export async function generateContentDraft({
   const result = await requestContentGeneration({
     action,
     apiKey,
+    baseUrl,
     deepThinkingEnabled,
     model,
     note,
+    provider,
     ruleProfileId: ruleProfile.id,
     supplement,
     topic,
@@ -1429,11 +1808,15 @@ export async function generateContentDraft({
       ? parsed.reportMarkdown.trim()
       : buildFallbackReport({ action, note, ruleProfile, supplement, topic })
   const sanitized = sanitizeDraftMarkdown(draftMarkdown, topic)
-  const placeholderCheck = validateDraftPlaceholderStructure(sanitized.draftMarkdown)
-  const structureCheck = validateStructuredDraftMarkdown(sanitized.draftMarkdown)
+  const formattedDraft = formatDraftMarkdownForReading(sanitized.draftMarkdown)
+  const finalDraftMarkdown = formattedDraft.draftMarkdown
+  const combinedAdjustments = [...sanitized.adjustments, ...formattedDraft.adjustments]
+  const placeholderCheck = validateDraftPlaceholderStructure(finalDraftMarkdown)
+  const structureCheck = validateStructuredDraftMarkdown(finalDraftMarkdown)
   const qualitySection = buildQualityCheckSection({
-    adjustments: sanitized.adjustments,
-    draftMarkdown: sanitized.draftMarkdown,
+    adjustments: combinedAdjustments,
+    draftMarkdown: finalDraftMarkdown,
+    formattingSummary: formattedDraft.summary,
     ruleProfile,
     topic,
   })
@@ -1443,14 +1826,14 @@ export async function generateContentDraft({
       : buildFallbackSummary({ action, note })
   const generatedTitle = readGeneratedTitle(parsed, topic)
 
-  if (!sanitized.draftMarkdown) {
+  if (!finalDraftMarkdown) {
     const error = new Error('当前模型没有返回可用的正文内容')
     error.status = 502
     throw error
   }
 
   return {
-    draftMarkdown: sanitized.draftMarkdown,
+    draftMarkdown: finalDraftMarkdown,
     llmTelemetry: result?.llmTelemetry ? [result.llmTelemetry] : [],
     model: result?.model ?? model,
     provider: result?.llmTelemetry?.provider || '',
