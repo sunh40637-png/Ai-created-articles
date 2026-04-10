@@ -22,7 +22,7 @@ const TOPIC_LIBRARY_KEY = `${OSS_ROOT_PREFIX}/topic-library/topic-library.json`
 const WRITING_CONFIG_KEY = `${OSS_ROOT_PREFIX}/configs/writing-config.json`
 const SYSTEM_CONFIG_KEY = `${OSS_ROOT_PREFIX}/configs/system-config.json`
 const CONTENT_SESSION_SNAPSHOT_KEY = `${OSS_ROOT_PREFIX}/sync/content-creation-sessions.json`
-const SHORT_CONTENT_SNAPSHOT_KEY = `${OSS_ROOT_PREFIX}/sync/short-content-conversations.json`
+const SHORT_INDEX_KEY = `${OSS_ROOT_PREFIX}/index/short-conversations.json`
 const LLM_CONFIG_SNAPSHOT_KEY = `${OSS_ROOT_PREFIX}/sync/llm-config.json`
 const TOPIC_STATUS_PRIORITY = {
   pending: 0,
@@ -47,6 +47,29 @@ function buildShortStableId(input = '') {
   }
 
   return crypto.createHash('md5').update(String(input)).digest('hex').slice(0, 8)
+}
+
+async function asyncPool(poolLimit, array, iteratorFn) {
+  const ret = []
+  const executing = []
+  for (const item of array) {
+    const p = Promise.resolve().then(() => iteratorFn(item, array))
+    ret.push(p)
+    if (poolLimit <= array.length) {
+      const e = p.then(() => executing.splice(executing.indexOf(e), 1))
+      executing.push(e)
+      if (executing.length >= poolLimit) {
+        await Promise.race(executing)
+      }
+    }
+  }
+  return Promise.all(ret)
+}
+
+function normalizeToTimestamp(dateStr) {
+  if (!dateStr) return 0
+  const t = new Date(dateStr).getTime()
+  return Number.isFinite(t) ? t : 0
 }
 
 function buildDateStamp(value) {
@@ -380,6 +403,40 @@ function buildSessionIndexPayload(state) {
   }
 }
 
+function buildShortConversationFilePayload(conversation) {
+  const dateStamp = buildDateStamp(conversation?.createdAt || conversation?.updatedAt)
+  const shortId = buildShortStableId(conversation?.id || dateStamp)
+  
+  return {
+    ...conversation,
+    id: conversation?.id || '',
+    createdAt: normalizeIsoTimestamp(conversation?.createdAt) || new Date().toISOString(),
+    updatedAt: normalizeIsoTimestamp(conversation?.updatedAt) || normalizeIsoTimestamp(conversation?.createdAt) || new Date().toISOString(),
+    _storageKey: `${OSS_ROOT_PREFIX}/short-conversations/conv-${dateStamp}-${shortId}.json`
+  }
+}
+
+function buildShortIndexPayload(state) {
+  const conversations = Array.isArray(state?.conversations) ? state.conversations : []
+  const items = conversations
+    .map((conv) => {
+      const payload = buildShortConversationFilePayload(conv)
+      return {
+        id: payload.id,
+        path: payload._storageKey,
+        publishStatus: payload.publishStatus || 'default',
+        updatedAt: payload.updatedAt,
+      }
+    })
+    .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
+
+  return {
+    items,
+    schemaVersion: 1,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 function buildArticleIndexPayload(state) {
   const sessions = Array.isArray(state?.sessions) ? state.sessions : []
   const items = sessions
@@ -582,21 +639,25 @@ function buildConfigIndexPayload() {
   }
 }
 
-async function writeDerivedObjectsToOss(state) {
+async function writeDerivedObjectsToOss(state, referenceState = null) {
   const sessions = Array.isArray(state?.sessions) ? state.sessions : []
+  const refSessionsMap = new Map((Array.isArray(referenceState?.sessions) ? referenceState.sessions : []).map(s => [s.id, s]))
 
-  await Promise.all(
-    sessions.map(async (session) => {
-      const ids = buildSessionStorageIds(session)
-      await putJsonObject(ids.sessionKey, buildSessionFilePayload(session))
+  const sessionsToUpdate = sessions.filter(session => {
+    const ref = refSessionsMap.get(session.id)
+    if (!ref) return true
+    return normalizeToTimestamp(session.updatedAt || session.createdAt) > normalizeToTimestamp(ref.updatedAt || ref.createdAt)
+  })
 
-      const articlePayload = buildArticleFilePayload(session)
+  await asyncPool(5, sessionsToUpdate, async (session) => {
+    const ids = buildSessionStorageIds(session)
+    await putJsonObject(ids.sessionKey, buildSessionFilePayload(session))
 
-      if (articlePayload) {
-        await putJsonObject(ids.articleKey, articlePayload)
-      }
-    }),
-  )
+    const articlePayload = buildArticleFilePayload(session)
+    if (articlePayload) {
+      await putJsonObject(ids.articleKey, articlePayload)
+    }
+  })
 
   await Promise.all([
     putJsonObject(SESSION_INDEX_KEY, buildSessionIndexPayload(state)),
@@ -609,17 +670,25 @@ async function writeDerivedObjectsToOss(state) {
   ])
 }
 
-async function readStateFromOssIndexes() {
+async function readStateFromOssIndexes(referenceState = null) {
   const sessionIndex = await getJsonObject(SESSION_INDEX_KEY)
+  const cloudItems = sessionIndex && Array.isArray(sessionIndex.items) ? sessionIndex.items : []
 
-  if (!sessionIndex || !Array.isArray(sessionIndex.items) || sessionIndex.items.length === 0) {
-    return null
-  }
+  const refSessionsMap = new Map((Array.isArray(referenceState?.sessions) ? referenceState.sessions : []).map(s => [s.id || s.sessionId, s]))
 
-  const sessionPayloads = await Promise.all(
-    sessionIndex.items.map((item) => getJsonObject(item?.path || '')),
-  )
-  const sessions = sessionPayloads.filter(Boolean)
+  const sessionPayloadsFromCloud = await asyncPool(5, cloudItems, async (item) => {
+    const refSession = refSessionsMap.get(item.sessionId)
+    if (refSession && normalizeToTimestamp(refSession.updatedAt || refSession.createdAt) >= normalizeToTimestamp(item.updatedAt)) {
+      refSessionsMap.delete(item.sessionId)
+      return refSession 
+    }
+    const cloudSession = await getJsonObject(item?.path || '')
+    if (cloudSession) refSessionsMap.delete(item.sessionId)
+    return cloudSession
+  })
+  
+  const localOnlySessions = Array.from(refSessionsMap.values())
+  const sessions = [...sessionPayloadsFromCloud.filter(Boolean), ...localOnlySessions]
 
   if (sessions.length === 0) {
     return null
@@ -627,14 +696,15 @@ async function readStateFromOssIndexes() {
 
   return {
     activeSessionId:
-      typeof sessionIndex.activeSessionId === 'string' && sessions.some((session) => session.sessionId === sessionIndex.activeSessionId)
+      typeof sessionIndex?.activeSessionId === 'string' && sessions.some((session) => (session.sessionId || session.id) === sessionIndex.activeSessionId)
         ? sessionIndex.activeSessionId
-        : sessions[0].sessionId,
-    isSidebarCollapsed: Boolean(sessionIndex.isSidebarCollapsed),
+        : sessions[0].sessionId || sessions[0].id,
+    isSidebarCollapsed: Boolean(sessionIndex?.isSidebarCollapsed),
     sessions: sessions
       .map((payload) => ({
         ...payload,
-        id: payload.sessionId,
+        id: payload.sessionId || payload.id,
+        sessionId: payload.sessionId || payload.id,
       }))
       .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()),
   }
@@ -654,18 +724,12 @@ export function getAliyunOssPublicConfig() {
   }
 }
 
-export async function readContentSessionPayloadFromOss({ name = 'content-creation-sessions-v1' } = {}) {
+export async function readContentSessionPayloadFromOss({ name = 'content-creation-sessions-v1', referencePayload = null } = {}) {
   if (!isAliyunOssConfigured()) {
     return null
   }
 
-  const snapshotPayload = normalizePersistedSnapshotPayload(await getJsonObject(CONTENT_SESSION_SNAPSHOT_KEY), name)
-
-  if (snapshotPayload?.item?.state) {
-    return snapshotPayload
-  }
-
-  const state = await readStateFromOssIndexes()
+  const state = await readStateFromOssIndexes(referencePayload?.item?.state ?? null)
 
   if (!state) {
     return null
@@ -688,7 +752,7 @@ export async function readContentSessionPayloadFromOss({ name = 'content-creatio
   }
 }
 
-export async function writeContentSessionPayloadToOss({ item, name = 'content-creation-sessions-v1' } = {}) {
+export async function writeContentSessionPayloadToOss({ item, name = 'content-creation-sessions-v1', referencePayload = null } = {}) {
   if (!item || typeof item !== 'object') {
     throw createOssError('缺少可写入 OSS 的会话数据', 400)
   }
@@ -703,15 +767,13 @@ export async function writeContentSessionPayloadToOss({ item, name = 'content-cr
     throw createOssError('OSS 会话数据缺少 state', 400)
   }
 
-  await writeDerivedObjectsToOss(state)
+  await writeDerivedObjectsToOss(state, referencePayload?.item?.state ?? null)
 
   const payload = {
     item,
     name,
     updatedAt: new Date().toISOString(),
   }
-
-  await putJsonObject(CONTENT_SESSION_SNAPSHOT_KEY, payload)
 
   return payload
 }
@@ -747,16 +809,74 @@ function normalizePersistedSnapshotPayload(payload, fallbackName) {
   }
 }
 
-export async function readShortContentPayloadFromOss({ name = 'short-content-conversations-v1' } = {}) {
+async function writeDerivedShortObjectsToOss(state, referenceState = null) {
+  const conversations = Array.isArray(state?.conversations) ? state.conversations : []
+  const refConvMap = new Map((Array.isArray(referenceState?.conversations) ? referenceState.conversations : []).map(c => [c.id, c]))
+
+  const convsToUpdate = conversations.filter(conv => {
+    const ref = refConvMap.get(conv.id)
+    if (!ref) return true
+    return normalizeToTimestamp(conv.updatedAt || conv.createdAt) > normalizeToTimestamp(ref.updatedAt || ref.createdAt)
+  })
+
+  await asyncPool(5, convsToUpdate, async (conv) => {
+    const payload = buildShortConversationFilePayload(conv)
+    const storageKey = payload._storageKey
+    delete payload._storageKey
+    await putJsonObject(storageKey, payload)
+  })
+
+  await putJsonObject(SHORT_INDEX_KEY, buildShortIndexPayload(state))
+}
+
+export async function readShortContentPayloadFromOss({ name = 'short-content-conversations-v1', referencePayload = null } = {}) {
   if (!isAliyunOssConfigured()) {
     return null
   }
 
-  const payload = await getJsonObject(SHORT_CONTENT_SNAPSHOT_KEY)
-  return normalizePersistedSnapshotPayload(payload, name)
+  const shortIndex = await getJsonObject(SHORT_INDEX_KEY)
+  const cloudItems = shortIndex && Array.isArray(shortIndex.items) ? shortIndex.items : []
+
+  const refConvMap = new Map((Array.isArray(referencePayload?.item?.state?.conversations) ? referencePayload.item.state.conversations : []).map(c => [c.id, c]))
+
+  const convPayloadsFromCloud = await asyncPool(5, cloudItems, async (item) => {
+    const refConv = refConvMap.get(item.id)
+    if (refConv && normalizeToTimestamp(refConv.updatedAt || refConv.createdAt) >= normalizeToTimestamp(item.updatedAt)) {
+      refConvMap.delete(item.id)
+      return refConv 
+    }
+    const cloudConv = await getJsonObject(item?.path || '')
+    if (cloudConv) refConvMap.delete(item.id)
+    return cloudConv
+  })
+
+  const localOnlyConvs = Array.from(refConvMap.values())
+  const conversations = [...convPayloadsFromCloud.filter(Boolean), ...localOnlyConvs]
+  
+  if (conversations.length === 0) {
+    return null
+  }
+
+  const state = {
+    conversations: conversations.sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
+  }
+
+  const latestUpdatedAt = conversations.reduce((latest, conv) => {
+    const nextTime = new Date(conv?.updatedAt || conv?.createdAt || 0).getTime()
+    return Number.isFinite(nextTime) && nextTime > latest ? nextTime : latest
+  }, 0)
+
+  return {
+    item: {
+      state,
+      version: 1,
+    },
+    name,
+    updatedAt: latestUpdatedAt > 0 ? new Date(latestUpdatedAt).toISOString() : new Date().toISOString(),
+  }
 }
 
-export async function writeShortContentPayloadToOss({ item, name = 'short-content-conversations-v1' } = {}) {
+export async function writeShortContentPayloadToOss({ item, name = 'short-content-conversations-v1', referencePayload = null } = {}) {
   if (!item || typeof item !== 'object') {
     throw createOssError('缺少可写入 OSS 的短文会话数据', 400)
   }
@@ -765,13 +885,14 @@ export async function writeShortContentPayloadToOss({ item, name = 'short-conten
     return null
   }
 
+  await writeDerivedShortObjectsToOss(item?.state, referencePayload?.item?.state ?? null)
+
   const payload = {
     item,
     name,
     updatedAt: new Date().toISOString(),
   }
 
-  await putJsonObject(SHORT_CONTENT_SNAPSHOT_KEY, payload)
   return payload
 }
 
@@ -780,7 +901,8 @@ export async function deleteShortContentPayloadFromOss() {
     return null
   }
 
-  await deleteObject(SHORT_CONTENT_SNAPSHOT_KEY).catch(() => null)
+  // Soft cleanup note: Because new mechanism uses multiple files, we may optionally delete index only.
+  await deleteObject(SHORT_INDEX_KEY).catch(() => null)
   return { deleted: true }
 }
 

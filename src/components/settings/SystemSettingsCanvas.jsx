@@ -435,6 +435,53 @@ function ProfileEditorDialog({
   )
 }
 
+function SyncDiffViewer({ diffs }) {
+  if (!diffs || (!diffs.localNews?.length && !diffs.cloudNews?.length)) {
+    return null
+  }
+
+  const { localNews = [], cloudNews = [] } = diffs
+
+  return (
+    <div className="mt-4 rounded-[6px] border border-border/70 text-[13px]">
+      <div className="flex border-b border-border/70 bg-secondary/20">
+        <div className="w-1/2 p-2.5 font-medium text-foreground border-r border-border/70">
+          <div className="flex items-center gap-2">本地新建/更新 <span className="text-[11px] font-normal text-muted-foreground">(近48小时)</span></div>
+        </div>
+        <div className="w-1/2 p-2.5 font-medium text-foreground">
+          <div className="flex items-center gap-2">云端新建/更新 <span className="text-[11px] font-normal text-muted-foreground">(近48小时)</span></div>
+        </div>
+      </div>
+      <div className="flex divide-x divide-border/70 bg-white">
+        <div className="w-1/2 p-2.5 space-y-2">
+          {localNews.length === 0 ? (
+            <div className="text-muted-foreground text-[12px] py-1">暂无差异</div>
+          ) : (
+            localNews.map(item => (
+              <div key={item.id} className="flex flex-col gap-0.5 rounded px-2 py-1.5 hover:bg-secondary/30 transition-colors">
+                <span className="truncate text-foreground font-medium">{item.title}</span>
+                <span className="text-[11px] text-muted-foreground">{formatDateTime(item.updatedAt)}</span>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="w-1/2 p-2.5 space-y-2">
+          {cloudNews.length === 0 ? (
+            <div className="text-muted-foreground text-[12px] py-1">暂无差异</div>
+          ) : (
+            cloudNews.map(item => (
+              <div key={item.id} className="flex flex-col gap-0.5 rounded px-2 py-1.5 hover:bg-secondary/30 transition-colors">
+                <span className="truncate text-foreground font-medium">{item.title}</span>
+                <span className="text-[11px] text-muted-foreground">{formatDateTime(item.updatedAt)}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SyncCard({ busyTarget, feedback, onAction, status, target }) {
   const isBusy = busyTarget === target
   const countLabel = target === 'content' ? '篇' : target === 'llm' ? '组' : '条'
@@ -475,7 +522,9 @@ function SyncCard({ busyTarget, feedback, onAction, status, target }) {
 
         <div className="flex flex-wrap gap-2">
           {Array.isArray(status?.actions) && status.actions.length > 0 ? (
-            status.actions.map((action) => (
+            status.actions.map((action) => {
+              const label = action.action === 'pull' ? '安全抓取云端差异 (Pull)' : action.action === 'push' ? '同步本机最新 (Push)' : action.label
+              return (
               <Button
                 className="rounded-[6px]"
                 disabled={isBusy}
@@ -483,7 +532,7 @@ function SyncCard({ busyTarget, feedback, onAction, status, target }) {
                 onClick={() => onAction(target, action.action)}
                 size="sm"
                 type="button"
-                variant={action.action === 'push' ? 'default' : 'outline'}
+                variant={action.action === 'push' ? 'outline' : 'default'}
               >
                 {isBusy ? (
                   <LoaderCircle className="animate-spin" size={14} />
@@ -492,14 +541,16 @@ function SyncCard({ busyTarget, feedback, onAction, status, target }) {
                 ) : (
                   <Download size={14} />
                 )}
-                {action.label}
+                {label}
               </Button>
-            ))
+            )})
           ) : (
             <span className="text-[12px] text-muted-foreground">无需操作</span>
           )}
         </div>
       </div>
+
+      <SyncDiffViewer diffs={status?.diffs} />
 
       {status?.cloud?.error ? (
         <div
@@ -902,13 +953,19 @@ export default function SystemSettingsCanvas({ onClose, onShowPageToast, open })
               <SettingsNavItem
                 active={activePanel === 'sync'}
                 icon={Cloud}
-                label="云端同步"
+                label="长文云端同步"
                 onClick={() => setActivePanel('sync')}
+              />
+              <SettingsNavItem
+                active={activePanel === 'sync_short'}
+                icon={Cloud}
+                label="短文云端同步"
+                onClick={() => setActivePanel('sync_short')}
               />
               <SettingsNavItem
                 active={activePanel === 'models'}
                 icon={Bot}
-                label="模型"
+                label="模型管理"
                 onClick={() => setActivePanel('models')}
               />
             </div>
@@ -970,7 +1027,7 @@ export default function SystemSettingsCanvas({ onClose, onShowPageToast, open })
             </div>
 
             <div className="benchmark-scroll-hidden min-h-0 flex-1 overflow-y-auto px-7 pb-7 pt-2">
-              {activePanel === 'sync' ? (
+              {activePanel === 'sync' || activePanel === 'sync_short' ? (
                 <div>
                   <div className="mb-4 flex items-center gap-2 text-[12px] text-muted-foreground">
                     <CheckCircle2 size={14} />
@@ -992,20 +1049,24 @@ export default function SystemSettingsCanvas({ onClose, onShowPageToast, open })
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <SyncCard
-                        busyTarget={busyTarget}
-                        feedback={actionFeedback.content}
-                        onAction={handleSyncAction}
-                        status={syncStatus?.content}
-                        target="content"
-                      />
-                      <SyncCard
-                        busyTarget={busyTarget}
-                        feedback={actionFeedback.shortContent}
-                        onAction={handleSyncAction}
-                        status={syncStatus?.shortContent}
-                        target="shortContent"
-                      />
+                      {activePanel === 'sync' && (
+                        <SyncCard
+                          busyTarget={busyTarget}
+                          feedback={actionFeedback.content}
+                          onAction={handleSyncAction}
+                          status={syncStatus?.content}
+                          target="content"
+                        />
+                      )}
+                      {activePanel === 'sync_short' && (
+                        <SyncCard
+                          busyTarget={busyTarget}
+                          feedback={actionFeedback.shortContent}
+                          onAction={handleSyncAction}
+                          status={syncStatus?.shortContent}
+                          target="shortContent"
+                        />
+                      )}
                       <SyncCard
                         busyTarget={busyTarget}
                         feedback={actionFeedback.llm}

@@ -311,6 +311,56 @@ function resolveSyncStatus({ cloudEnabled, cloudError, cloudHash, cloudUpdatedAt
   return 'conflict'
 }
 
+function computeRecentDiff(localPayload, cloudPayload, type) {
+  if (type === 'llm') return null
+
+  const localItems = type === 'content'
+    ? (Array.isArray(localPayload?.item?.state?.sessions) ? localPayload.item.state.sessions : [])
+    : (Array.isArray(localPayload?.item?.state?.conversations) ? localPayload.item.state.conversations : [])
+    
+  const cloudItems = type === 'content'
+    ? (Array.isArray(cloudPayload?.item?.state?.sessions) ? cloudPayload.item.state.sessions : [])
+    : (Array.isArray(cloudPayload?.item?.state?.conversations) ? cloudPayload.item.state.conversations : [])
+
+  const localMap = new Map()
+  const cloudMap = new Map()
+
+  localItems.forEach(s => localMap.set(s.id || s.sessionId, { ...s, _t: new Date(s.updatedAt || s.createdAt || 0).getTime() }))
+  cloudItems.forEach(s => cloudMap.set(s.id || s.sessionId, { ...s, _t: new Date(s.updatedAt || s.createdAt || 0).getTime() }))
+
+  const cutOffTime = Date.now() - 48 * 60 * 60 * 1000
+
+  const localNews = []
+  const cloudNews = []
+
+  const formatItem = (item) => ({
+    id: item.id || item.sessionId,
+    title: item.title || '无标题',
+    updatedAt: new Date(item._t).toISOString(),
+  })
+
+  for (const local of localMap.values()) {
+    if (local._t < cutOffTime) continue
+    const cloud = cloudMap.get(local.id || local.sessionId)
+    if (!cloud || local._t > cloud._t) {
+      localNews.push(formatItem(local))
+    }
+  }
+
+  for (const cloud of cloudMap.values()) {
+    if (cloud._t < cutOffTime) continue
+    const local = localMap.get(cloud.id || cloud.sessionId)
+    if (!local || cloud._t > local._t) {
+      cloudNews.push(formatItem(cloud))
+    }
+  }
+
+  localNews.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  cloudNews.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+
+  return { localNews, cloudNews }
+}
+
 function buildTargetStatus({
   cloudEnabled,
   cloudError = '',
@@ -338,8 +388,11 @@ function buildTargetStatus({
   const statusMeta = resolveStatusMeta(status)
   const countLabel = type === 'content' ? 'sessionCount' : type === 'llm' ? 'profileCount' : 'conversationCount'
 
+  const diffs = cloudEnabled ? computeRecentDiff(localPayload, cloudPayload, type) : null
+
   return {
     actions: resolveAvailableActions(status).map(buildActionMeta),
+    diffs,
     cloud: {
       ...getAliyunOssPublicConfig(),
       [countLabel]: cloudCount,
@@ -454,7 +507,8 @@ function normalizeSyncTarget(target = '') {
 }
 
 function normalizeSyncAction(action = '') {
-  return action === 'pull' ? 'pull' : action === 'push' ? 'push' : ''
+  // Now we accept "sync" as the unified merge action, as well as legacy push/pull
+  return action === 'sync' ? 'sync' : action === 'pull' ? 'pull' : action === 'push' ? 'push' : ''
 }
 
 export async function performSystemSyncAction({ action, target }) {
@@ -491,12 +545,14 @@ export async function performSystemSyncAction({ action, target }) {
         throw error
       }
 
-      payload = await writeContentSessionPayloadToOss({
+      await writeContentSessionPayloadToOss({
         item: localPayload.item,
         name: localPayload.name,
       })
+      payload = localPayload
     } else {
-      const cloudPayload = await readContentSessionPayloadFromOss()
+      const localPayload = await readPersistedContentSessionPayloadFromLocal()
+      const cloudPayload = await readContentSessionPayloadFromOss({ referencePayload: localPayload })
 
       if (!cloudPayload?.item) {
         const error = new Error('云端当前没有可恢复的长文内容')
@@ -519,12 +575,14 @@ export async function performSystemSyncAction({ action, target }) {
         throw error
       }
 
-      payload = await writeShortContentPayloadToOss({
+      await writeShortContentPayloadToOss({
         item: localPayload.item,
         name: localPayload.name,
       })
+      payload = localPayload
     } else {
-      const cloudPayload = await readShortContentPayloadFromOss()
+      const localPayload = await readPersistedShortContentPayload()
+      const cloudPayload = await readShortContentPayloadFromOss({ referencePayload: localPayload })
 
       if (!cloudPayload?.item) {
         const error = new Error('云端当前没有可恢复的短文内容')
