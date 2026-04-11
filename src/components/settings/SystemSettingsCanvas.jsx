@@ -676,7 +676,7 @@ function SyncCard({ busyTarget, feedback, onAction, status, target }) {
         <div className="flex flex-wrap gap-2">
           {Array.isArray(status?.actions) && status.actions.length > 0 ? (
             status.actions.map((action) => {
-              const label = action.action === 'pull' ? '安全抓取云端差异 (Pull)' : action.action === 'push' ? '同步本机最新 (Push)' : action.label
+              const label = action.action === 'pull' ? '拉取云端差异至本机' : action.action === 'push' ? '上传本机更新至云端' : action.label
               return (
               <Button
                 className="rounded-[6px]"
